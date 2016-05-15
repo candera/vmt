@@ -1,4 +1,4 @@
-(ns weathergen2.render
+(ns weathergen.render
   (:require [weathergen.math :as math]))
 
 (def successor
@@ -20,10 +20,10 @@
 (defn weather-color-gradient
   [w]
   (math/vector-interpolate (-> w :category color)
-                      (-> w :category successor color)
-                      (-> w :proportion)
-                      0
-                      1))
+                           (-> w :category successor color)
+                           (-> w :proportion)
+                           0
+                           1))
 
 (defn weather-color-greyscale
   [w]

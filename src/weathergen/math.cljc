@@ -19,11 +19,11 @@
   (unchecked-add (high-bits x n) (bit-shift-left (low-bits x (- 32 n)) n)))
 
 (defn frac
-  [x]
+  ^double [^double x]
   (- x (Math/floor x)))
 
 (defn whole
-  [x]
+  ^long [^double x]
   (long (Math/floor x)))
 
 (defn mean
@@ -42,19 +42,17 @@
     (mapv interp v1 v2)))
 
 (defn scramble
-  (^long [x] (scramble x 1))
-  (^long [x seed]
-   (-> x
-       (* seed)
-       Math/sin
-       ;;frac
-       (* 0xffffffff)
-       (bit-rotate-left 17)
-       )))
+  (^double [x] (scramble x 1))
+  (^double [x seed]
+   (let [a (-> x (* seed) Math/sin)
+         b (* a 1E9)
+         c (whole b)
+         d (frac b)]
+     (+ (frac b) (/ (whole b) 1.0E18)))))
 
 (defn discrete-noise-field
-  (^long [^long x ^long y] (discrete-noise-field x y 1))
-  (^long [^long x ^long y seed]
+  (^double [^long x ^long y] (discrete-noise-field x y 1))
+  (^double [^long x ^long y seed]
    (-> x (* 65521) (+ y) (scramble seed))))
 
 (defn continuous-noise-field
@@ -64,14 +62,13 @@
          y-frac (frac y)
          x-whole (whole x)
          y-whole (whole y)]
-     (/ (interpolate (interpolate (double (discrete-noise-field x-whole y-whole seed))
-                                  (double (discrete-noise-field (inc x-whole) y-whole seed))
-                                  x-frac)
-                     (interpolate (double (discrete-noise-field x-whole (inc y-whole) seed))
-                                  (double (discrete-noise-field (inc x-whole) (inc y-whole) seed))
-                                  x-frac)
-                     y-frac)
-        (double 0xffffffff)))))
+     (interpolate (interpolate (discrete-noise-field x-whole y-whole seed)
+                               (discrete-noise-field (inc x-whole) y-whole seed)
+                               x-frac)
+                  (interpolate (discrete-noise-field x-whole (inc y-whole) seed)
+                               (discrete-noise-field (inc x-whole) (inc y-whole) seed)
+                               x-frac)
+                  y-frac))))
 
 (defn fractal-field
   ([x y zoom] (fractal-field x y zoom 1))
@@ -97,3 +94,10 @@
         dfdx (/ (- fx f0) delta)
         dfdy (/ (- fy f0) delta)]
     [dfdx dfdy]))
+
+(defn clamp
+  [min max val]
+  (cond
+    (< val min) min
+    (< max val) max
+    :else val))

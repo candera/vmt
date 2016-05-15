@@ -35,12 +35,13 @@
    (let [t1               (math/whole (+ t seed))
          t2               (inc t1)
          pressure-fn      (fn [x y]
-                            (math/interpolate (math/fractal-field x y 32 t1)
-                                              (math/fractal-field x y 32 t2)
-                                              (math/frac t)))
+                            (math/clamp 0 1
+                                        (math/interpolate (math/fractal-field x y 32 t1)
+                                                          (math/fractal-field x y 32 t2)
+                                                          (math/frac t))))
          pressure         (pressure-fn x y)
          info             (categorize pressure)
-         [px' py' :as p'] (math/gradient x y pressure-fn 2)]
+         [px' py' :as p'] (math/gradient x y pressure-fn 3)]
      {:category          (:category info)
       :pressure          pressure
       :wind              (mapv #(* (:wind-adjustment info) pressure 20 %) [py' (- px')])

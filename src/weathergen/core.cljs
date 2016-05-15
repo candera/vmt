@@ -21,7 +21,10 @@
 
 (defn go
   []
-  ;; TODO
-  )
+  (let [weather (fn [x y] (model/weather x y 0))]
+    (-> (dom/getElement "app")
+        (svg/add-svg weather {:canvas-width 500
+                              :canvas-height 500
+                              :square-size 5}))))
 
 (go)
