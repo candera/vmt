@@ -1,6 +1,5 @@
-(ns weathergen.render
-  (:require [weathergen.grid :as grid]
-            [goog.dom :as dom]
+(ns weathergen.svg
+  (:require [goog.dom :as dom]
             [goog.graphics :as graphics]
             [goog.string :as gstring]
             [goog.string.format]))
@@ -21,7 +20,8 @@
   (let [size 5
         g (graphics/SvgGraphics. 500 500)]
     (.render g parent)
-    (doseq [[x y v] (grid/contents weather)]
+    (doseq [[x y v] [] ; TODO
+            ]
       (.drawRect g
                  (* size x)
                  (* size y)

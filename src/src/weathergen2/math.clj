@@ -1,4 +1,4 @@
-(ns weathergen2.noise
+(ns weathergen2.math
   "Functions for generating pseudorandom noise fields")
 
 (defn low-bits
@@ -41,9 +41,10 @@
    (-> x
        (* seed)
        Math/sin
-       frac
+       ;;frac
        (* 0xffffffff)
-       (bit-rotate-left 17))))
+       (bit-rotate-left 17)
+       )))
 
 (defn discrete-noise-field
   (^long [^long x ^long y] (discrete-noise-field x y 1))
@@ -78,3 +79,15 @@
               (/ z 2))))))
 
 
+(defn magnitude
+  [[x y]]
+  (Math/sqrt (+ (* x x) (* y y))))
+
+(defn gradient
+  [x y field delta]
+  (let [f0 (field x y)
+        fx (field (+ x delta) y)
+        fy (field x (+ y delta))
+        dfdx (/ (- fx f0) delta)
+        dfdy (/ (- fy f0) delta)]
+    [dfdx dfdy]))
