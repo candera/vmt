@@ -44,16 +44,18 @@
         wind-dirs   (doall (for [y (range size-y)
                                  x (range size-x)]
                              (read-float is)))]
-    (into (sorted-map)
-          (map (fn [coords wx-type pressure wind-speed wind-dir]
-                 [coords {:wx-type wx-type
-                          :pressure pressure
-                          :wind {:speed wind-speed
-                                 :dir wind-dir}}])
-               (for [y (range size-y)
-                     x (range size-x)]
-                 [x y])
-               wx-types
-               pressures
-               wind-speeds
-               wind-dirs))))
+    {:size-x size-x
+     :size-y size-y
+     :weather (into (sorted-map)
+                    (map (fn [coords wx-type pressure wind-speed wind-dir]
+                           [coords {:wx-type wx-type
+                                    :pressure pressure
+                                    :wind {:speed wind-speed
+                                           :dir wind-dir}}])
+                         (for [y (range size-y)
+                               x (range size-x)]
+                           [x y])
+                         wx-types
+                         pressures
+                         wind-speeds
+                         wind-dirs))}))

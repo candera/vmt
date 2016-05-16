@@ -8,10 +8,11 @@
 
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/clojurescript "1.8.51"]
-                 ;;[org.clojure/clojurescript "1.7.228"]
                  [org.clojure/core.async "0.2.374"
                   :exclusions [org.clojure/tools.reader]]
-                 [quil "2.4.0"]]
+                 [org.omcljs/om "1.0.0-alpha34"]
+                 [quil "2.4.0"]
+                 [seesaw "1.4.5"]]
 
   :plugins [[lein-figwheel "0.5.2"]
             [lein-cljsbuild "1.1.3" :exclusions [[org.clojure/clojure]]]]

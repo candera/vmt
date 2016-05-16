@@ -20,11 +20,9 @@
 
 (defn frac
   ^double [^double x]
-  (- x (Math/floor x)))
+  (- x (long x)))
 
-(defn whole
-  ^long [^double x]
-  (long (Math/floor x)))
+(def whole long)
 
 (defn mean
   [x y]
@@ -42,9 +40,9 @@
     (mapv interp v1 v2)))
 
 (defn scramble
-  (^double [x] (scramble x 1))
-  (^double [x seed]
-   (let [a (-> x (* seed) Math/sin)
+  (^double [^long x] (scramble x 1))
+  (^double [^long x ^long seed]
+   (let [a (-> x (* seed) Math/sin Math/abs)
          b (* a 1E9)
          c (whole b)
          d (frac b)]
@@ -85,6 +83,10 @@
 (defn magnitude
   [[x y]]
   (Math/sqrt (+ (* x x) (* y y))))
+
+(defn heading
+  [[x y]]
+  (-> (Math/atan2 x y) (* 180.0) (/ Math/PI) (mod 360)))
 
 (defn gradient
   [x y field delta]
