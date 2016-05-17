@@ -35,19 +35,19 @@
 (defn pressure
   [w]
   ;; TODO: Convert to mmHg
-  (model/inhg->mmhg (:pressure w)))
+  (-> w :pressure model/inhg->mmhg (math/nearest 1)))
 
 (defn wind-speed
   [w]
-  (-> w :wind :speed))
+  (-> w :wind :speed (math/nearest 1)))
 
 (defn wind-direction
   [w]
-  (-> w :wind :heading))
+  (-> w :wind :heading (math/nearest 1)))
 
 (defn temperature
   [w]
-  (-> w :temperature))
+  (-> w :temperature (math/nearest 0.1)))
 
 (defn get-blob
   [weather-fn xs ys]

@@ -101,3 +101,8 @@
     (< val min) min
     (< max val) max
     :else val))
+
+(defn nearest
+  "Round x to the nearest n. E.g. (nearest 10 15) => 20"
+  [x n]
+  (-> x double (/ n) Math/round (* n)))

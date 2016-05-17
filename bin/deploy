@@ -1,0 +1,6 @@
+#!/bin/bash
+
+cd $(dirname $0)/..
+lein clean
+lein cljsbuild once min
+cp -R resources/public/ ~/Dropbox/Public/weathergen/
