@@ -1,5 +1,6 @@
 (ns weathergen.fmap
-  (:require [weathergen.math :as math]))
+  (:require [weathergen.math :as math]
+            [weathergen.model :as model]))
 
 (defn byte-writer
   [size]
@@ -34,15 +35,19 @@
 (defn pressure
   [w]
   ;; TODO: Convert to mmHg
-  (:pressure w))
+  (model/inhg->mmhg (:pressure w)))
 
 (defn wind-speed
   [w]
-  (-> w :wind math/magnitude))
+  (-> w :wind :speed))
 
 (defn wind-direction
   [w]
-  (-> w :wind math/heading))
+  (-> w :wind :heading))
+
+(defn temperature
+  [w]
+  (-> w :temperature))
 
 (defn get-blob
   [weather-fn xs ys]
@@ -52,12 +57,13 @@
                                  x xs]
                              [[x y] (weather-fn x y)]))
         num-cells (* x-cells y-cells)
-        size      (+ 8 (* 4 4 num-cells))
+        size      (+ 8 (* 4 5 num-cells))
         bw        (byte-writer size)]
     (write-int32 bw x-cells)
     (write-int32 bw y-cells)
     (doseq [[f op] [[category write-int32]
                     [pressure write-float32]
+                    [temperature write-float32]
                     [wind-speed write-float32]
                     [wind-direction write-float32]]
             y (range y-cells)

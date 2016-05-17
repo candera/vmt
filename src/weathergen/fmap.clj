@@ -1,4 +1,5 @@
 (ns weathergen.fmap
+  (:require [weathergen.model :as model])
   (:import [java.io InputStream]
            [java.nio ByteBuffer ByteOrder]))
 
@@ -38,6 +39,9 @@
         pressures   (doall (for [y (range size-y)
                                  x (range size-x)]
                              (read-float is)))
+        temps       (doall (for [y (range size-y)
+                                 x (range size-x)]
+                             (read-float is)))
         wind-speeds (doall (for [y (range size-y)
                                  x (range size-x)]
                              (read-float is)))
@@ -47,15 +51,17 @@
     {:size-x size-x
      :size-y size-y
      :weather (into (sorted-map)
-                    (map (fn [coords wx-type pressure wind-speed wind-dir]
+                    (map (fn [coords wx-type pressure temp wind-speed wind-dir]
                            [coords {:wx-type wx-type
-                                    :pressure pressure
+                                    :pressure (model/mmhg->inhg pressure)
+                                    :temperature temp
                                     :wind {:speed wind-speed
-                                           :dir wind-dir}}])
+                                           :heading wind-dir}}])
                          (for [y (range size-y)
                                x (range size-x)]
                            [x y])
                          wx-types
                          pressures
+                         temps
                          wind-speeds
                          wind-dirs))}))

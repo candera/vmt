@@ -41,12 +41,10 @@
 
 (defn scramble
   (^double [^long x] (scramble x 1))
-  (^double [^long x ^long seed]
+  (^double [^long x ^double seed]
    (let [a (-> x (* seed) Math/sin Math/abs)
-         b (* a 1E9)
-         c (whole b)
-         d (frac b)]
-     (+ (frac b) (/ (whole b) 1.0E18)))))
+         b (* a 1E5)]
+     (+ (frac b) (/ (whole b) 1.0E10)))))
 
 (defn discrete-noise-field
   (^double [^long x ^long y] (discrete-noise-field x y 1))
@@ -56,10 +54,10 @@
 (defn continuous-noise-field
   (^double [^double x ^double y] (continuous-noise-field x y 1.0))
   (^double [^double x ^double y seed]
-   (let [x-frac (frac x)
-         y-frac (frac y)
-         x-whole (whole x)
-         y-whole (whole y)]
+   (let [x-frac (mod (frac x) 1.0)
+         y-frac (mod (frac y) 1.0)
+         x-whole (Math/floor x)
+         y-whole (Math/floor y)]
      (interpolate (interpolate (discrete-noise-field x-whole y-whole seed)
                                (discrete-noise-field (inc x-whole) y-whole seed)
                                x-frac)
@@ -89,13 +87,13 @@
   (-> (Math/atan2 x y) (* 180.0) (/ Math/PI) (mod 360)))
 
 (defn gradient
-  [x y field delta]
-  (let [f0 (field x y)
-        fx (field (+ x delta) y)
-        fy (field x (+ y delta))
-        dfdx (/ (- fx f0) delta)
-        dfdy (/ (- fy f0) delta)]
-    [dfdx dfdy]))
+  ([x y field delta] (gradient x y field delta (field x y)))
+  ([x y field delta f0]
+   (let [fx (field (+ x delta) y)
+         fy (field x (+ y delta))
+         dfdx (/ (- fx f0) delta)
+         dfdy (/ (- fy f0) delta)]
+     [dfdx dfdy])))
 
 (defn clamp
   [min max val]

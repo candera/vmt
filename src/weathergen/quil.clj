@@ -21,9 +21,10 @@
 (defn update-state [state]
   ; Update sketch state by changing circle color and position.
   (-> state
-      (update :x inc)
-      (update :y inc)
-      (update :t #(+ % 0.05))))
+      (update :x #(- % 5))
+      (update :y #(- % 5))
+      (update :t #(+ % 0.05))
+      ))
 
 (defn arrow
   [x y xoff yoff c1 c2]
@@ -41,7 +42,7 @@
 (defn draw-state [state]
   (let [wind-vector-length 45
         wind-vector-frequency 1
-        square-size 20]
+        square-size 10]
     (q/background 240)
     ;; (q/fill 128 128 128)
     ;; (q/rect 0 0 10 10)
@@ -58,13 +59,13 @@
                         (q/debug y*)
                         (q/debug t*)))
                   ;;w {:wind [0 0] :pressure 0 :pressure-gradient [0 0] :category :sunny}
-                  [wind-x wind-y] (:wind w)
-                  [px' py'] (:pressure-gradient w)]]
+                  ;;[wind-x wind-y] (:wind w)
+                  ]]
       ;;(apply q/fill (weather-color-greyscale w)
       (q/stroke 0 0 0 1)
-      (apply q/fill (render/weather-color-discrete w))
+      (apply q/fill (render/weather-color-gradient w))
       (q/rect (* x square-size) (* y square-size) square-size square-size)
-      (when (and (zero? (mod x wind-vector-frequency))
+      #_(when (and (zero? (mod x wind-vector-frequency))
                  (zero? (mod y wind-vector-frequency)))
         (arrow (+ (* x square-size) (/ square-size 2))
                (+ (* y square-size) (/ square-size 2))
@@ -72,6 +73,22 @@
                (* wind-vector-length wind-y)
                [0 0 0]
                [255 105 180])))))
+
+#_(defn draw-state
+  [state]
+    (let [wind-vector-length 45
+        wind-vector-frequency 1
+        square-size 10]
+    (q/background 240)
+    (doseq [x (range (/ canvas-size square-size))
+            y (range (/ canvas-size square-size))
+            :let [x* (+ x (:x state))
+                  y* (+ y (:y state))
+                  t* (:t state)
+                  w  {:pressure (math/fractal-field x* y* 64 1)}]]
+      (q/stroke 0 0 0 1)
+      (apply q/fill (render/weather-color-greyscale w))
+      (q/rect (* x square-size) (* y square-size) square-size square-size))))
 
 (q/defsketch weathergen
   :title "Stormy weather"
