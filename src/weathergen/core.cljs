@@ -1,6 +1,5 @@
 (ns weathergen.core
   (:require [weathergen.model :as model]
-            [weathergen.svg :as svg]
             [weathergen.fmap :as fmap]
             [weathergen.math :as math]
             [goog.dom :as gdom]
