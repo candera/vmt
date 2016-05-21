@@ -6,12 +6,7 @@
    :fair :poor
    :poor :inclement})
 
-(def color
-  {:sunny [0 128 255]
-   :fair [0 255 0]
-   :poor [255 255 0]
-   :inclement [192 0 0]
-   nil [255 0 0]})
+
 
 (defn weather-color-discrete
   [w]
@@ -19,11 +14,11 @@
 
 (defn weather-color-gradient
   [w]
-  (math/vector-interpolate (-> w :category color)
-                           (-> w :category successor color)
-                           (-> w :proportion)
-                           0
-                           1))
+  (mapv long (math/vector-interpolate (-> w :category color)
+                                     (-> w :next color)
+                                     (-> w :proportion)
+                                     0
+                                     1)))
 
 (defn weather-color-greyscale
   [w]

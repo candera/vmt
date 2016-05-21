@@ -44,7 +44,7 @@
   (^double [^long x ^double seed]
    (let [a (-> x (* seed) Math/sin Math/abs)
          b (* a 1E5)]
-     (+ (frac b) (/ (whole b) 1.0E10)))))
+     (frac b))))
 
 (defn discrete-noise-field
   (^double [^long x ^long y] (discrete-noise-field x y 1))
@@ -67,11 +67,11 @@
                   y-frac))))
 
 (defn fractal-field
-  ([x y zoom] (fractal-field x y zoom 1))
-  ([x y zoom seed]
+  ([x y zoom] (fractal-field x y zoom 1 1.0))
+  ([x y zoom seed floor]
    (loop [result 0
           z zoom]
-     (if (< z 1.0)
+     (if (< z floor)
        result
        (recur (+ result (* (continuous-noise-field (/ x z) (/ y z) seed)
                            (/ z zoom 2.0)))
@@ -106,3 +106,19 @@
   "Round x to the nearest n. E.g. (nearest 10 15) => 20"
   [x n]
   (-> x double (/ n) Math/round (* n)))
+
+(defn scale
+  [c v]
+  (mapv #(* c %) v))
+
+(defn deg->rad
+  [deg]
+  (-> deg (* Math/PI) (/ 180.0)))
+
+(defn rotate
+  [deg [x y]]
+  (let [rad (deg->rad (- deg))
+        cs (Math/cos rad)
+        sn (Math/sin rad)]
+    [(- (* x cs) (* y sn))
+     (+ (* x sn) (* y cs))]))

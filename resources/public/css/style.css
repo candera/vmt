@@ -1,6 +1,27 @@
 /* some style */
 
 svg {
-    display: block;
+    display: inline-block;
 }
 
+#controls {
+    display: inline-block;
+}
+
+/* These next classes don't work until I figure out if React can
+   support classes on SVG rects */
+rect.sunny {
+    fill: rgba(0,128,255,0);
+}
+
+rect.fair {
+    fill: rgba(0,255,0,1);
+}
+
+rect.poor {
+    fill: rgba(255,255,0,1);
+}
+
+rect.inclement {
+    fill: rgba(192, 0, 0, 1);
+}

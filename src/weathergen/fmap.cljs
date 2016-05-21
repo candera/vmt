@@ -51,8 +51,8 @@
 
 (defn get-blob
   [weather-fn xs ys]
-  (let [x-cells (count xs)
-        y-cells (count ys)
+  (let [x-cells   (count xs)
+        y-cells   (count ys)
         data      (into {} (for [y ys
                                  x xs]
                              [[x y] (weather-fn x y)]))
@@ -66,8 +66,8 @@
                     [temperature write-float32]
                     [wind-speed write-float32]
                     [wind-direction write-float32]]
-            y (range y-cells)
-            x (range x-cells)
+            y ys
+            x xs
             :let [w (get data [x y])]]
       (->> w f (op bw)))
     (blob bw)))

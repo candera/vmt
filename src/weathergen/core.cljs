@@ -2,6 +2,7 @@
   (:require [weathergen.model :as model]
             [weathergen.fmap :as fmap]
             [weathergen.math :as math]
+            [weathergen.render :as render]
             [goog.dom :as gdom]
             [goog.style :as gstyle]
             [goog.string :as gstring]
@@ -9,26 +10,12 @@
             [om.next :as om :refer-macros [defui]]
             [om.dom :as dom]
             [cljs.core.async :as async
-             :refer [<! >! timeout]])
+             :refer [<! >! timeout]]
+            ;;[butler.core :as butler]
+            )
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (enable-console-print!)
-
-(println "Edits to this text should show up in your developer console.")
-
-;; define your app data so that it doesn't get over-written on reload
-
-(defonce app-state
-  (atom {:origin-x 0
-         :origin-y 0
-         :t 0.01
-         :canvas-width 800
-         :canvas-height 800
-         :x-cells 59
-         :y-cells 59
-         :feature-size 0.25
-         :map :korea
-         :opacity 0.5}))
 
 (defn on-js-reload []
   ;; optionally touch your app-state to force rerendering depending on
@@ -36,83 +23,29 @@
   ;; (swap! app-state update-in [:__figwheel_counter] inc)
   )
 
-(defn current-weather
-  [{:keys [origin-x origin-y feature-size t] :as state} x y]
-  (model/weather (/ (+ x origin-x) feature-size)
-                 (/ (+ y origin-y) feature-size)
-                 t))
+(defonce app-state
+  (atom {:weather-params {:origin-x 0
+                          :origin-y 0
+                          :t 0.01
+                          :x-cells 59
+                          :y-cells 59
+                          :feature-size 0.2}
+         :weather-data nil
+         :display-params {:canvas-width 800
+                          :canvas-height 800
+                          :opacity 0.75
+                          :display :weather
+                          :map :korea}}))
 
-(defn click-prev
-  [e]
-  (swap! app-state (fn [state] (-> state
-                                   (update :origin-x dec)
-                                   (update :origin-y dec)
-                                   (update :t #(- % 0.05))))))
+(defn update-weather!
+  []
+  (swap! app-state assoc :weather-data
+         (model/weather-grid (:weather-params @app-state))))
 
-(defn click-next
-  [e]
-  (swap! app-state (fn [state] (-> state
-                                   (update :origin-x inc)
-                                   (update :origin-y inc)
-                                   (update :t #(+ % 0.05))))))
-
-(defn save-data
-  [blob filename]
-  (let [a (gdom/createElement "a")
-        _ (-> (gdom/getDocument) .-body (gdom/appendChild a))
-        _ (gstyle/showElement a false)
-        url (-> js/window .-URL (.createObjectURL blob))]
-    (-> a .-href (set! url))
-    (-> a .-download (set! filename))
-    (.click a)
-    (-> js/window .-URL (.revokeObjectURL url))))
-
-(defn click-save
-  [e]
-  (let [{:keys [x-cells y-cells] :as state} @app-state
-        blob (fmap/get-blob (fn [x y] (current-weather state x y))
-                       (range x-cells)
-                       (range y-cells))]
-    (save-data blob "generated.fmap")))
-
-(defn map-change
-  [e]
-  (let [map (-> e
-             .-target
-             .-value
-             {"Israel" :israel
-              "Balkans" :balkans
-              "Korea" :korea})]
-    ;; (println "New map" map (-> e .-target .-value))
-    (swap! app-state
-           assoc
-           :map
-           map)))
-
-(let [opacity-ch (async/chan (async/dropping-buffer 1))]
-
-  (go-loop [last-received nil
-            last-set nil]
-    (let [to (async/timeout 100)
-          [val ch] (async/alts! [opacity-ch to])]
-      (cond
-        (= ch opacity-ch)
-        (do
-          (recur val last-set))
-
-        (not= last-received last-set)
-        (do
-          (swap! app-state assoc :opacity last-received)
-          (recur last-received last-received))
-
-        :else
-        (do
-          (recur last-received last-set)))))
-
-  (defn opacity-change
-    [e]
-    (let [opacity (-> e .-target .-value (/ 100.0))]
-      (go (>! opacity-ch opacity)))))
+(def map-image
+  {:korea "images/kto.jpg"
+   :balkans "images/balkans.png"
+   :israel "images/ito.jpg"})
 
 (defn wind-vector
   [{:keys [x y width height wind key]}]
@@ -142,127 +75,306 @@
                            :strokeWidth stroke-width
                            :transform transform})))))
 
-(defn fill-color
-  [val alpha]
-  (if (= val :sunny)
-    "rgba(0,0,0,0)"
-    (gstring/format "rgba(%s,%s)"
-                    (case val
-                      :fair "0,255,0"
-                      :poor "255,255,0"
-                      :inclement "255,0,0")
-                    (str alpha))))
+(def weather-color
+  {:sunny [0 128 255 0]
+   :fair [0 255 0 1]
+   :poor [255 255 0 1]
+   :inclement [192 0 0 1]
+   nil [255 0 0 1]})
 
-(def map-image
-  {:korea "images/kto.jpg"
-   :balkans "images/balkans.png"
-   :israel "images/ito.jpg"})
+(def pressure-map
+  {28.5   [192 0 0 1]
+   28.75   [192 0 0 1]
+   29.0   [255 255 0 1]
+   29.425 [0 255 0 1]
+   29.7   [0 128 255 1]
+   30.0   [255 255 255 1]
+   31.0   [255 255 255 1]})
+
+(defn gradient-color
+  [color-map val]
+  (let [[[low l] [high h]] (->> color-map
+                                (into (sorted-map))
+                                (partition 2 1)
+                                (filter (fn [[[low l] [high h]]]
+                                          (<= low val high)))
+                                first)]
+    (math/vector-interpolate l h val low high)))
+
+(defn pressure-color
+  [pressure]
+  (let [[r g b a] (gradient-color pressure-map pressure)]
+    [(long r) (long g) (long b) a]))
+
+(defn fill-color
+  [w display alpha]
+  (let [[r g b a]
+        (case display
+          :weather (-> w :category weather-color)
+          :pressure (-> w
+                        :pressure
+                        pressure-color)
+          :temperature (-> w :category weather-color))]
+    (gstring/format "rgba(%s,%s,%s,%s)" r g b (* a alpha))))
+
+(let [opacity-ch (async/chan (async/dropping-buffer 1))]
+
+  (go-loop [last-received nil
+            last-set nil]
+    (let [to (async/timeout 100)
+          [val ch] (async/alts! [opacity-ch to])]
+      (cond
+        (= ch opacity-ch)
+        (do
+          (recur val last-set))
+
+        (not= last-received last-set)
+        (do
+          (swap! app-state assoc-in [:display-params :opacity] last-received)
+          (recur last-received last-received))
+
+        :else
+        (do
+          (recur last-received last-set)))))
+
+  (defn opacity-change
+    [e]
+    (let [opacity (-> e .-target .-value (/ 100.0))]
+      (go (>! opacity-ch opacity)))))
+
+(defn show-data
+  [_ x y weather]
+  (swap! app-state
+         #(-> %
+              (assoc-in [:selected-cell :x] x)
+              (assoc-in [:selected-cell :y] y)
+              (assoc-in [:selected-cell :weather] weather))))
+
+(defui WeatherGrid
+  ;; static om/IQuery
+  ;; (query [this]
+  ;;        [:weather-data :display-params :weather-params])
+  Object
+  (render [this]
+          #_(dom/svg #js {:width 800
+                          :height 800}
+                     (js/React.DOM.image #js {:href (map-image :korea)
+                                              :width 800
+                                              :height 800}))
+          (let [{:keys [weather-params weather-data display-params]} (om/props this)
+                {:keys [canvas-width canvas-height opacity display map]} display-params
+                {:keys [x-cells y-cells]} weather-params
+                cell-width (/ canvas-width x-cells)
+                cell-height (/ canvas-height y-cells)]
+            (dom/svg
+             #js {:width canvas-width
+                  :height canvas-height}
+             (when-let [map-image (map-image map)]
+               (js/React.DOM.image #js {:href map-image
+                                        :width canvas-width
+                                        :height canvas-height}
+                                   nil))
+             (for [[[x y] weather] weather-data]
+               (dom/rect #js {:key (str "cell" x "-" y)
+                              :x (* cell-width x)
+                              :y (* cell-height y)
+                              :width cell-width
+                              :height cell-height
+                              ;;:class (weather-class weather)
+                              :fill (fill-color weather display opacity)
+                              :onMouseOver #(show-data % x y weather)
+                              ;; :stroke "black"
+                              ;; :strokeWidth "0.3px"
+                              }))
+             (for [[[x y] weather] weather-data
+                   vector-part (wind-vector {:x (* cell-width x)
+                                             :y (* cell-height y)
+                                             :key (str x "-" y)
+                                             :width cell-width
+                                             :height cell-height
+                                             :wind (:wind weather)})]
+               vector-part)))))
+
+(def weather-grid (om/factory WeatherGrid))
+
+(defn invert-map
+  [m]
+  (zipmap (vals m) (keys m)))
+
+(def map-name->key
+  {"Israel" :israel
+   "Balkans" :balkans
+   "Korea" :korea})
+
+(def map-key->name
+  (invert-map map-name->key))
+
+(defn map-change
+  [e]
+  (let [map (-> e
+                .-target
+                .-value
+                map-name->key)]
+    ;; (println "New map" map (-> e .-target .-value))
+    (swap! app-state
+           assoc-in
+           [:display-params :map]
+           map)))
+
+(def weather-name->key
+  {"Weather" :weather
+   "Pressure" :pressure
+   "Temperature" :temperature})
+
+(def weather-key->name
+  (invert-map weather-name->key))
+
+(defn display-change
+  [e]
+  (let [map (-> e
+                .-target
+                .-value
+                weather-name->key)]
+    (swap! app-state
+           assoc-in
+           [:display-params :display]
+           map)))
+
+
+(defui DisplayControls
+  Object
+  (render
+   [this]
+   (let [{:keys [display-params]} (om/props this)
+         {:keys [map opacity]}    display-params]
+    (dom/div
+     #js {:id "display-controls"}
+     (dom/table
+      nil
+      (dom/tbody
+       nil
+       (dom/tr
+        nil
+        (dom/td nil "Map:")
+        (dom/td nil
+                ;; TODO: This really needs to be a control
+                (dom/select #js {:onChange map-change
+                                 :value (map-key->name map)}
+                            (for [map-name ["Korea" "Balkans" "Israel" "None"]]
+                              (dom/option
+                               #js {:value map-name}
+                               map-name)))))
+       (dom/tr
+        nil
+        (dom/td nil "Display:")
+        (dom/td nil
+                ;; TODO: Make this a control at the same time as the above
+                (dom/select #js {:onChange display-change}
+                            (for [map ["Weather" "Temperature" "Pressure"]]
+                              (dom/option #js {:value map} map)))))
+       (dom/tr
+        nil
+        (dom/td nil "Opacity:")
+        (dom/td nil (dom/input #js {:type "range"
+                                    :min 0
+                                    :max 100
+                                    :value (long (* opacity 100))
+                                    :onChange opacity-change})))))))))
+
+(def display-controls
+  (om/factory DisplayControls))
+
+(defn click-prev
+  [e]
+  (swap! app-state (fn [state] (-> state
+                                   (update-in [:weather-params :origin-x] dec)
+                                   (update-in [:weather-params :origin-y] dec)
+                                   (update-in [:weather-params :t] #(- % 0.05)))))
+  (update-weather!))
+
+(defn click-next
+  [e]
+  (swap! app-state (fn [state] (-> state
+                                   (update-in [:weather-params :origin-x] inc)
+                                   (update-in [:weather-params :origin-y] inc)
+                                   (update-in [:weather-params :t] #(+ % 0.05)))))
+  (update-weather!))
+
+(defn save-data
+  [blob filename]
+  (let [a (gdom/createElement "a")
+        _ (-> (gdom/getDocument) .-body (gdom/appendChild a))
+        _ (gstyle/showElement a false)
+        url (-> js/window .-URL (.createObjectURL blob))]
+    (-> a .-href (set! url))
+    (-> a .-download (set! filename))
+    (.click a)
+    (-> js/window .-URL (.revokeObjectURL url))))
+
+(defn click-save
+  [e]
+  (let [{:keys [weather-params weather-data] :as state} @app-state
+        {:keys [x-cells y-cells]}  weather-params
+        blob (fmap/get-blob (fn [x y] (get weather-data [x y]))
+                            (range x-cells)
+                            (range y-cells))]
+    (save-data blob "generated.fmap")))
+
+
+(defui PlayControls
+  Object
+  (render
+   [this]
+   (dom/div #js {}
+            (dom/button #js {:onClick click-prev} "<")
+            (dom/button #js {:onClick click-save} "Save")
+            (dom/button #js {:onClick click-next} ">"))))
+
+(def play-controls
+  (om/factory PlayControls))
+
+(defui DebugInfo
+  Object
+  (render
+   [this]
+   (let [{:keys [weather-params display-params selected-cell]} (om/props this)]
+     (dom/div
+      #js {:id "debug"}
+      (dom/table
+       nil
+       (dom/tbody
+        nil
+        (for [[k v] (merge weather-params display-params selected-cell)]
+          (dom/tr nil
+                  (dom/td nil (str k))
+                  (dom/td nil (str v))))))))))
+
+(def debug-info
+  (om/factory DebugInfo))
 
 (defui WeatherGen
   Object
   (render [this]
-          (let [{:keys [x-cells y-cells canvas-width canvas-height map opacity] :as state} @app-state
-                cell-width (/ canvas-width x-cells)
-                cell-height (/ canvas-height y-cells)
-                data (for [x (range x-cells)
-                           y (range y-cells)]
-                       [[x y] (current-weather state x y)])]
-            (dom/div
-             nil
-             (dom/svg
-              #js {:width canvas-width
-                   :height canvas-height}
-              (when-let [map-image (map-image map)]
-                (js/React.DOM.image #js {:href map-image
-                                         :width canvas-width
-                                         :height canvas-height}))
-              (for [[[x y] weather] data]
-                (dom/rect #js {:key (str "cell" x "-" y)
-                               :x (* cell-width x)
-                               :y (* cell-height y)
-                               :width cell-width
-                               :height cell-height
-                               :fill (-> weather
-                                         :category
-                                         (fill-color opacity))
-                               :stroke "black"
-                               :strokeWidth "0.3px"}))
-              (for [[[x y] weather] data
-                    vector-part (wind-vector {:x (* cell-width x)
-                                              :y (* cell-height y)
-                                              :key (str x "-" y)
-                                              :width cell-width
-                                              :height cell-height
-                                              :wind (:wind weather)})]
-                vector-part))
-             (dom/table
-              #js {:id "controls"}
-              (dom/tbody
-               nil
-               (dom/tr
-                nil
-                (dom/td nil "Map:")
-                (dom/td nil
-                        (dom/select #js {:onChange map-change}
-                                    (for [map ["Korea" "Balkans" "Israel" "None"]]
-                                      (dom/option #js {:value map} map)))))
-               (dom/tr
-                nil
-                (dom/td nil "Opacity:")
-                (dom/td nil (dom/input #js {:type "range"
-                                            :min 0
-                                            :max 100
-                                            :value (long (* opacity 100))
-                                            :onChange opacity-change})))))
-             (dom/button #js {:onClick click-prev} "<")
-             (dom/button #js {:onClick click-save} "Save")
-             (dom/button #js {:onClick click-next} ">")
-             (dom/div
-              #js {:id "debug"}
-              (dom/table
-               nil
-               (dom/tbody
-                nil
-                (for [[k v] state]
-                  (dom/tr nil
-                          (dom/td nil (str k))
-                          (dom/td nil (str v)))))))))))
+          (dom/div nil
+                   (weather-grid (assoc @app-state :react-key :weather-grid))
+                   (play-controls (assoc @app-state :react-key :play-controls))
+                   (display-controls (assoc @app-state :react-key :display-controls))
+                   (debug-info @app-state))))
 
 (def reconciler
-  (om/reconciler {:state app-state}))
+  (om/reconciler {:state app-state
+                  ;; :parser (om/parser {:read read
+                  ;;                     :mutate mutate})
+                  }))
 
 (om/add-root! reconciler
               WeatherGen
               (gdom/getElement "app"))
 
-(defn update-state
-  [state]
-  (-> state
-      (update :x inc)
-      (update :y inc)
-      (update :t #(+ % 0.05))))
 
-;; (go-loop []
-;;   (async/<! (timeout 2000))
-;;   (println (:t @app-state))
-;;   (swap! app-state update-state)
-;;   (recur))
+;; (if (undefined? (.-document js/self))
+;;   (comment (worker/main))
+;;   (ui/main "js/compiled/weathergen.js"))
 
-;; (js/ReactDOM.render (weathergen) (gdom/getElement "app"))
+;; (ui/main nil)
 
-
-;; (defn root-component [app owner]
-;;   (reify
-;;     om/IRender
-;;     (render [_]
-;;       (dom/svg nil nil))))
-
-;; (defn go
-;;   []
-;;   (let [weather (fn [x y] (model/weather x y 0))]
-;;     (-> (dom/getElement "app")
-;;         (svg/add-svg weather {:canvas-width 500
-;;                               :canvas-height 500
-;;                               :square-size 5}))))
-
-;; (go)

@@ -90,7 +90,7 @@
       (apply q/fill (render/weather-color-greyscale w))
       (q/rect (* x square-size) (* y square-size) square-size square-size))))
 
-(q/defsketch weathergen
+#_(q/defsketch weathergen
   :title "Stormy weather"
   :size [canvas-size canvas-size]
   ; setup function called only once, during sketch initialization.

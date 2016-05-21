@@ -12,7 +12,8 @@
                   :exclusions [org.clojure/tools.reader]]
                  [org.omcljs/om "1.0.0-alpha34"]
                  [quil "2.4.0"]
-                 [seesaw "1.4.5"]]
+                 ;;[butler "0.2.0"]
+                 ]
 
   :plugins [[lein-figwheel "0.5.2"]
             [lein-cljsbuild "1.1.3" :exclusions [[org.clojure/clojure]]]]
@@ -27,12 +28,16 @@
 
                 ;; If no code is to be run, set :figwheel true for continued automagical reloading
                 :figwheel {:on-jsload "weathergen.core/on-js-reload"}
+                ;;:figwheel true
 
                 :compiler {:main weathergen.core
                            :asset-path "js/compiled/out"
                            :output-to "resources/public/js/compiled/weathergen.js"
+                           ;;:source-map "resources/public/js/compiled/weathergen.js.map"
                            :output-dir "resources/public/js/compiled/out"
-                           :source-map-timestamp true}}
+                           :source-map-timestamp true
+                           ;;:optimizations :simple
+                           }}
                ;; This next build is an compressed minified build for
                ;; production. You can build this with:
                ;; lein cljsbuild once min
