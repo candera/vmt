@@ -39,6 +39,10 @@
         interp (fn [a b] (+ (* (- 1 f) a) (* f b)))]
     (mapv interp v1 v2)))
 
+(defn vector-add
+  [& vs]
+  (apply mapv + vs))
+
 (defn scramble
   (^double [^long x] (scramble x 1))
   (^double [^long x ^double seed]

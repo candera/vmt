@@ -8,6 +8,17 @@ svg {
     display: inline-block;
 }
 
+.two-column {
+    display: flex;
+}
+
+.left-column {
+}
+
+.right-column {
+    width: 100%;
+}
+
 /* These next classes don't work until I figure out if React can
    support classes on SVG rects */
 rect.sunny {
