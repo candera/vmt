@@ -1,11 +1,21 @@
 (ns weathergen.quil
   (:require [quil.core :as q]
-            [quil.middleware :as m]
             [weathergen.math :as math]
-            [weathergen.model :as model]
-            [weathergen.render :as render]))
+            [weathergen.model :as model]))
 
 (def canvas-size (* 18 59))
+
+(def state (atom {:origin-x 0
+                  :origin-y 0
+                  :t 0.01
+                  ;; :x-cells 59
+                  ;; :y-cells 59
+                  :x-cells 120
+                  :y-cells 120
+                  :feature-size 0.07
+                  :wind-pressure-constant 2
+                  :wind-smoothing-window 0
+                  :wind-strength 50.0}))
 
 (defn setup []
   ; Set frame rate to 30 frames per second.
@@ -14,17 +24,16 @@
   (q/color-mode :rgb)
   ; setup function returns initial state. It contains
   ; circle color and position.
-  {:x 0
-   :y 0
-   :t 1})
+  state)
 
-(defn update-state [state]
-  ; Update sketch state by changing circle color and position.
-  (-> state
-      (update :x #(- % 5))
-      (update :y #(- % 5))
-      (update :t #(+ % 0.05))
-      ))
+(defn update-state [_]
+  (swap! state (fn [val]
+                 (-> val
+                     (update :origin-x #(- % 2))
+                     (update :origin-y #(- % 2))
+                     (update :t #(+ % 0.04))
+                     )))
+  state)
 
 (defn arrow
   [x y xoff yoff c1 c2]
@@ -39,20 +48,27 @@
     (apply q/stroke c2)
     (q/line xm ym x2 y2)))
 
-(defn draw-state [state]
+(defn weather-color-gradient
+  [w]
+  [(-> w :value (* 192) long) 255 255])
+
+#_(defn draw-state [state]
   (let [wind-vector-length 45
         wind-vector-frequency 1
-        square-size 10]
+        square-size 5]
     (q/background 240)
     ;; (q/fill 128 128 128)
     ;; (q/rect 0 0 10 10)
     (doseq [x (range (/ canvas-size square-size))
             y (range (/ canvas-size square-size))
-            :let [x* (- x (:x state))
-                  y* (- y (:y state))
+            :let [x* (- x (:origin-x state))
+                  y* (- y (:origin-y state))
                   t* (:t state)
                   w (try
-                      (model/weather x* y* t*)
+                      ;;(model/weather x* y* t*)
+                      (model/field {:x x* :y y* :t t*
+                                    :fxy (fn [x y] (Math/sin (+ x y)))
+                                    :fv #(-> % Math/sin Math/abs)})
                       (catch Throwable ex
                         (q/debug ex)
                         (q/debug x*)
@@ -63,7 +79,8 @@
                   ]]
       ;;(apply q/fill (weather-color-greyscale w)
       (q/stroke 0 0 0 1)
-      (apply q/fill (render/weather-color-gradient w))
+      ;;(apply q/fill (weather-color-gradient w))
+      (q/fill [(long (* w 192)) 255 255])
       (q/rect (* x square-size) (* y square-size) square-size square-size)
       #_(when (and (zero? (mod x wind-vector-frequency))
                  (zero? (mod y wind-vector-frequency)))
@@ -74,32 +91,69 @@
                [0 0 0]
                [255 105 180])))))
 
-#_(defn draw-state
+(defn draw-state
   [state]
-    (let [wind-vector-length 45
+  (let [wind-vector-length 45
         wind-vector-frequency 1
-        square-size 10]
+        square-size (/ canvas-size (:x-cells @state))]
     (q/background 240)
-    (doseq [x (range (/ canvas-size square-size))
-            y (range (/ canvas-size square-size))
-            :let [x* (+ x (:x state))
-                  y* (+ y (:y state))
-                  t* (:t state)
-                  w  {:pressure (math/fractal-field x* y* 64 1)}]]
-      (q/stroke 0 0 0 1)
-      (apply q/fill (render/weather-color-greyscale w))
-      (q/rect (* x square-size) (* y square-size) square-size square-size))))
+    (let [ ;; grid (model/weather-grid @state)
+          zoom (:feature-size @state)]
+      (doseq [x (range (:x-cells @state))
+              y (range (:y-cells @state))
+              :let [x* (* (+ x (:origin-x @state)) zoom)
+                    y* (* (+ y (:origin-y @state)) zoom)
+                    {:keys [v g]}
+                    (model/field2 {:x x* :y y* :t (:t @state)
+                                   ;;:t-power 15
+                                   :t-power 0
+                                   :t-size 0.05
+                                   :fxy (fn [x y]
+                                          {:v (-> (* (Math/sin (/ x 1.3))
+                                                     (Math/sin (/ y 2.2))
+                                                     (Math/abs (- (mod x 2) 1))
+                                                     (Math/abs (- (mod y 2) 1)))
+                                                  (+ 1)
+                                                  (/ 2))
+                                           :g [(* (Math/cos (/ x 1.3))
+                                                  (Math/sin (/ y 2.2))
+                                                  (Math/abs (- (mod y 2) 1))
+                                                  (Math/abs (- (mod x 2) 1)))
+                                               (* (Math/sin (/ x 1.3))
+                                                  (Math/cos (/ y 2.2))
+                                                  (Math/abs (- (mod x 2) 1))
+                                                  (Math/abs (- (mod y 2) 1)))]})})
+                    [gx gy] g]]
+        (q/stroke 0 0 0 1)
+        ;;(apply q/fill (weather-color-gradient w))
+        (q/color-mode :hsb)
+        (q/fill (* v 192) 255 255)
+        (q/rect (* x square-size) (* y square-size) square-size square-size)
+        (arrow (* (+ x 0.5) square-size)
+               (* (+ y 0.5) square-size)
+               (* gx square-size)
+               (* gy square-size)
+               [0 0 0]
+               [0 0 0])))))
 
-#_(q/defsketch weathergen
-  :title "Stormy weather"
-  :size [canvas-size canvas-size]
-  ; setup function called only once, during sketch initialization.
-  :setup setup
-  ; update-state is called on each iteration before draw-state.
-  :update update-state
-  :draw draw-state
-  :features [:keep-on-top :no-start]
-  ; This sketch uses functional-mode middleware.
-  ; Check quil wiki for more info about middlewares and particularly
-  ; fun-mode.
-  :middleware [m/fun-mode])
+
+
+(comment
+  ;; Got good values with this:
+  (model/field {:x x* :y y* :t (:t @state)
+                :t-power 4
+                :t-size 0.05
+                :fxy (fn [x y]
+                       (* (Math/abs
+                           (Math/sin (/ x 5)))
+                          (Math/pow
+                           (* (Math/abs (- (mod x 2) 1))
+                              (Math/abs (- (mod y 2) 1)))
+                           3)))
+                :fv (fn [v]
+                      (let [v1 (-> v Math/sin Math/abs)
+                            v2 (- v1 0.5)
+                            v3 (* v2 v2 v2)]
+                        (-> v3 (* 4) (+ 0.5))))
+                })
+  )

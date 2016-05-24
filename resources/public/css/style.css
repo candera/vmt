@@ -1,5 +1,11 @@
 /* some style */
 
+body {
+    font-family: 'Open Sans Condensed', sans-serif;
+    font-weight: bold;
+    background-color: #FDFFD9;
+}
+
 svg {
     display: inline-block;
 }

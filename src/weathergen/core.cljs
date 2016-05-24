@@ -28,8 +28,11 @@
                           :t 0.01
                           :x-cells 59
                           :y-cells 59
-                          ;;:feature-size 0.2
-                          }
+                          :feature-size 0.25
+                          :wind-pressure-constant 2
+                          :wind-smoothing-window 0
+                          :wind-strength 50.0}
+         :selected-cell nil
          :weather-data nil
          :display-params {:canvas-width 800
                           :canvas-height 800
@@ -144,47 +147,41 @@
 (let [opacity-ch (async/chan (async/dropping-buffer 1))]
 
   (go-loop [last-received nil
+            component nil
             last-set nil]
     (let [to (async/timeout 100)
-          [val ch] (async/alts! [opacity-ch to])]
+          [[val c] ch] (async/alts! [opacity-ch to])]
       (cond
         (= ch opacity-ch)
         (do
-          (recur val last-set))
+          (recur val c last-set))
 
         (not= last-received last-set)
         (do
-          (swap! app-state assoc-in [:display-params :opacity] last-received)
-          (recur last-received last-received))
+          (om/transact! component [(list 'change-opacity {:opacity last-received})
+                                   :display-params])
+          (recur last-received component last-received))
 
         :else
         (do
-          (recur last-received last-set)))))
+          (recur last-received component last-set)))))
 
   (defn opacity-change
-    [e]
+    [e component]
     (let [opacity (-> e .-target .-value (/ 100.0))]
-      (go (>! opacity-ch opacity)))))
+      (go (>! opacity-ch [opacity component])))))
 
 (defn show-data
-  [_ x y weather]
-  (swap! app-state
-         #(-> %
-              (assoc-in [:selected-cell :x] x)
-              (assoc-in [:selected-cell :y] y)
-              (assoc-in [:selected-cell :weather] weather))))
+  [component x y weather]
+  (om/transact! component [(list 'show-selected-cell {:x x :y y :weather weather})
+                           :selected-cell]))
 
 (defui WeatherGrid
-  ;; static om/IQuery
-  ;; (query [this]
-  ;;        [:weather-data :display-params :weather-params])
+  static om/IQuery
+  (query [this]
+         [:weather-data :display-params :weather-params])
   Object
   (render [this]
-          #_(dom/svg #js {:width 800
-                          :height 800}
-                     (js/React.DOM.image #js {:href (map-image :korea)
-                                              :width 800
-                                              :height 800}))
           (let [{:keys [weather-params weather-data display-params]} (om/props this)
                 {:keys [canvas-width canvas-height opacity display map]} display-params
                 {:keys [x-cells y-cells]} weather-params
@@ -206,7 +203,7 @@
                               :height cell-height
                               ;;:class (weather-class weather)
                               :fill (fill-color weather display opacity)
-                              :onMouseOver #(show-data % x y weather)
+                              :onMouseOver #(show-data this x y weather)
                               ;; :stroke "black"
                               ;; :strokeWidth "0.3px"
                               }))
@@ -233,38 +230,27 @@
 (def map-key->name
   (invert-map map-name->key))
 
-(defn map-change
-  [e]
-  (let [map (-> e
-                .-target
-                .-value
-                map-name->key)]
-    ;; (println "New map" map (-> e .-target .-value))
-    (swap! app-state
-           assoc-in
-           [:display-params :map]
-           map)))
-
-(def weather-name->key
+(def display-name->key
   {"Weather" :weather
    "Pressure" :pressure})
 
-(def weather-key->name
-  (invert-map weather-name->key))
+(def display-key->name
+  (invert-map display-name->key))
 
 (defn display-change
-  [e]
-  (let [map (-> e
-                .-target
-                .-value
-                weather-name->key)]
-    (swap! app-state
-           assoc-in
-           [:display-params :display]
-           map)))
+  [e component]
+  (let [display (-> e
+                    .-target
+                    .-value
+                    display-name->key)]
+    (om/transact! component [(list 'change-display {:display display})
+                             :display-params])))
 
 
 (defui DisplayControls
+  static om/IQuery
+  (query [this]
+         [:display-params])
   Object
   (render
    [this]
@@ -284,19 +270,27 @@
           (dom/td nil "Map:")
           (dom/td nil
                   ;; TODO: This really needs to be a control
-                  (dom/select #js {:onChange map-change
-                                   :value (map-key->name map)}
-                              (for [map-name ["Korea" "Balkans" "Israel" "None"]]
-                                (dom/option
-                                 #js {:value map-name}
-                                 map-name)))))
+                  (dom/select
+                   #js {:onChange (fn [e]
+                                    (om/transact! this
+                                                  [(list 'change-map
+                                                         {:map (-> e
+                                                                   .-target
+                                                                   .-value)})
+                                                   :display-params]))
+                        :value (map-key->name map)}
+                   (for [map-name ["Korea" "Balkans" "Israel" "None"]]
+                     (dom/option
+                      #js {:value map-name}
+                      map-name)))))
          (dom/tr
           nil
           (dom/td nil "Display:")
           (dom/td nil
                   ;; TODO: Make this a control at the same time as the above
-                  (dom/select #js {:onChange display-change}
-                              (for [map (keys weather-name->key)]
+                  (dom/select #js {:onChange (fn [e]
+                                               (display-change e this))}
+                              (for [map (keys display-name->key)]
                                 (dom/option #js {:value map} map)))))
          (dom/tr
           nil
@@ -305,21 +299,15 @@
                                       :min 0
                                       :max 100
                                       :value (long (* opacity 100))
-                                      :onChange opacity-change}))))))))))
+                                      :onChange (fn [e]
+                                                  (opacity-change e this))}))))))))))
 
 (def display-controls
   (om/factory DisplayControls))
 
-(defn click-prev
-  [e]
-  (swap! app-state (fn [state] (-> state
-                                   (update-in [:weather-params :origin-x] dec)
-                                   (update-in [:weather-params :origin-y] dec)
-                                   (update-in [:weather-params :t] #(- % 0.05)))))
-  (update-weather!))
-
 (defn click-next
   [e]
+  ;;(om/transact! this)
   (swap! app-state (fn [state] (-> state
                                    (update-in [:weather-params :origin-x] inc)
                                    (update-in [:weather-params :origin-y] inc)
@@ -348,6 +336,9 @@
 
 
 (defui PlayControls
+  static om/IQuery
+  (query [this]
+         [])
   Object
   (render
    [this]
@@ -355,9 +346,13 @@
     nil
     (dom/legend nil "Play/save controls")
     (dom/div #js {}
-             (dom/button #js {:onClick click-prev} "<")
+             (dom/button #js {:onClick (fn [e]
+                                         (om/transact! this '[(prev) :weather-data]))}
+                         "<")
              (dom/button #js {:onClick click-save} "Save")
-             (dom/button #js {:onClick click-next} ">")))))
+             (dom/button #js {:onClick (fn [e]
+                                         (om/transact! this '[(next) :weather-data]))}
+                         ">")))))
 
 (def play-controls
   (om/factory PlayControls))
@@ -372,6 +367,9 @@
   (invert-map category-name->key))
 
 (defui SelectedCellInfo
+  static om/IQuery
+  (query [this]
+         [:selected-cell])
   Object
   (render
    [this]
@@ -399,6 +397,9 @@
   (om/factory SelectedCellInfo))
 
 (defui DebugInfo
+  static om/IQuery
+  (query [this]
+         [:weather-params :display-params :selected-cell])
   Object
   (render
    [this]
@@ -421,6 +422,9 @@
   (om/factory DebugInfo))
 
 (defui WeatherGen
+  static om/IQuery
+  (query [this]
+         (vec (keys @app-state)))
   Object
   (render [this]
           (dom/div
@@ -434,11 +438,86 @@
                              (play-controls (assoc @app-state :react-key :play-controls))))
            (debug-info @app-state))))
 
+(defn read [{:keys [state] :as env} key params]
+  (let [st @state]
+    (if-let [[_ value] (find st key)]
+      {:value value}
+      {:value :not-found})))
+
+(defmulti mutation (fn [state key params] key))
+
+(defmethod mutation 'prev
+  [state key params]
+  (println "Mutate prev" :key key :params params)
+  {:value {:keys [:weather-params :weather-data :display-params]}
+   :action (fn []
+             (println "Performing prev mutation")
+             (let [state (swap! state
+                                (fn [state]
+                                  (-> state
+                                      (update-in [:weather-params :origin-x] dec)
+                                      (update-in [:weather-params :origin-y] dec)
+                                      (update-in [:weather-params :t] #(- % 0.05)))))]
+               (update-weather!)
+               (println "Update worked")
+               state))})
+
+(defmethod mutation 'next
+  [state key params]
+  (println "Mutate prev" :key key :params params)
+  {:value {:keys [:weather-params :weather-data :display-params]}
+   :action (fn []
+             (println "Performing prev mutation")
+             (let [state (swap! state
+                                (fn [st]
+                                  (-> st
+                                      (update-in [:weather-params :origin-x] inc)
+                                      (update-in [:weather-params :origin-y] inc)
+                                      (update-in [:weather-params :t] #(+ % 0.05)))))]
+               (update-weather!)
+               (println "Update worked")
+               state))})
+
+(defmethod mutation 'change-map
+  [state key {:keys [map] :as params}]
+  {:value {:keys [:display-params]}
+   :action #(swap! state
+                   assoc-in
+                   [:display-params :map]
+                   (map-name->key map))})
+
+(defmethod mutation 'show-selected-cell
+  [state key {:keys [x y weather] :as params}]
+  ;;(println "show-selected-cell mutation" :x x :y y :weather weather)
+  {:value {:keys [:selected-cell]}
+   :action (fn []
+             (swap! state
+                    #(-> %
+                         (assoc-in [:selected-cell :x] x)
+                         (assoc-in [:selected-cell :y] y)
+                         (assoc-in [:selected-cell :weather] weather))))})
+
+(defmethod mutation 'change-opacity
+  [state key {:keys [opacity] :as params}]
+  {:value {:keys [:display-params]}
+   :action #(swap! state assoc-in [:display-params :opacity] opacity)})
+
+(defmethod mutation 'change-display
+  [state key {:keys [display] :as params}]
+  {:value {:keys [:display-params]}
+   :action #(swap! state
+                   assoc-in
+                   [:display-params :display]
+                   map)})
+
+(defn mutate [{:keys [state] :as env} key params]
+  ;;(println "Mutating" :key key :params params)
+  (mutation state key params))
+
 (def reconciler
   (om/reconciler {:state app-state
-                  ;; :parser (om/parser {:read read
-                  ;;                     :mutate mutate})
-                  }))
+                  :parser (om/parser {:read read
+                                      :mutate mutate})}))
 
 (om/add-root! reconciler
               WeatherGen
