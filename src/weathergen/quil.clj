@@ -31,7 +31,7 @@
                  (-> val
                      (update :origin-x #(- % 2))
                      (update :origin-y #(- % 2))
-                     (update :t #(+ % 0.04))
+                     (update :t #(+ % 0.05))
                      )))
   state)
 
@@ -41,11 +41,12 @@
         y1 y
         x2 (+ x xoff)
         y2 (+ y yoff)
-        xm (math/interpolate x1 x2 0.75)
-        ym (math/interpolate y1 y2 0.75)]
+        xm (math/interpolate x1 x2 0.6)
+        ym (math/interpolate y1 y2 0.6)]
     (apply q/stroke c1)
     (q/line x1 y1 xm ym)
     (apply q/stroke c2)
+    (q/stroke-weight 2)
     (q/line xm ym x2 y2)))
 
 (defn weather-color-gradient
@@ -103,38 +104,58 @@
               y (range (:y-cells @state))
               :let [x* (* (+ x (:origin-x @state)) zoom)
                     y* (* (+ y (:origin-y @state)) zoom)
-                    {:keys [v g]}
-                    (model/field2 {:x x* :y y* :t (:t @state)
-                                   ;;:t-power 15
-                                   :t-power 0
-                                   :t-size 0.05
-                                   :fxy (fn [x y]
-                                          {:v (-> (* (Math/sin (/ x 1.3))
-                                                     (Math/sin (/ y 2.2))
-                                                     (Math/abs (- (mod x 2) 1))
-                                                     (Math/abs (- (mod y 2) 1)))
-                                                  (+ 1)
-                                                  (/ 2))
-                                           :g [(* (Math/cos (/ x 1.3))
-                                                  (Math/sin (/ y 2.2))
-                                                  (Math/abs (- (mod y 2) 1))
-                                                  (Math/abs (- (mod x 2) 1)))
-                                               (* (Math/sin (/ x 1.3))
-                                                  (Math/cos (/ y 2.2))
-                                                  (Math/abs (- (mod x 2) 1))
-                                                  (Math/abs (- (mod y 2) 1)))]})})
-                    [gx gy] g]]
+                    fxy (fn [x y]
+                          (let [x* (- (mod (+ x 1) 2) 1)
+                                y* (- (mod (+ y 1) 2) 1)
+                                v (* (Math/sin (/ x 1.3))
+                                     (Math/sin (/ y 2.2))
+                                     (Math/cos (* Math/PI x*))
+                                     (Math/cos (* Math/PI y*)))]
+                            {:v (-> v (+ 1) (/ 2))
+                             :w (->> [(* (Math/sin (* Math/PI x*))
+                                         (Math/cos (* Math/PI y*)))
+                                      (* (Math/cos (* Math/PI x*))
+                                         (Math/sin (* Math/PI y*)))]
+                                     math/normalize
+                                     (math/scale (+ 0.5 (Math/abs v)))
+                                     (math/scale 0.75)
+                                     (math/rotate (+ 80 (* 20 v))))}))
+                    t-power 20
+                    t-size 0.1
+                    delta 0.001
+                    [x0 y0] (model/field2 {:x x*
+                                           :y y*
+                                           :t (:t @state)
+                                           :t-power t-power
+                                           :t-size t-size})
+                    [xx yx] (model/field2 {:x (+ x* delta)
+                                           :y y*
+                                           :t (:t @state)
+                                           :t-power t-power
+                                           :t-size t-size})
+                    [xy yy] (model/field2 {:x x*
+                                           :y (+ y* delta)
+                                           :t (:t @state)
+                                           :t-power t-power
+                                           :t-size t-size})
+                    [dxx dyx] [(/ (- xx x0) delta) (/ (- yx y0) delta)]
+                    [dxy dyy] [(/ (- xy x0) delta) (/ (- yy y0) delta)]
+                    {:keys [v w]} (fxy x0 y0)
+                    [wx wy] w
+                    [wx* wy*] (->> [(+ (* wx dxx) (* wy dyx))
+                                    (+ (* wx dxy) (* wy dyy))]
+                                   (math/normalize)
+                                   (math/scale (math/magnitude w)))]]
         (q/stroke 0 0 0 1)
-        ;;(apply q/fill (weather-color-gradient w))
         (q/color-mode :hsb)
         (q/fill (* v 192) 255 255)
         (q/rect (* x square-size) (* y square-size) square-size square-size)
         (arrow (* (+ x 0.5) square-size)
                (* (+ y 0.5) square-size)
-               (* gx square-size)
-               (* gy square-size)
+               (* wx* 0.75 square-size)
+               (* wy* 0.75 square-size)
                [0 0 0]
-               [0 0 0])))))
+               [255 0 255])))))
 
 
 

@@ -72,7 +72,7 @@
              produces base, unperturbed pattern
    fv      - function of any number to number in range [0.0,1.0]
    t-power - Strength of turbulence factor
-   t-size  - Spatial size of turbulence field" 
+   t-size  - Spatial size of turbulence field"
   [params]
   (let [{:keys [x y t seed fxy
                 fv t-power t-size]} (merge {:x 0 :y 0 :t 0
@@ -92,10 +92,10 @@
     (fv (+ (* t-power turbulence) v0))))
 
 (defn field2
-  "x, y, t - space and time coordinates of sample position.
+  "Returns the perturbed coordinates of a point given:
+
+   x, y, t - space and time coordinates of sample position.
    seed    - PNRG seed
-   fxy - function of x and y that returns map of :v and :g, the value
-         and gradient at the unperturbed x and y coordinates
    t-power - Strength of turbulence factor
    t-size  - Spatial size of turbulence field"
   [params]
@@ -127,8 +127,8 @@
                                                            32
                                                            (+ t* 3.01) 1)
                                        (mod (math/frac t) 1.0))]
-    (fxy (+ (* t-power x-turbulence) x)
-         (+ (* t-power y-turbulence) y))))
+    [(+ (* t-power x-turbulence) x)
+     (+ (* t-power y-turbulence) y)]))
 
 (defn weather
   ([x y t] (weather x y t 1))

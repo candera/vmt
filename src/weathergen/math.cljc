@@ -126,3 +126,10 @@
         sn (Math/sin rad)]
     [(- (* x cs) (* y sn))
      (+ (* x sn) (* y cs))]))
+
+(defn normalize
+  [v]
+  (let [m (magnitude v)]
+    (if (zero? m)
+      v
+      (mapv #(/ % m) v))))
