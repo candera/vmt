@@ -17,11 +17,7 @@
       (* 110)
       (+ 950)))
 
-(def min-pressure 28.5)
-(def max-pressure 31.0)
-(def pressure-range (- max-pressure min-pressure))
-
-(def thresholds
+#_(def thresholds
   [0.0
    {:category        :inclement
     :wind-adjustment 40
@@ -43,19 +39,21 @@
    nil])
 
 (defn categorize
-  [pressure]
-  (->> thresholds
-       (partition-all 4 2)
-       (map (fn [[low config high next]]
-              (let [low-pressure (+ min-pressure (* low pressure-range))
-                    high-pressure (+ min-pressure (* high pressure-range))]
-                (when (<= low-pressure pressure high-pressure)
-                  (assoc config
-                         :val pressure
-                         :next next
-                         :proportion (/ (- pressure low-pressure)
-                                        (- high-pressure low-pressure)))))))
-       (some identity)))
+  [x {:keys [categories] :as params}]
+  (let [cumulative  (->> categories
+                         (map :weight)
+                         (reductions +))
+        total       (double (last cumulative))
+        cumulative* (map #(/ % total) cumulative)
+        c*          (map #(assoc %1 :range [%2 %3])
+                         categories
+                         (concat [0] cumulative*)
+                         (concat cumulative* [1]))]
+    (->> c*
+         (filter (fn [{:keys [range]}]
+                   (let [[to from] range]
+                     (<= to x from))))
+         first)))
 
 (defn temperature
   [base {:keys [category next temp-adjustment proportion]}]
@@ -65,33 +63,7 @@
                               (- 1 proportion)))
     base))
 
-(defn field
-  "x, y, t - space and time coordinates of sample position.
-   seed    - PNRG seed
-   fxy     - function of x and y that, if unperturbed and passed to f2,
-             produces base, unperturbed pattern
-   fv      - function of any number to number in range [0.0,1.0]
-   t-power - Strength of turbulence factor
-   t-size  - Spatial size of turbulence field"
-  [params]
-  (let [{:keys [x y t seed fxy
-                fv t-power t-size]} (merge {:x 0 :y 0 :t 0
-                                           :t-power 0 :t-res 1 :seed 1} params)
-        t1         (long (Math/floor (+ t seed)))
-        t2         (inc t1)
-        turbulence (math/interpolate (math/fractal-field (/ x t-size)
-                                                         (/ y t-size)
-                                                         32
-                                                         (+ t1 0.01) 1)
-                                     (math/fractal-field (/ x t-size)
-                                                         (/ y t-size)
-                                                         32
-                                                         (+ t2 0.01) 1)
-                                     (mod (math/frac t) 1.0))
-        v0 (fxy x y)]
-    (fv (+ (* t-power turbulence) v0))))
-
-(defn field2
+(defn turbulent-field
   "Returns the perturbed coordinates of a point given:
 
    x, y, t - space and time coordinates of sample position.
@@ -99,185 +71,158 @@
    t-power - Strength of turbulence factor
    t-size  - Spatial size of turbulence field"
   [params]
-  (let [{:keys [x y t seed fxy t-power t-size]} (merge {:x       0
-                                                        :y       0
-                                                        :t       0
-                                                        :seed    1
-                                                        :t-power 0
-                                                        :t-size  1}
-                                                       params)
+  (let [{:keys [x y t seed fxy turbulence]} (merge {:x       0
+                                                    :y       0
+                                                    :t       0
+                                                    :seed    1
+                                                    :turbulence {:power 0
+                                                                 :size  1}}
+                                                   params)
+        t-power (:power turbulence)
+        t-size (:size turbulence)
         x* (/ x t-size)
         y* (/ y t-size)
         t* (long (Math/floor (+ t seed)))
-        x-turbulence (math/interpolate (math/fractal-field x*
-                                                           y*
-                                                           32
-                                                           (+ t* 0.01) 1)
-                                       (math/fractal-field x*
-                                                           y*
-                                                           32
-                                                           (+ t* 1.01) 1)
-                                       (mod (math/frac t) 1.0))
-        y-turbulence (math/interpolate (math/fractal-field x*
-                                                           y*
-                                                           32
-                                                           (+ t* 2.01) 1)
-                                       (math/fractal-field x*
-                                                           y*
-                                                           32
-                                                           (+ t* 3.01) 1)
-                                       (mod (math/frac t) 1.0))]
+        x-turbulence (- (math/interpolate (math/fractal-field x*
+                                                              y*
+                                                              32
+                                                              (+ t* 0.01) 1)
+                                          (math/fractal-field x*
+                                                              y*
+                                                              32
+                                                              (+ t* 1.01) 1)
+                                          (mod (math/frac t) 1.0))
+                        0.5)
+        y-turbulence (- (math/interpolate (math/fractal-field x*
+                                                              y*
+                                                              32
+                                                              (+ t* 2.01) 1)
+                                          (math/fractal-field x*
+                                                              y*
+                                                              32
+                                                              (+ t* 3.01) 1)
+                                          (mod (math/frac t) 1.0))
+                        0.5)]
     [(+ (* t-power x-turbulence) x)
      (+ (* t-power y-turbulence) y)]))
 
+;; A checkerboard pattern of high and low pressure "cells"
+(defn pressure-pattern
+  [x y]
+  (let [;; spacing 2
+        ;; x* (- (mod (+ x 1) 2) 1)
+        ;; y* (- (mod (+ y 1) 2) 1)
+        c1 1
+        v  (+ (* (Math/sin x)
+                 (Math/sin y))
+              (* c1
+                 (Math/sin (/ x 3))
+                 (Math/sin (/ y 3))))
+        #_(* #_(Math/sin x)
+             #_(Math/cos (* x 1.1))
+             (Math/sin (+ x (* 4 y)))
+             (Math/cos (+ (* 4 x) y))
+             #_(Math/sin (/ y 2))
+             (Math/cos (* #_Math/PI (+ x* y*)))
+             (Math/cos (* #_Math/PI (- y* x*)))
+             )]
+    (-> v (+ 1 c1) (/ (+ 2 (* 2 c1))))))
+
+;; Spiral
+#_(defn pressure-pattern
+  [x y]
+  (let [theta (Math/atan2 x y)
+        r (Math/sqrt (+ (* x x) (* y y)))]
+    (-> (+ r (* 4 theta))
+        (/ 1)
+        Math/sin
+        (+ 1)
+        (/ 2))))
+
+;; Lines
+#_(defn pressure-pattern
+  [x y]
+  (-> (+ x y)
+      Math/sin
+      (* (Math/sin (- (* 3 x) (* 2 y))))
+      (* (Math/sin (+ (* 7 x) (* 5 y))))
+      (+ 1)
+      (/ 2)))
+
+;; TODO: Set the wind strength according to the category
+(defn wind-pattern
+  [x y v]
+  (let [c1 1]
+    (->> [(+ (* (Math/cos x)
+                (Math/sin y))
+             (* c1
+                (/ 1 3)
+                (Math/cos (/ x 3))
+                (Math/sin (/ y 3))))
+          (+ (* (Math/sin x)
+                (Math/cos y))
+             (* c1
+                (/ 1 3)
+                (Math/sin (/ x 3))
+                (Math/cos (/ y 3))))]
+         math/normalize
+         (math/rotate 90))))
+
 (defn weather
-  ([x y t] (weather x y t 1))
-  ([x y t seed]
-   (let [t1               (long (Math/floor (+ t seed)))
-         t2               (inc t1)
-         ;; pressure-coarse  (fn [x y]
-         ;;                    (math/interpolate (math/fractal-field x y 32 (+ t1 0.01) 16)
-         ;;                                      (math/fractal-field x y 32 (+ t2 0.01) 16)
-         ;;                                      (mod (math/frac t) 1.0)))
-         ;; pressure-fine     (fn [x y]
-         ;;                     (math/interpolate (math/fractal-field x y 16 (+ t1 0.01) 1)
-         ;;                                       (math/fractal-field x y 16 (+ t2 0.01) 1)
-         ;;                                       (mod (math/frac t) 1.0)))
-         ;; pressure         (->> (+ (pressure-coarse x y) (/ (pressure-fine x y) 8))
-         ;;                       (* (- max-pressure min-pressure))
-         ;;                       (+ min-pressure)
-         ;;                       (math/clamp min-pressure max-pressure))
-         ;; pressure-smoothed (fn [x y]
-         ;;                     (->> (for [xoff [-2 -1 0 1 2]
-         ;;                                yoff [-2 -1 0 1 2]]
-         ;;                            (pressure-coarse (+ x xoff)
-         ;;                                             (+ y yoff)))
-         ;;                          (reduce +)))
-         pressure-fn (fn [x y]
-                       (let [turbulence (* 4000
-                                             (math/interpolate (math/fractal-field x y 32 (+ t1 0.01) 1)
-                                                               (math/fractal-field x y 32 (+ t2 0.01) 1)
-                                                               (mod (math/frac t) 1.0)))]
-                         (Math/abs (/ (+ (Math/sin (* (+ x turbulence) 0.0001))
-                                         (Math/sin (* (+ y turbulence) 0.00011))
-                                         (Math/sin (* (+ x (* 2 turbulence)) 0.00012))
-                                         (Math/sin (* (+ y (* 2 turbulence)) 0.00013))
-                                         ;; (Math/sin (* (+ x (* 3 turbulence)) 0.00025))
-                                         ;; (Math/sin (* (+ y (* 3 turbulence)) 0.00031))
-                                         )
-                                      6.0))))
-         #_pressure-fn      #_(fn [x y]
-                                (Math/abs
-                                 (Math/sin
-                                  (+ (* x 0.0001)
-                                     (* y 0.0001)
-                                     (* 5
-                                        (math/interpolate (math/fractal-field x y 32 (+ t1 0.01) 1)
-                                                          (math/fractal-field x y 32 (+ t2 0.01) 1)
-                                                          (mod (math/frac t) 1.0)))))))
-         value            (pressure-fn x y)
-         pressure         (->> value
-                               (* (- max-pressure min-pressure))
-                               (+ min-pressure)
-                               (math/clamp min-pressure max-pressure))
-         info             (categorize pressure)]
-     {:category          (:category info)
-      :value             value
-      :pressure          pressure
-      :temperature       (temperature 22 info)
-      :proportion        (:proportion info)
-      :info              info})))
-
-
-    ;; TODO: wind
-         ;;     [px' py' :as p'] (math/gradient x y pressure-fn 1)
-         ;; wind             (->> p'
-         ;;                       (math/rotate 60)
-         ;;                       (math/scale (:wind-adjustment info))
-;;                       (math/scale 1000))
-      ;; :wind              {:speed (math/magnitude wind)
-      ;;                     :heading (math/heading wind)}
-
-
-(defn smooth-wind
-  [window-size x-cells y-cells wind-grid]
-  (if (zero? window-size)
-    wind-grid
-    (->> (for [x (range x-cells)
-               y (range y-cells)]
-           [[x y] (->> (for [x-offset (range (- window-size) (inc window-size))
-                             y-offset (range (- window-size) (inc window-size))]
-                         (get wind-grid [(+ x x-offset) (+ y y-offset)]))
-                       (apply math/vector-add)
-                       (math/scale (/ 1.0 (* window-size window-size))))])
-         (into (sorted-map)))))
+  [{:keys [x y t seed turbulence max-pressure min-pressure] :as params}]
+  (let [delta     100.0000010
+        ;; TODO: Introduce some sort of vector/matrix abstraction
+        ;; Although meh: just make it run on the GPU
+        [x0 y0]   (turbulent-field params)
+        value     (pressure-pattern x0 y0)
+        w         (wind-pattern x0 y0 value)
+        [wx wy]   w
+        pressure  (->> value
+                       (* (- max-pressure min-pressure))
+                       (+ min-pressure)
+                       (math/clamp min-pressure max-pressure))
+        info      (categorize value params)]
+    {:value       value
+     :pressure    (math/nearest pressure 0.01)
+     :temperature (math/nearest (temperature 22 info) 1)
+     :info        info
+     :wind        {:heading (math/nearest (math/heading w) 1)
+                   :speed (math/nearest (* (math/magnitude w) 10) 1)}
+     :wind-pattern w
+     :wind-vec    w
+     :p           [x0 y0]}))
 
 (defn weather-grid
   [params]
-  (let [{:keys [origin-x origin-y t x-cells
-                y-cells feature-size t
-                wind-multiplier
-                wind-strength
-                wind-pressure-constant
-                wind-smoothing-window]} params
-        weather (into (sorted-map)
-                      (for [x (range (- wind-smoothing-window)
-                                     (+ x-cells (+ wind-smoothing-window 2)))
-                            y (range (- wind-smoothing-window)
-                                     (+ y-cells (+ wind-smoothing-window 2)))]
-                        [[x y] (weather (/ (+ origin-x x) feature-size)
-                                        (/ (+ origin-y y) feature-size)
-                                        t)]))
-        ;; weather-fn (fn [x y] (get weather [x y]))
-        ;; wind (->> (for [x (range (- wind-smoothing-window)
-        ;;                          (+ x-cells (inc wind-smoothing-window)))
-        ;;                 y (range (- wind-smoothing-window)
-        ;;                          (+ y-cells (inc wind-smoothing-window)))]
-        ;;             [x y])
-        ;;           (map (fn [[x y]]
-        ;;                  (let [f (fn [v]
-        ;;                            (/ 1.0
-        ;;                               (+ wind-pressure-constant v)))
-        ;;                        p0 (-> (weather-fn x y) :value f)
-        ;;                        px- (-> (weather-fn (dec x) y) :value f)
-        ;;                        px+ (-> (weather-fn (inc x) y) :value f)
-        ;;                        py- (-> (weather-fn x (dec y)) :value f)
-        ;;                        py+ (-> (weather-fn x (inc y)) :value f)
-        ;;                        adj (get-in weather [[x y] :info :wind-adjustment])]
-        ;;                    [[x y] (math/rotate
-        ;;                            90
-        ;;                            (math/scale
-        ;;                             (* adj wind-strength)
-        ;;                             [(- px+ px-) (- py+ py-)]))])))
-        ;;           (into (sorted-map))
-        ;;           (smooth-wind wind-smoothing-window x-cells y-cells))
-        ]
+  (let [{:keys [origin t size feature-size turbulence categories]} params
+        [origin-x origin-y] origin
+        [width height] size]
     (into (sorted-map)
-          (for [x (range x-cells)
-                y (range y-cells)
-                :let [weather (-> (get weather [x y])
-                                  (update :pressure math/nearest 0.01)
-                                  (update :temperature math/nearest 1))
-                      ;; wind (let [v (get wind [x y])]
-                      ;;        {:speed (math/nearest (math/magnitude v) 1)
-                      ;;         :heading (math/nearest (math/heading v) 1)})
-                      ]]
-            [[x y] (assoc weather :wind [0 0])]))))
+          (for [x (range width)
+                y (range height)]
+            [[x y] (-> (weather (-> params
+                                    (assoc :x (/ (+ origin-x x) feature-size))
+                                    (assoc :y (/ (+ origin-y y) feature-size)))))]))))
 
 (comment
-  (weather-grid {:origin-x (rand-int 100)
-                 :origin-y (rand-int 100)
-                 :x-cells 4
-                 :y-cells 4
-                 :feature-size 0.25
+  (weather-grid {:origin [(* 100 (rand))
+                          (* 100 (rand))]
                  :t 1.5
-                 :wind-strength 25.0
-                 :wind-pressure-constant 0.2
-                 :wind-smoothing-window 0})
+                 :size [4 4]
+                 :feature-size 10
+                 :turblence {:size 1
+                             :power 30}
+                 :min-pressure 28.5
+                 :max-pressure 31.0
+                 :categories [{:type :sunny
+                               :weight 5}
+                              {:type :fair
+                               :weight 3}
+                              {:type :poor
+                               :weight 1}
+                              {:type :inclement
+                               :weight 1}]})
 
-  (smooth-wind 2 4 4 (into (sorted-map)
-                           (for [x (range -2 11)
-                                 y (range -2 11)]
-                             [[x y] [(rand) (rand)]])))
+
 
   )

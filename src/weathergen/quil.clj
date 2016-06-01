@@ -5,17 +5,91 @@
 
 (def canvas-size (* 18 59))
 
-(def state (atom {:origin-x 0
-                  :origin-y 0
-                  :t 0.01
-                  ;; :x-cells 59
-                  ;; :y-cells 59
-                  :x-cells 120
-                  :y-cells 120
-                  :feature-size 0.07
-                  :wind-pressure-constant 2
-                  :wind-smoothing-window 0
-                  :wind-strength 50.0}))
+(def interesting-params
+  {0 {:origin       [0 0]
+      :t            0.01
+      :size         [59 59]
+      :feature-size 10
+      :turbulence   {:size  1
+                     :power 1}
+      :min-pressure 28.5
+      :max-pressure 31.0
+      :categories   [{:type :sunny
+                      :weight 5}
+                     {:type :fair
+                      :weight 3}
+                     {:type :poor
+                      :weight 1}
+                     {:type :inclement
+                      :weight 1}]}
+   1 {:origin       [-456 -456],
+      :t            2.289999999999995,
+      :direction    [-1 -1]
+      :evolution    0.1
+      :size         [59 59],
+      :feature-size 20,
+      :turbulence   {:size 0.04, :power 6},
+      :min-pressure 28.5,
+      :max-pressure 31.0,
+      :categories   [{:type :sunny, :weight 5}
+                     {:type :fair, :weight 3}
+                     {:type :poor, :weight 1}
+                     {:type :inclement, :weight 1}]}
+   2 {:origin       [-978 -978],
+      :t            4.89999999999994,
+      :size         [59 59],
+      :feature-size 40,
+      :turbulence   {:size 0.1, :power 25},
+      :min-pressure 28.5,
+      :max-pressure 31.0,
+      :categories
+      [{:type :sunny, :weight 5}
+       {:type :fair, :weight 3}
+       {:type :poor, :weight 1}
+       {:type :inclement, :weight 1}]}
+   3 {:max-pressure 31.0,
+      :evolution 0.1,
+      :min-pressure 28.5,
+      :size [100 100],
+      :feature-size 20,
+      :categories
+      [{:type :sunny, :weight 5}
+       {:type :fair, :weight 3}
+       {:type :poor, :weight 1}
+       {:type :inclement, :weight 1}],
+      :turbulence {:size 0.1, :power 20},
+      :origin [-509 -509],
+      :t 7.589999999999984,
+      :direction [-1 -1]}
+   4 {:max-pressure 31.0,
+      :evolution 0.07500000000000001,
+      :min-pressure 28.5,
+      :size [100 100],
+      :feature-size 20,
+      :categories
+      [{:type :sunny, :weight 5}
+       {:type :fair, :weight 3}
+       {:type :poor, :weight 1}
+       {:type :inclement, :weight 1}],
+      :turbulence {:size 0.1, :power 20},
+      :origin [-561 -561],
+      :t 12.489999999999961,
+      :direction [-1 -1]}
+   5 {:max-pressure 31.0,
+      :evolution 0.07,
+      :min-pressure 28.5,
+      :size [100 100],
+      :feature-size 10,
+      :categories [{:type :sunny, :weight 5}
+                   {:type :fair, :weight 3}
+                   {:type :poor, :weight 1}
+                   {:type :inclement, :weight 1}],
+      :turbulence {:size 0.1, :power 15},
+      :origin [8885 1186],
+      :t 1747.0626599126583,
+      :direction [1 1]}})
+
+(def state (atom (get interesting-params 5)))
 
 (defn setup []
   ; Set frame rate to 30 frames per second.
@@ -29,10 +103,8 @@
 (defn update-state [_]
   (swap! state (fn [val]
                  (-> val
-                     (update :origin-x #(- % 2))
-                     (update :origin-y #(- % 2))
-                     (update :t #(+ % 0.05))
-                     )))
+                     (update :origin math/vector-add (:direction val))
+                     (update :t + (:evolution val)))))
   state)
 
 (defn arrow
@@ -53,128 +125,33 @@
   [w]
   [(-> w :value (* 192) long) 255 255])
 
-#_(defn draw-state [state]
-  (let [wind-vector-length 45
-        wind-vector-frequency 1
-        square-size 5]
-    (q/background 240)
-    ;; (q/fill 128 128 128)
-    ;; (q/rect 0 0 10 10)
-    (doseq [x (range (/ canvas-size square-size))
-            y (range (/ canvas-size square-size))
-            :let [x* (- x (:origin-x state))
-                  y* (- y (:origin-y state))
-                  t* (:t state)
-                  w (try
-                      ;;(model/weather x* y* t*)
-                      (model/field {:x x* :y y* :t t*
-                                    :fxy (fn [x y] (Math/sin (+ x y)))
-                                    :fv #(-> % Math/sin Math/abs)})
-                      (catch Throwable ex
-                        (q/debug ex)
-                        (q/debug x*)
-                        (q/debug y*)
-                        (q/debug t*)))
-                  ;;w {:wind [0 0] :pressure 0 :pressure-gradient [0 0] :category :sunny}
-                  ;;[wind-x wind-y] (:wind w)
-                  ]]
-      ;;(apply q/fill (weather-color-greyscale w)
-      (q/stroke 0 0 0 1)
-      ;;(apply q/fill (weather-color-gradient w))
-      (q/fill [(long (* w 192)) 255 255])
-      (q/rect (* x square-size) (* y square-size) square-size square-size)
-      #_(when (and (zero? (mod x wind-vector-frequency))
-                 (zero? (mod y wind-vector-frequency)))
-        (arrow (+ (* x square-size) (/ square-size 2))
-               (+ (* y square-size) (/ square-size 2))
-               (* wind-vector-length wind-x)
-               (* wind-vector-length wind-y)
-               [0 0 0]
-               [255 105 180])))))
+(def type-color
+  {:sunny [128 255 255]
+   :fair  [90 255 255]
+   :poor  [50 255 255]
+   :inclement [0 225 255]})
 
 (defn draw-state
   [state]
-  (let [wind-vector-length 45
-        wind-vector-frequency 1
-        square-size (/ canvas-size (:x-cells @state))]
-    (q/background 240)
-    (let [ ;; grid (model/weather-grid @state)
-          zoom (:feature-size @state)]
-      (doseq [x (range (:x-cells @state))
-              y (range (:y-cells @state))
-              :let [x* (* (+ x (:origin-x @state)) zoom)
-                    y* (* (+ y (:origin-y @state)) zoom)
-                    fxy (fn [x y]
-                          (let [x* (- (mod (+ x 1) 2) 1)
-                                y* (- (mod (+ y 1) 2) 1)
-                                v (* (Math/sin (/ x 1.3))
-                                     (Math/sin (/ y 2.2))
-                                     (Math/cos (* Math/PI x*))
-                                     (Math/cos (* Math/PI y*)))]
-                            {:v (-> v (+ 1) (/ 2))
-                             :w (->> [(* (Math/sin (* Math/PI x*))
-                                         (Math/cos (* Math/PI y*)))
-                                      (* (Math/cos (* Math/PI x*))
-                                         (Math/sin (* Math/PI y*)))]
-                                     math/normalize
-                                     (math/scale (+ 0.5 (Math/abs v)))
-                                     (math/scale 0.75)
-                                     (math/rotate (+ 80 (* 20 v))))}))
-                    t-power 20
-                    t-size 0.1
-                    delta 0.001
-                    [x0 y0] (model/field2 {:x x*
-                                           :y y*
-                                           :t (:t @state)
-                                           :t-power t-power
-                                           :t-size t-size})
-                    [xx yx] (model/field2 {:x (+ x* delta)
-                                           :y y*
-                                           :t (:t @state)
-                                           :t-power t-power
-                                           :t-size t-size})
-                    [xy yy] (model/field2 {:x x*
-                                           :y (+ y* delta)
-                                           :t (:t @state)
-                                           :t-power t-power
-                                           :t-size t-size})
-                    [dxx dyx] [(/ (- xx x0) delta) (/ (- yx y0) delta)]
-                    [dxy dyy] [(/ (- xy x0) delta) (/ (- yy y0) delta)]
-                    {:keys [v w]} (fxy x0 y0)
-                    [wx wy] w
-                    [wx* wy*] (->> [(+ (* wx dxx) (* wy dyx))
-                                    (+ (* wx dxy) (* wy dyy))]
-                                   (math/normalize)
-                                   (math/scale (math/magnitude w)))]]
-        (q/stroke 0 0 0 1)
-        (q/color-mode :hsb)
-        (q/fill (* v 192) 255 255)
-        (q/rect (* x square-size) (* y square-size) square-size square-size)
-        (arrow (* (+ x 0.5) square-size)
-               (* (+ y 0.5) square-size)
-               (* wx* 0.75 square-size)
-               (* wy* 0.75 square-size)
-               [0 0 0]
-               [255 0 255])))))
+  (q/background 240)
+  (let [{:keys [size feature-size] :as params} @state
+        [width height]                         size
+        square-size                            (/ canvas-size width)
+        grid                                   (model/weather-grid params)]
+    (doseq [x (range width)
+            y (range height)
+            :let [{:keys [value info wind-pattern wind-vec]} (get grid [x y])
+                  [wx wy] wind-vec
+                  {:keys [type]} info]]
+      (q/stroke 0 0 0 1)
+      (q/color-mode :hsb)
+      (apply q/fill (type-color type))
+      (q/rect (* x square-size) (* y square-size) square-size square-size)
+      (arrow (* (+ x 0.5) square-size)
+             (* (+ y 0.5) square-size)
+             (* wx 0.5 square-size)
+             (* wy 0.5 square-size)
+             [0 0 0]
+             [255 0 255]))))
 
 
-
-(comment
-  ;; Got good values with this:
-  (model/field {:x x* :y y* :t (:t @state)
-                :t-power 4
-                :t-size 0.05
-                :fxy (fn [x y]
-                       (* (Math/abs
-                           (Math/sin (/ x 5)))
-                          (Math/pow
-                           (* (Math/abs (- (mod x 2) 1))
-                              (Math/abs (- (mod y 2) 1)))
-                           3)))
-                :fv (fn [v]
-                      (let [v1 (-> v Math/sin Math/abs)
-                            v2 (- v1 0.5)
-                            v3 (* v2 v2 v2)]
-                        (-> v3 (* 4) (+ 0.5))))
-                })
-  )
