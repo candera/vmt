@@ -3,93 +3,27 @@
             [weathergen.math :as math]
             [weathergen.model :as model]))
 
-(def canvas-size (* 18 59))
+(def canvas-size (* 16 59))
 
-(def interesting-params
-  {0 {:origin       [0 0]
-      :t            0.01
-      :size         [59 59]
-      :feature-size 10
-      :turbulence   {:size  1
-                     :power 1}
-      :min-pressure 28.5
-      :max-pressure 31.0
-      :categories   [{:type :sunny
-                      :weight 5}
-                     {:type :fair
-                      :weight 3}
-                     {:type :poor
-                      :weight 1}
-                     {:type :inclement
-                      :weight 1}]}
-   1 {:origin       [-456 -456],
-      :t            2.289999999999995,
-      :direction    [-1 -1]
-      :evolution    0.1
-      :size         [59 59],
-      :feature-size 20,
-      :turbulence   {:size 0.04, :power 6},
-      :min-pressure 28.5,
-      :max-pressure 31.0,
-      :categories   [{:type :sunny, :weight 5}
-                     {:type :fair, :weight 3}
-                     {:type :poor, :weight 1}
-                     {:type :inclement, :weight 1}]}
-   2 {:origin       [-978 -978],
-      :t            4.89999999999994,
-      :size         [59 59],
-      :feature-size 40,
-      :turbulence   {:size 0.1, :power 25},
-      :min-pressure 28.5,
-      :max-pressure 31.0,
-      :categories
-      [{:type :sunny, :weight 5}
-       {:type :fair, :weight 3}
-       {:type :poor, :weight 1}
-       {:type :inclement, :weight 1}]}
-   3 {:max-pressure 31.0,
-      :evolution 0.1,
-      :min-pressure 28.5,
-      :size [100 100],
-      :feature-size 20,
-      :categories
-      [{:type :sunny, :weight 5}
-       {:type :fair, :weight 3}
-       {:type :poor, :weight 1}
-       {:type :inclement, :weight 1}],
-      :turbulence {:size 0.1, :power 20},
-      :origin [-509 -509],
-      :t 7.589999999999984,
-      :direction [-1 -1]}
-   4 {:max-pressure 31.0,
-      :evolution 0.07500000000000001,
-      :min-pressure 28.5,
-      :size [100 100],
-      :feature-size 20,
-      :categories
-      [{:type :sunny, :weight 5}
-       {:type :fair, :weight 3}
-       {:type :poor, :weight 1}
-       {:type :inclement, :weight 1}],
-      :turbulence {:size 0.1, :power 20},
-      :origin [-561 -561],
-      :t 12.489999999999961,
-      :direction [-1 -1]}
-   5 {:max-pressure 31.0,
-      :evolution 0.07,
-      :min-pressure 28.5,
-      :size [100 100],
-      :feature-size 10,
-      :categories [{:type :sunny, :weight 5}
-                   {:type :fair, :weight 3}
-                   {:type :poor, :weight 1}
-                   {:type :inclement, :weight 1}],
-      :turbulence {:size 0.1, :power 15},
-      :origin [8885 1186],
-      :t 1747.0626599126583,
-      :direction [1 1]}})
-
-(def state (atom (get interesting-params 5)))
+(def state (atom {:categories
+                  {:sunny {:weight 10, :wind {:min 0, :mean 7, :max 20}},
+                   :fair {:weight 1, :wind {:min 5, :mean 10, :max 30}},
+                   :poor {:weight 5, :wind {:min 15, :mean 25, :max 45}},
+                   :inclement {:weight 2, :wind {:min 25, :mean 40, :max 80}}},
+                  :crossfade 0.1,
+                  :direction [1 1],
+                  :evolution 0.005,
+                  :feature-size 10,
+                  :layer :type,
+                  :max-pressure 31.0,
+                  :min-pressure 28.5,
+                  :origin [3194 3194],
+                  :prevailing-wind {:heading 45},
+                  :wind-uniformity 0.7
+                  :size [59 59],
+                  :t 14.285000000000833,
+                  :turbulence {:size 1, :power 200},
+                  :wind-spread 0.3}))
 
 (defn setup []
   ; Set frame rate to 30 frames per second.
@@ -134,24 +68,52 @@
 (defn draw-state
   [state]
   (q/background 240)
-  (let [{:keys [size feature-size] :as params} @state
+  (let [{:keys [size feature-size layer] :as params} @state
         [width height]                         size
         square-size                            (/ canvas-size width)
         grid                                   (model/weather-grid params)]
+    (q/color-mode
+     (get {:pressure :rgb
+           :type     :hsb}
+          layer
+          :rgb))
     (doseq [x (range width)
             y (range height)
-            :let [{:keys [value info wind-pattern wind-vec]} (get grid [x y])
-                  [wx wy] wind-vec
-                  {:keys [type]} info]]
+            :let [{:keys [value type wind wind-var]} (get grid [x y])]]
+      (q/stroke 0 0 0 1)
+      (case layer
+        :type (do
+                (q/color-mode :hsb)
+                (apply q/fill (type-color type)))
+        ;; TODO: other layers
+        (let [v (* value 255)]
+          (q/color-mode :rgb)
+          (q/fill v v v)))
+      (q/rect (* x square-size) (* y square-size) square-size square-size))
+    (doseq [x (range width)
+            y (range height)
+            :let [{:keys [value type wind wind-var]} (get grid [x y])]]
       (q/stroke 0 0 0 1)
       (q/color-mode :hsb)
-      (apply q/fill (type-color type))
-      (q/rect (* x square-size) (* y square-size) square-size square-size)
-      (arrow (* (+ x 0.5) square-size)
-             (* (+ y 0.5) square-size)
-             (* wx 0.5 square-size)
-             (* wy 0.5 square-size)
-             [0 0 0]
-             [255 0 255]))))
+      (let [[wx wy] (->> [0 1]
+                         (math/rotate (:heading wind))
+                         (math/scale (-> wind :speed (+ 1) Math/log (* 0.25))))]
+        #_(do
+          (q/fill 0 0 0)
+          (q/text (str (math/nearest (:speed wind) 1))
+                  (* x square-size)
+                  (* (+ y 0.75) square-size))
+          (q/stroke 0 0 0 32)
+          (q/fill 0 0 0 0)
+          (q/rect (* x square-size)
+                  (* y square-size)
+                  square-size
+                  square-size))
+        (arrow (* (+ x 0.5) square-size)
+                 (* (+ y 0.5) square-size)
+                 (* wx square-size)
+                 (* wy square-size)
+                 [0 0 0]
+                 [255 0 255])))))
 
 

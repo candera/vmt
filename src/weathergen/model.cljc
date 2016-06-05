@@ -17,43 +17,35 @@
       (* 110)
       (+ 950)))
 
-#_(def thresholds
-  [0.0
-   {:category        :inclement
-    :wind-adjustment 40
-    :temp-adjustment -7
-    }
-   0.10
-   {:category        :poor
-    :wind-adjustment 15
-    :temp-adjustment -5}
-   0.30
-   {:category        :fair
-    :wind-adjustment 10
-    :temp-adjustment -2}
-   0.90
-   {:category        :sunny
-    :wind-adjustment 5
-    :temp-adjustment 0}
-   1.0
-   nil])
+(def types [:inclement :poor :fair :sunny])
 
-(defn categorize
-  [x {:keys [categories] :as params}]
-  (let [cumulative  (->> categories
-                         (map :weight)
-                         (reductions +))
-        total       (double (last cumulative))
-        cumulative* (map #(/ % total) cumulative)
-        c*          (map #(assoc %1 :range [%2 %3])
-                         categories
-                         (concat [0] cumulative*)
-                         (concat cumulative* [1]))]
-    (->> c*
-         (filter (fn [{:keys [range]}]
-                   (let [[to from] range]
-                     (<= to x from))))
-         first)))
+(defn mix
+  [x fade type-params]
+  (let [cumulative        (->> types
+                               (map #(get-in type-params [% :weight]))
+                               (reductions +))
+        total             (last cumulative)
+        [i p f s]         (map #(/ % total) cumulative)
+        contour           [[0                           [1 0 0 0]]
+                           [(* (- 1 fade) i)            [1 0 0 0]]
+                           [(math/interpolate i p fade) [0 1 0 0]]
+                           [(math/interpolate p i fade) [0 1 0 0]]
+                           [(math/interpolate p f fade) [0 0 1 0]]
+                           [(math/interpolate f p fade) [0 0 1 0]]
+                           [(- 1 fade)                  [0 0 0 1]]
+                           [1                           [0 0 0 1]]]
+        [[x1 v1] [x2 v2]] (->> contour
+                               (partition 2 1)
+                               (filter (fn [[[low] [high]]] (<= low x high)))
+                               first)]
+    (zipmap types
+            (math/vector-interpolate v1 v2 x x1 x2))))
+
+(defn mix-on
+  [categories mixture path]
+  (->> (for [[type weight] mixture]
+         (* weight (get-in categories (into [type] path))))
+       (reduce +)))
 
 (defn temperature
   [base {:keys [category next temp-adjustment proportion]}]
@@ -63,7 +55,21 @@
                               (- 1 proportion)))
     base))
 
-(defn turbulent-field
+(defn smoothed-noise-field
+  [x y t seed zoom]
+  #_(println :x x :y y :t t :seed seed :zoom zoom)
+  (let [t* (long (Math/floor (+ t seed)))]
+    (math/interpolate (math/fractal-field x
+                                          y
+                                          zoom
+                                          (+ t* 0.01) 1)
+                      (math/fractal-field x
+                                          y
+                                          zoom
+                                          (+ t* 1.01) 1)
+                      (mod (math/frac t) 1.0))))
+
+(defn perturb
   "Returns the perturbed coordinates of a point given:
 
    x, y, t - space and time coordinates of sample position.
@@ -71,126 +77,102 @@
    t-power - Strength of turbulence factor
    t-size  - Spatial size of turbulence field"
   [params]
-  (let [{:keys [x y t seed fxy turbulence]} (merge {:x       0
-                                                    :y       0
-                                                    :t       0
-                                                    :seed    1
-                                                    :turbulence {:power 0
-                                                                 :size  1}}
-                                                   params)
+  #_(println "perturb" params)
+  (let [{:keys [x y t seed turbulence]} (merge {:x       0
+                                                :y       0
+                                                :t       0
+                                                :seed    1
+                                                :turbulence {:power 0
+                                                             :size  1}}
+                                               params)
         t-power (:power turbulence)
         t-size (:size turbulence)
         x* (/ x t-size)
         y* (/ y t-size)
-        t* (long (Math/floor (+ t seed)))
-        x-turbulence (- (math/interpolate (math/fractal-field x*
-                                                              y*
-                                                              32
-                                                              (+ t* 0.01) 1)
-                                          (math/fractal-field x*
-                                                              y*
-                                                              32
-                                                              (+ t* 1.01) 1)
-                                          (mod (math/frac t) 1.0))
-                        0.5)
-        y-turbulence (- (math/interpolate (math/fractal-field x*
-                                                              y*
-                                                              32
-                                                              (+ t* 2.01) 1)
-                                          (math/fractal-field x*
-                                                              y*
-                                                              32
-                                                              (+ t* 3.01) 1)
-                                          (mod (math/frac t) 1.0))
-                        0.5)]
+        x-turbulence (smoothed-noise-field x* y* t seed 32)
+        y-turbulence (smoothed-noise-field x* y* (+ t 16) seed 32)]
     [(+ (* t-power x-turbulence) x)
      (+ (* t-power y-turbulence) y)]))
 
 ;; A checkerboard pattern of high and low pressure "cells"
 (defn pressure-pattern
-  [x y]
-  (let [;; spacing 2
-        ;; x* (- (mod (+ x 1) 2) 1)
-        ;; y* (- (mod (+ y 1) 2) 1)
-        c1 1
-        v  (+ (* (Math/sin x)
+  [[x y]]
+  (let [v  (+ (* (Math/sin x)
                  (Math/sin y))
-              (* c1
-                 (Math/sin (/ x 3))
-                 (Math/sin (/ y 3))))
-        #_(* #_(Math/sin x)
-             #_(Math/cos (* x 1.1))
-             (Math/sin (+ x (* 4 y)))
-             (Math/cos (+ (* 4 x) y))
-             #_(Math/sin (/ y 2))
-             (Math/cos (* #_Math/PI (+ x* y*)))
-             (Math/cos (* #_Math/PI (- y* x*)))
-             )]
-    (-> v (+ 1 c1) (/ (+ 2 (* 2 c1))))))
-
-;; Spiral
-#_(defn pressure-pattern
-  [x y]
-  (let [theta (Math/atan2 x y)
-        r (Math/sqrt (+ (* x x) (* y y)))]
-    (-> (+ r (* 4 theta))
-        (/ 1)
-        Math/sin
-        (+ 1)
-        (/ 2))))
-
-;; Lines
-#_(defn pressure-pattern
-  [x y]
-  (-> (+ x y)
-      Math/sin
-      (* (Math/sin (- (* 3 x) (* 2 y))))
-      (* (Math/sin (+ (* 7 x) (* 5 y))))
-      (+ 1)
-      (/ 2)))
+              (* (Math/sin (/ x 3))
+                 (Math/sin (/ y 3))))]
+    (-> v (+ 2) (/ 4))))
 
 ;; TODO: Set the wind strength according to the category
-(defn wind-pattern
-  [x y v]
-  (let [c1 1]
-    (->> [(+ (* (Math/cos x)
-                (Math/sin y))
-             (* c1
-                (/ 1 3)
-                (Math/cos (/ x 3))
-                (Math/sin (/ y 3))))
-          (+ (* (Math/sin x)
-                (Math/cos y))
-             (* c1
-                (/ 1 3)
-                (Math/sin (/ x 3))
-                (Math/cos (/ y 3))))]
-         math/normalize
-         (math/rotate 90))))
+(defn wind-direction
+  [[x y] v params]
+  (let [h (get-in params [:prevailing-wind :heading])
+        w0 (->> [(+ (* (Math/cos x)
+                       (Math/sin y))
+                    (* (/ 1.0 3)
+                       (Math/cos (/ x 3))
+                       (Math/sin (/ y 3))))
+                 (+ (* (Math/sin x)
+                       (Math/cos y))
+                    (* (/ 1.0 3)
+                       (Math/sin (/ x 3))
+                       (Math/cos (/ y 3))))]
+                math/normalize
+                (math/rotate 90))
+        w1 (math/rotate (- h) [0 1])
+        c (-> v (- 0.5) Math/abs)]
+    (math/normalize
+     (math/vector-interpolate w1 w0
+                              c
+                              0 0.5))))
+
+(defn wind-speed
+  [categories mixture v]
+  (let [mean (mix-on categories mixture [:wind :mean])
+        min  (mix-on categories mixture [:wind :min])
+        max  (mix-on categories mixture [:wind :max])]
+    (math/distribute v min mean max 1)))
 
 (defn weather
-  [{:keys [x y t seed turbulence max-pressure min-pressure] :as params}]
+  [{:keys [x y t seed categories crossfade turbulence wind-uniformity
+           max-pressure min-pressure feature-size]
+    :or {seed 1}
+    :as params}]
+  #_(println "weather" :x x :y y :t t :seed seed)
   (let [delta     100.0000010
         ;; TODO: Introduce some sort of vector/matrix abstraction
         ;; Although meh: just make it run on the GPU
-        [x0 y0]   (turbulent-field params)
-        value     (pressure-pattern x0 y0)
-        w         (wind-pattern x0 y0 value)
-        [wx wy]   w
+        p         (perturb params)
+        value     (pressure-pattern p)
+        wind-dir  (wind-direction p value params)
         pressure  (->> value
                        (* (- max-pressure min-pressure))
                        (+ min-pressure)
                        (math/clamp min-pressure max-pressure))
-        info      (categorize value params)]
+        mixture   (mix value crossfade categories)
+        wind-var  (math/reject-tails wind-uniformity
+                                     (smoothed-noise-field (* x feature-size)
+                                                           (* y feature-size)
+                                                           t
+                                                           (+ seed 17)
+                                                           32))]
+    #_(println :p p
+               :wind-dir wind-dir
+               :pressure pressure
+               :mixture mixture
+               :categories categories
+               :wind-var wind-var)
     {:value       value
      :pressure    (math/nearest pressure 0.01)
-     :temperature (math/nearest (temperature 22 info) 1)
-     :info        info
-     :wind        {:heading (math/nearest (math/heading w) 1)
-                   :speed (math/nearest (* (math/magnitude w) 10) 1)}
-     :wind-pattern w
-     :wind-vec    w
-     :p           [x0 y0]}))
+     :mixture     mixture
+     :type        (key (last (sort-by val mixture)))
+     ;;:temperature (math/nearest (temperature 22 info) 1)
+     ;;:info        info
+     :wind        {:heading (math/heading wind-dir)
+                   :speed (wind-speed categories mixture wind-var)}
+     :wind-var    wind-var
+     :wind-vec    wind-dir
+     :p           p}))
 
 (defn weather-grid
   [params]
@@ -205,24 +187,37 @@
                                     (assoc :y (/ (+ origin-y y) feature-size)))))]))))
 
 (comment
-  (weather-grid {:origin [(* 100 (rand))
-                          (* 100 (rand))]
-                 :t 1.5
-                 :size [4 4]
-                 :feature-size 10
-                 :turblence {:size 1
-                             :power 30}
-                 :min-pressure 28.5
-                 :max-pressure 31.0
-                 :categories [{:type :sunny
-                               :weight 5}
-                              {:type :fair
-                               :weight 3}
-                              {:type :poor
-                               :weight 1}
-                              {:type :inclement
-                               :weight 1}]})
+  (clojure.pprint/pprint
+   (weather-grid {:origin          [(* 100 (rand))
+                                    (* 100 (rand))]
+                  :t               1.5
+                  :size            [4 4]
+                  :feature-size    10
+                  :turblence       {:size 1
+                                    :power 30}
+                  :min-pressure    28.5
+                  :max-pressure    31.0
+                  :prevailing-wind {:heading 45}
+                  :crossfade       0.1
+                  :wind-spread     1.25
+                  :categories      {:sunny     {:weight 5
+                                                :wind   {:min  0
+                                                         :mean 10
+                                                         :max  20}}
+                                    :fair      {:weight 3
+                                                :wind   {:min  5
+                                                         :mean 15
+                                                         :max  25}}
+                                    :poor      {:weight 1
+                                                :wind   {:min  15
+                                                         :mean 25
+                                                         :max  45}}
+                                    :inclement {:weight 1
+                                                :wind {:min 25
+                                                       :mean 40
+                                                       :max 80}}}}))
 
 
 
+  (weather-grid @weathergen.quil/state)
   )

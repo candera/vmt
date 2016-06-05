@@ -133,3 +133,26 @@
     (if (zero? m)
       v
       (mapv #(/ % m) v))))
+
+(defn distribute
+  "Map x via a sort of gamma-shaped distribution. Shape determines how
+  close to the mean the values will cluster - lower values spread them
+  out more. Values below one will actually make a U-shaped
+  distribution, with values towards the min and max more likely."
+  [x min mean max shape]
+  ;; (println :x x :min min :mean mean :max max :shape shape)
+  (let [x1 (-> x (* 2) (- 1))
+        x2 (Math/pow (Math/abs x1) shape)]
+    (if (neg? x1)
+      (-> (- 1 x2) (* (- mean min)) (+ min))
+      (-> x2 (* (- max mean)) (+ mean)))))
+
+(defn reject-tails
+  "Take a number in the range [0,1], presumably normally distributed
+  with a mean of 0.5, and 'spread' it so that the tails are thrown
+  away and the remainder of the distribution stretched into it.
+  `spread` determins the amount - zero does not change the
+  distribution and 1 throws away all but the mean."
+  [spread x]
+  (let [x1 (-> x (- 0.5) (* 2) (* (/ 1 (- 1 spread))))]
+    (-> (clamp -1 1 x1) (/ 2) (+ 0.5))))
