@@ -47,14 +47,6 @@
          (* weight (get-in categories (into [type] path))))
        (reduce +)))
 
-(defn temperature
-  [base {:keys [category next temp-adjustment proportion]}]
-  (if next
-    (+ base (math/interpolate temp-adjustment
-                              (:temp-adjustment next)
-                              (- 1 proportion)))
-    base))
-
 (defn smoothed-noise-field
   [x y t seed zoom]
   #_(println :x x :y y :t t :seed seed :zoom zoom)
@@ -133,12 +125,23 @@
         max  (mix-on categories mixture [:wind :max])]
     (math/distribute v min mean max 1)))
 
+(defn temperature
+  [categories mixture v]
+  (let [mean (mix-on categories mixture [:temp :mean])
+        min  (mix-on categories mixture [:temp :min])
+        max  (mix-on categories mixture [:temp :max])]
+    (math/distribute v min mean max 1)))
+
 (defn weather
-  [{:keys [x y t seed categories crossfade turbulence wind-uniformity
-           max-pressure min-pressure feature-size]
+  [{:keys [x y t seed
+           categories
+           crossfade
+           wind-uniformity
+           temp-uniformity
+           max-pressure min-pressure
+           feature-size]
     :or {seed 1}
     :as params}]
-  #_(println "weather" :x x :y y :t t :seed seed)
   (let [delta     100.0000010
         ;; TODO: Introduce some sort of vector/matrix abstraction
         ;; Although meh: just make it run on the GPU
@@ -155,18 +158,18 @@
                                                            (* y feature-size)
                                                            t
                                                            (+ seed 17)
-                                                           32))]
-    #_(println :p p
-               :wind-dir wind-dir
-               :pressure pressure
-               :mixture mixture
-               :categories categories
-               :wind-var wind-var)
+                                                           32))
+        temp-var (math/reject-tails temp-uniformity
+                                    (smoothed-noise-field (* x feature-size)
+                                                          (* y feature-size)
+                                                          t
+                                                          (+ seed 18)
+                                                          32))]
     {:value       value
      :pressure    (math/nearest pressure 0.01)
      :mixture     mixture
      :type        (key (last (sort-by val mixture)))
-     ;;:temperature (math/nearest (temperature 22 info) 1)
+     :temperature (temperature categories mixture temp-var)
      ;;:info        info
      :wind        {:heading (math/heading wind-dir)
                    :speed (wind-speed categories mixture wind-var)}
@@ -199,7 +202,7 @@
                   :max-pressure    31.0
                   :prevailing-wind {:heading 45}
                   :crossfade       0.1
-                  :wind-spread     1.25
+                  :wind-uniformity 0.7
                   :categories      {:sunny     {:weight 5
                                                 :wind   {:min  0
                                                          :mean 10
