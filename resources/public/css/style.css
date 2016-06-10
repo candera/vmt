@@ -6,6 +6,42 @@ body {
     background-color: #FDFFD9;
 }
 
+#title {
+    font-size: 175%;
+    background: black;
+    color: white;
+    padding: 4px 13px;
+    margin-bottom: 2px;
+}
+
+#category-params input {
+    width: 40px;
+}
+
+#category-params thead {
+    text-align: center;
+}
+
+#category-params .min {
+    padding-left: 10px;
+}
+
+#general-params {
+    min-width: 270px;
+}
+
+.time-params input {
+    width: 30px;
+}
+
+#time-location-params td {
+    vertical-align: bottom;
+}
+
+#load-save-controls button {
+    margin-right: 10px;
+}
+
 svg {
     display: inline-block;
 }

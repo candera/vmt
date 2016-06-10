@@ -83,7 +83,8 @@
         {:keys [color text wind?]} display
         [width height]                         size
         square-size                            (/ canvas-size width)
-        grid                                   (model/weather-grid params)]
+        grid                                   (model/weather-grid (assoc params
+                                                                          :map-fn pmap))]
     (doseq [x (range width)
             y (range height)
             :let [{:keys [value type temperature]} (get grid [x y])]]

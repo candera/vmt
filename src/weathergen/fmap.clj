@@ -29,6 +29,12 @@
 
 (defreader read-float getFloat)
 
+(def weather-type
+  {1 :sunny
+   2 :fair
+   3 :poor
+   4 :inclement})
+
 (defn read-fmap
   [^InputStream is]
   (let [size-x      (read-int is)
@@ -53,6 +59,7 @@
      :weather (into (sorted-map)
                     (map (fn [coords wx-type pressure temp wind-speed wind-dir]
                            [coords {:wx-type wx-type
+                                    :type (weather-type wx-typ)
                                     :pressure (model/mmhg->inhg pressure)
                                     :temperature temp
                                     :wind {:speed wind-speed

@@ -25,12 +25,12 @@
   [bw]
   (js/Blob. #js [(:array-buffer bw)] #js {:type "application/octet-stream"}))
 
-(defn category
+(defn weather-type
   [w]
-  (-> w :category {:sunny 1
-                   :fair 2
-                   :poor 3
-                   :inclement 4}))
+  (-> w :type {:sunny 1
+               :fair 2
+               :poor 3
+               :inclement 4}))
 
 (defn pressure
   [w]
@@ -50,24 +50,19 @@
   (-> w :temperature (math/nearest 0.1)))
 
 (defn get-blob
-  [weather-fn xs ys]
-  (let [x-cells   (count xs)
-        y-cells   (count ys)
-        data      (into {} (for [y ys
-                                 x xs]
-                             [[x y] (weather-fn x y)]))
-        num-cells (* x-cells y-cells)
+  [data x-cells y-cells]
+  (let [num-cells (* x-cells y-cells)
         size      (+ 8 (* 4 5 num-cells))
         bw        (byte-writer size)]
     (write-int32 bw x-cells)
     (write-int32 bw y-cells)
-    (doseq [[f op] [[category write-int32]
+    (doseq [[f op] [[weather-type write-int32]
                     [pressure write-float32]
                     [temperature write-float32]
                     [wind-speed write-float32]
                     [wind-direction write-float32]]
-            y ys
-            x xs
+            y (range y-cells)
+            x (range x-cells)
             :let [w (get data [x y])]]
       (->> w f (op bw)))
     (blob bw)))
