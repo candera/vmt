@@ -59,7 +59,7 @@
      :weather (into (sorted-map)
                     (map (fn [coords wx-type pressure temp wind-speed wind-dir]
                            [coords {:wx-type wx-type
-                                    :type (weather-type wx-typ)
+                                    :type (weather-type wx-type)
                                     :pressure (model/mmhg->inhg pressure)
                                     :temperature temp
                                     :wind {:speed wind-speed
