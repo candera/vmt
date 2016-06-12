@@ -25,7 +25,8 @@
   )
 
 (defonce app-state
-  (atom {:weather-params  {:temp-uniformity 0.7
+  (atom {:revision        1
+         :weather-params  {:temp-uniformity 0.7
                            :pressure        {:min 28.5 :max 31}
                            :size            [59 59]
                            :feature-size    10
@@ -44,16 +45,18 @@
                            :turbulence      {:size 1 :power 250}
                            :origin          [1000 1000]
                            :time            {:offset    1234
-                                             :evolution 600
+                                             :evolution 1200
                                              :current   {:day 1 :hour 5 :minute 0}
                                              :start     {:day 1 :hour 5 :minute 0}}
                            :direction {:heading 135 :speed 30}
                            :wind-uniformity 0.7
                            :crossfade       0.1
                            :prevailing-wind {:heading 325}
-                           :seed            1234}
-         :movement-params {:step      60
-                           :end       {:day 1 :hour 14 :minute 0}}
+                           :seed            1234
+                           :wind-stability-areas [[16 39 6 4]]}
+         :movement-params {:step          60
+                           :step-on-save? true
+                           :end           {:day 1 :hour 14 :minute 0}}
          :selected-cell   nil
          :weather-data    nil
          :display-params  {:canvas-width  800
@@ -65,7 +68,7 @@
 (defn update-weather!
   []
   (swap! app-state assoc :weather-data
-            (model/weather-grid (:weather-params @app-state))))
+         (model/weather-grid (:weather-params @app-state))))
 
 (update-weather!)
 
@@ -180,6 +183,13 @@
                            temperature-color))]
     (gstring/format "rgba(%s,%s,%s,%s)" r g b (* a alpha))))
 
+(defn row
+  [cols]
+  (dom/tr
+   nil
+   (for [col cols]
+     (dom/td nil col))))
+
 (let [opacity-ch (async/chan (async/dropping-buffer 1))]
 
   (go-loop [last-received nil
@@ -215,12 +225,14 @@
 (defui WeatherGrid
   static om/IQuery
   (query [this]
-         [:weather-data :display-params :weather-params])
+         [:weather-data :display-params :weather-params :selected-cell])
   Object
   (render [this]
-          (let [{:keys [weather-params weather-data display-params]} (om/props this)
+          (let [{:keys [weather-params weather-data display-params selected-cell]} (om/props this)
                 {:keys [canvas-width canvas-height opacity display map]} display-params
                 {:keys [size]} weather-params
+                selected-x (:x selected-cell)
+                selected-y (:y selected-cell)
                 [x-cells y-cells] size
                 cell-width (/ canvas-width x-cells)
                 cell-height (/ canvas-height y-cells)]
@@ -234,7 +246,9 @@
                                         :height canvas-height}
                                    nil))
              (for [[[x y] weather] weather-data
-                   :let [{:keys [type wind temperature]} weather]]
+                   :let [{:keys [type wind temperature]} weather
+                         selected? (and (= x selected-x)
+                                        (= y selected-y))]]
                (dom/rect #js {:key (str "cell" x "-" y)
                               :x (* cell-width x)
                               :y (* cell-height y)
@@ -242,10 +256,9 @@
                               :height cell-height
                               ;;:class (weather-class weather)
                               :fill (fill-color weather display opacity)
-                              :onMouseOver #(show-data this x y weather)
-                              ;; :stroke "black"
-                              ;; :strokeWidth "0.3px"
-                              }))
+                              :onMouseEnter #(show-data this x y weather)
+                              :stroke (if selected? "black" "none")
+                              :strokeWidth "1px"}))
              (for [[[x y] weather] weather-data
                    vector-part (wind-vector {:x (* cell-width x)
                                              :y (* cell-height y)
@@ -253,7 +266,20 @@
                                              :width cell-width
                                              :height cell-height
                                              :wind (:wind weather)})]
-               vector-part)))))
+               vector-part)
+             (let [[x y width height] (first (:wind-stability-areas weather-params))]
+               (when (and x y width height)
+                 (for [[x1 y1 x2 y2] [[0 0 1 0]
+                                      [1 0 1 1]
+                                      [1 1 0 1]
+                                      [0 1 0 0]]]
+                   (dom/line #js {:x1 (-> x1 (* width) (+ x) (* cell-width))
+                                  :y1 (-> y1 (* height) (+ y) (* cell-width))
+                                  :x2 (-> x2 (* width) (+ x) (* cell-width))
+                                  :y2 (-> y2 (* height) (+ y) (* cell-width))
+                                  :stroke "black"
+                                  :strokeWidth "2.5px"
+                                  :strokeDasharray "5,5"}))))))))
 
 (def weather-grid (om/factory WeatherGrid))
 
@@ -369,45 +395,22 @@
   [e]
   (let [{:keys [weather-params weather-data] :as state} @app-state
         {:keys [size]}  weather-params
+        t (get-in weather-params [:time :current])
         [x-cells y-cells] size
         blob (fmap/get-blob weather-data
                             x-cells
                             y-cells)]
-    (save-data blob "generated.fmap")))
-
-(defn click-save-multi
-  [c e]
-  (let [{:keys [weather-params movement-params] :as state} @app-state
-        {:keys [size]} weather-params
-        {:keys [step]} movement-params
-        end (:end movement-params)
-        [x-cells y-cells] size
-        ch (async/chan)]
-    (.addEventListener js/window "focus" #(go (>! ch "focus")) false)
-    (go-loop [t (get-in weather-params [:time :start])]
-      (when (<= (model/falcon-time->minutes t) (model/falcon-time->minutes end))
-        (let [wp (assoc-in weather-params [:time :current] t)
-              wd (model/weather-grid wp)]
-          (om/transact! c [(list 'update-params-and-weather
-                                 {:weather-params wp
-                                  :weather-data wd})
-                           :weather-params
-                           :weather-data])
-          (-> wd
-              (fmap/get-blob x-cells y-cells)
-              (save-data (gstring/format "%02d%02d%02d.fmap"
-                                         (:day t)
-                                         (:hour t)
-                                         (:minute t)))))
-        (<! ch)
-        (recur (model/add-time t step))))))
+    (save-data blob (gstring/format "%d%02d%02d.fmap"
+                                    (:day t)
+                                    (:hour t)
+                                    (:minute t)))))
 
 (defn click-save-settings
   [e]
   (save-data (js/Blob. #js[(-> @app-state
-                            (select-keys [:weather-params :movement-params :display-params])
-                            pr-str)]
-                    #js{:type "text/plain"})
+                               (select-keys [:weather-params :movement-params :display-params :revision])
+                               pr-str)]
+                       #js{:type "text/plain"})
              "weathergen-settings.edn"))
 
 (defn click-load-settings
@@ -433,7 +436,7 @@
                (not= edit-text (get-in props selector)))
       (acceptor selector edit-text)
       (om/update-state! c assoc-in (conj selector :edit-text) nil)
-    (doto e (.preventDefault) (.stopPropagation)))))
+      (doto e (.preventDefault) (.stopPropagation)))))
 
 (def ESCAPE_KEY 27)
 (def ENTER_KEY 13)
@@ -441,11 +444,11 @@
 (defn key-down [c props selector acceptor e]
   (condp == (.-keyCode e)
     ESCAPE_KEY
-      (do
-        (om/update-state! c assoc-in (conj selector :edit-text) nil)
-        (doto e (.preventDefault) (.stopPropagation)))
+    (do
+      (om/update-state! c assoc-in (conj selector :edit-text) nil)
+      (doto e (.preventDefault) (.stopPropagation)))
     ENTER_KEY
-      (submit c props selector acceptor e)
+    (submit c props selector acceptor e)
     nil))
 
 (defn change [c selector e]
@@ -562,10 +565,26 @@
             ["Temp uniformity"     [:weather-params :temp-uniformity] str]
             ["Turbulence power"    [:weather-params :turbulence :power] str]
             ["Turbulence size"     [:weather-params :turbulence :size] str]]]
-       (dom/tr nil
-               (dom/td nil label)
-               (dom/td nil
-                       (edit-field c props selector))))))))
+       (row [label (edit-field c props selector)]))))))
+
+(defn wind-stability-parameters
+  [c props]
+  (dom/fieldset
+   nil
+   (dom/legend nil "Wind stability region")
+   (dom/table
+    #js {:id "wind-stability-params"}
+    (dom/tbody
+     nil
+     (row ["NW corner"
+           (edit-field c props [:weather-params :wind-stability-areas 0 0])
+           (edit-field c props [:weather-params :wind-stability-areas 0 1])])
+     (row ["Width/height"
+           (edit-field c props [:weather-params :wind-stability-areas 0 2])
+           (edit-field c props [:weather-params :wind-stability-areas 0 3])])))
+   (dom/button #js {:onClick #(om/transact! c '[(clear-wind-stability-area {:index 0})
+                                                :weather-data])}
+               "Clear")))
 
 (defn time-entry
   [c props path]
@@ -592,13 +611,6 @@
       nil
       (edit-field c props (conj path :minute)))))))
 
-(defn row
-  [cols]
-  (dom/tr
-   nil
-   (for [col cols]
-     (dom/td nil col))))
-
 (defn step-controls
   [c props]
   (dom/fieldset
@@ -615,17 +627,21 @@
            (time-entry c props [:weather-params :time :start])])
      (row ["Current Time"
            (time-entry c props [:weather-params :time :current])])
-     (row ["End Time"
-           (time-entry c props [:movement-params :end])])
      (row ["Step interval"
            (edit-field c props [:movement-params :step])])))
    (dom/button #js {:title "Step back in time"
                     :onClick (fn [e]
-                               (om/transact! c '[(prev) :weather-data]))}
+                               (om/transact! c '[(prev)
+                                                 :weather-data
+                                                 :weather-params
+                                                 :movement-params]))}
                "<< Step Back")
    (dom/button #js {:title "Step forward in time"
                     :onClick (fn [e]
-                               (om/transact! c '[(next) :weather-data]))}
+                               (om/transact! c '[(next)
+                                                 :weather-data
+                                                 :weather-params
+                                                 :movement-params]))}
                "Step Forward >>")))
 
 (defui WeatherControls
@@ -639,7 +655,10 @@
      (dom/div
       nil
       (two-column
-       (weather-parameters this props)
+       (dom/div
+        nil
+        (weather-parameters this props)
+        (wind-stability-parameters this props))
        (dom/div
         nil
         (weather-type-configuration this props)
@@ -651,21 +670,47 @@
 (defui SerializationControls
   static om/IQuery
   (query [this]
-         [:weather-params :weather-data])
+         [:weather-params :weather-data :movement-params])
   Object
   (render
    [this]
-   (dom/fieldset
-    #js {:id "load-save-controls"}
-    (dom/legend nil "Load/save")
-    (dom/button #js {:onClick click-save} "Save Current as Single FMAP")
-    (dom/button #js {:onClick #(click-save-multi this %)} "Save Start->End as Multiple FMAPs")
-    (dom/button #js {:onClick click-save-settings} "Save Settings")
-    (dom/fieldset
-     nil
-     (dom/legend nil "Load settings")
-     (dom/input #js {:type "file"
-                     :onChange #(click-load-settings this %)})))))
+   (let [step-on-save? (get-in (om/props this) [:movement-params :step-on-save?])]
+     (dom/fieldset
+      #js {:id "load-save-controls"}
+      (dom/legend nil "Load/save")
+      (dom/div
+       nil
+       (dom/button #js {:onClick (fn [e]
+                                   (click-save e)
+                                   (println "click save" :step-on-save? step-on-save?)
+                                   (om/transact! this '[(next)
+                                                        :weather-data
+                                                        :weather-params
+                                                        :movement-params])
+                                   ;; Not sure why this doesn't work
+                                   #_(when step-on-save?
+                                       (om/transact! this '[(next)
+                                                            :weather-data
+                                                            :weather-params
+                                                            :movement-params])))}
+                   "Save Current as Single FMAP")
+       "(Steps forward in time)"
+       (println "Rendering serialization controls" :step-on-save? step-on-save?)
+       #_(dom/input #js {:type "checkbox"
+                       :checked step-on-save?
+                       :onClick (fn [e]
+                                  (om/transact!
+                                   this
+                                   [(list 'toggle-step-on-save)]))})
+       #_"Step forward after saving")
+      (dom/div
+       nil
+       (dom/button #js {:onClick click-save-settings} "Save Settings"))
+      (dom/div
+       nil
+       "Load Settings: "
+       (dom/input #js {:type "file"
+                       :onChange #(click-load-settings this %)}))))))
 
 (def serialization-controls
   (om/factory SerializationControls))
@@ -797,7 +842,8 @@
                                     (:movement-params %)
                                     1))]
                  (update-weather!)
-                 (println "Update worked" :weather-params (:weather-params @state))
+                 (println "Update worked";; :weather-params (:weather-params @state)
+                          )
                  state)
                (catch :default e
                  (println e))))})
@@ -852,17 +898,45 @@
                          :weather-params weather-params
                          :weather-data weather-data))})
 
+(defn merge-loaded
+  "Take a loaded settings file and merge it with the current app
+  state, resolving any conflicts if possible."
+  [current loaded]
+  ;; TODO: This is a pretty crappy resolution algorithm, but it works
+  ;; okay for now.
+  {:revision (:revision current)
+   :weather-params (merge (:weather-params current) (:weather-params loaded))
+   :display-params (merge (:display-params current) (:display-params loaded))
+   :movement-params (merge (:movement-params current) (:movement-params loaded))
+   :selected-cell {}})
+
 (defmethod mutation 'load-settings
   [state key {:keys [data] :as params}]
   {:value {:keys [:weather-params :weather-data :display-params :selected-cell]}
    :action (fn []
              (swap! state
-                    assoc
-                    :weather-params (:weather-params data)
-                    :display-params (:display-params data)
-                    :movement-params (:movement-params data)
-                    :selected-cell {})
+                    merge-loaded
+                    data)
              (update-weather!))})
+
+(defmethod mutation 'clear-wind-stability-area
+  [state key {:keys [index] :as params}]
+  {:value {:keys [:weather-data]}
+   :action (fn []
+             (swap! state
+                    assoc-in
+                    [:weather-params :wind-stability-areas]
+                    [[nil nil nil nil]])
+             (update-weather!))})
+
+(defmethod mutation 'toggle-step-on-save
+  [state key params]
+  {:value {:keys [:movement-params]}
+   :action (fn []
+             (swap! state
+                    update-in
+                    [:movement-params :step-on-save?]
+                    not))})
 
 (defn mutate [{:keys [state] :as env} key params]
   ;;(println "Mutating" :key key :params params)

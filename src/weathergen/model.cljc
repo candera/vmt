@@ -1,5 +1,6 @@
 (ns weathergen.model
-  (:require [weathergen.math :as math]))
+  (:require [weathergen.math :as math]
+            [org.craigandera.weathergen.pattern-space :as pat]))
 
 (defn mmhg->inhg
   [mmhg]
@@ -85,13 +86,13 @@
 (defn perturb
   "Returns the perturbed coordinates of a point given:
 
-   x, y, t - space and time coordinates of sample position.
+   x, y, t - coordinates of sample position in pattern space.
    seed    - PNRG seed
    t-power - Strength of turbulence factor
    t-size  - Spatial size of turbulence field"
   [params]
   #_(println "perturb" params)
-  (let [{:keys [x y t seed turbulence]} params
+  (let [{:keys [::pat/x ::pat/y ::pat/t seed turbulence]} params
         t-power (:power turbulence)
         t-size (:size turbulence)
         x* (/ x t-size)
@@ -154,6 +155,16 @@
         max  (mix-on categories mixture [:wind :max])]
     (math/distribute v min mean max 1)))
 
+(defn stabilize-wind?
+  "Return logical true if the current cell is in a wind-stablized
+  region"
+  [{:keys [wind-stability-areas x y] :as params}]
+  (some (fn [[x1 y1 width height]]
+          (and x1 y1 width height
+               (<= x1 x (+ x1 width))
+               (<= y1 y (+ y1 height))))
+        wind-stability-areas))
+
 (defn temperature
   [categories mixture v]
   (let [mean (mix-on categories mixture [:temp :mean])
@@ -163,53 +174,19 @@
 
 (defn weather
   [{:keys [x y t seed
+           origin
+           size
+           time
+           direction
            categories
            crossfade
            wind-uniformity
+           prevailing-wind
            temp-uniformity
            pressure
            feature-size]
     :as params}]
-  (let [max-pressure (:max pressure)
-        min-pressure (:min pressure)
-        ;; TODO: Introduce some sort of vector/matrix abstraction
-        ;; Although meh: just make it run on the GPU
-        p         (perturb params)
-        value     (pressure-pattern p)
-        wind-dir  (wind-direction p value params)
-        pressure  (->> value
-                       (* (- max-pressure min-pressure))
-                       (+ min-pressure)
-                       (math/clamp min-pressure max-pressure))
-        mixture   (mix value crossfade categories)
-        wind-var  (math/reject-tails wind-uniformity
-                                     (smoothed-noise-field (* x feature-size)
-                                                           (* y feature-size)
-                                                           t
-                                                           (+ seed 17)
-                                                           32))
-        temp-var (math/reject-tails temp-uniformity
-                                    (smoothed-noise-field (* x feature-size)
-                                                          (* y feature-size)
-                                                          t
-                                                          (+ seed 18)
-                                                          32))]
-    {:value       value
-     :pressure    (math/nearest pressure 0.01)
-     :mixture     mixture
-     :type        (key (last (sort-by val mixture)))
-     :temperature (temperature categories mixture temp-var)
-     ;;:info        info
-     :wind        {:heading (math/heading wind-dir)
-                   :speed (wind-speed categories mixture wind-var)}
-     :wind-var    wind-var
-     :wind-vec    wind-dir
-     :p           p}))
-
-(defn weather-grid
-  [params]
-  (let [{:keys [origin size feature-size time direction map-fn]} params
-        {:keys [heading speed]} direction
+  (let [{:keys [heading speed]} direction
         {:keys [current start offset evolution]} time
         [origin-x origin-y] origin
         [width height] size
@@ -219,16 +196,61 @@
         [x-off y-off] (-> (->> [0 1]
                                (math/rotate (- heading))
                                (math/scale (* delta-t (/ speed 60 9)))))
+        x* (/ (+ origin-x x x-off) feature-size)
+        y* (/ (+ origin-y y y-off) feature-size)
+        ;; TODO: Why do we need this 10 here?
+        t* (/ delta-t evolution 10)
+        max-pressure (:max pressure)
+        min-pressure (:min pressure)
+        params* (assoc params
+                       ::pat/x x*
+                       ::pat/y y*
+                       ::pat/t t*)
+        ;; TODO: Introduce some sort of vector/matrix abstraction
+        ;; Although meh: just make it run on the GPU
+        p         (perturb params*)
+        value     (pressure-pattern p)
+        wind-dir  (wind-direction p value params*)
+        pressure  (->> value
+                       (* (- max-pressure min-pressure))
+                       (+ min-pressure)
+                       (math/clamp min-pressure max-pressure))
+        mixture   (mix value crossfade categories)
+        wind-var  (math/reject-tails wind-uniformity
+                                     (smoothed-noise-field (* x* feature-size)
+                                                           (* y* feature-size)
+                                                           t*
+                                                           (+ seed 17)
+                                                           32))
+        temp-var (math/reject-tails temp-uniformity
+                                    (smoothed-noise-field (* x* feature-size)
+                                                          (* y* feature-size)
+                                                          t*
+                                                          (+ seed 18)
+                                                          32))]
+    {:value       value
+     :pressure    (math/nearest pressure 0.01)
+     :mixture     mixture
+     :type        (key (last (sort-by val mixture)))
+     :temperature (temperature categories mixture temp-var)
+     ;;:info        info
+     :wind        (if (stabilize-wind? params*)
+                    {:heading (:heading prevailing-wind)
+                     :speed (get-in categories [:fair :wind :mean])}
+                    {:heading (math/heading wind-dir)
+                     :speed (wind-speed categories mixture wind-var)})
+     :wind-var    wind-var
+     :wind-vec    wind-dir
+     :p           p}))
+
+(defn weather-grid
+  [{:keys [map-fn size] :as params}]
+  (let [[width height] size
         ;; This is so we can pass in pmap when we're in a non-CLJS context
         map-fn (or map-fn map)]
     (->>  (for [x (range width)
-                y (range height)
-                :let []]
-            [[x y] (-> params
-                       (assoc :x (/ (+ origin-x x x-off) feature-size))
-                       (assoc :y (/ (+ origin-y y y-off) feature-size))
-                       ;; TODO: Why do we need this 10 here?
-                       (assoc :t (/ delta-t evolution 10)))])
+                y (range height)]
+            [[x y] (assoc params :x x :y y)])
           (map-fn (fn [[[x y] params]]
                     [[x y] (weather params)]))
           (into (sorted-map)))))
@@ -264,6 +286,7 @@
                   :crossfade       0.1
                   :wind-uniformity 0.7
                   :temp-uniformity 0.7
+                  :wind-stability-areas [[0 0 1 1]]
                   :categories      {:sunny     {:weight 5
                                                 :wind   {:min  0
                                                          :mean 10

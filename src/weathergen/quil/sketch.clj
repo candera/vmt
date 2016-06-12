@@ -3,7 +3,7 @@
             [quil.core :as q]
             [quil.middleware :as m]))
 
-(q/defsketch weathergen
+#_(q/defsketch weathergen
   :title "Stormy weather"
   :size [wq/canvas-size wq/canvas-size]
   ; setup function called only once, during sketch initialization.
