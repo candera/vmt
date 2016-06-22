@@ -1,0 +1,828 @@
+(page "index.html"
+  (:require [hoplon.svg :as svg]
+            [goog.dom :as gdom]
+            [goog.string :as gstring]
+            [goog.string.format]
+            [goog.style :as gstyle]
+            [weathergen.canvas :as canvas]
+            [weathergen.fmap :as fmap]
+            [weathergen.math :as math]
+            [weathergen.model :as model]
+            [cljs.core.async :as async
+             :refer [<! >! timeout]]
+            [cljs.reader :as reader])
+  (:require-macros
+   [cljs.core.async.macros :refer [go]]))
+
+;;; Constants
+
+(def revision 2)
+
+;;; State
+
+(defc weather-params {:temp-uniformity 0.7
+                      :pressure        {:min 28.5 :max 31}
+                      :cell-count      [59 59]
+                      :feature-size    10
+                      :categories      {:sunny     {:weight 20
+                                                    :wind   {:min 0 :mean 7 :max 20}
+                                                    :temp   {:min 20 :mean 22 :max 24}}
+                                        :fair      {:weight 0.7
+                                                    :wind   {:min 5 :mean 10 :max 30}
+                                                    :temp   {:min 18 :mean 21 :max 23}}
+                                        :poor      {:weight 5
+                                                    :wind   {:min 10 :mean 18 :max 30}
+                                                    :temp   {:min 15 :mean 18 :max 21}}
+                                        :inclement {:weight 2
+                                                    :wind   {:min 15 :mean 25 :max 60}
+                                                    :temp   {:min 12 :mean 14 :max 16}}}
+                      :turbulence      {:size 1 :power 250}
+                      :origin          [1000 1000]
+                      :time            {:offset    1234
+                                        :evolution 1200
+                                        :current   {:day 1 :hour 5 :minute 0}
+                                        :start     {:day 1 :hour 5 :minute 0}}
+                      :direction {:heading 135 :speed 30}
+                      :wind-uniformity 0.7
+                      :crossfade       0.1
+                      :prevailing-wind {:heading 325}
+                      :seed            1234
+                      :wind-stability-areas [[16 39 6 4]]})
+
+(defc movement-params {:step          60
+                       :end           {:day 1 :hour 14 :minute 0}})
+
+(defc selected-cell nil)
+
+(defc= weather-data (model/weather-grid weather-params))
+
+(defc= selected-cell-weather (get weather-data selected-cell))
+
+(defc display-params {:dimensions [800 800]
+                      :opacity    0.75
+                      :display    :type
+                      :map        :korea
+                      :mouse-mode :select
+                      :overlay    :wind})
+
+
+(defc= cell-count (:cell-count weather-params))
+
+(defc= dimensions (:dimensions display-params))
+
+(defc= grid-data {:display-params display-params
+                  :cell-count cell-count
+                  :weather-data weather-data
+                  :selected-cell selected-cell
+                  :wind-stability-areas (:wind-stability-areas weather-params)})
+
+(defn move
+  "Advances the weather by `steps` steps"
+  [steps]
+  (swap! weather-params
+         model/step
+         @movement-params
+         steps))
+
+;;; Serialization
+
+(defn save-data
+  [blob filename]
+  (let [a (gdom/createElement "a")
+        _ (-> (gdom/getDocument) .-body (gdom/appendChild a))
+        _ (gstyle/showElement a false)
+        url (-> js/window .-URL (.createObjectURL blob))]
+    (-> a .-href (set! url))
+    (-> a .-download (set! filename))
+    (.click a)
+    (-> js/window .-URL (.revokeObjectURL url))))
+
+(defn save-fmap
+  [weather-params weather-data]
+  (let [t (get-in weather-params [:time :current])
+        [x-cells y-cells] (:cell-count weather-params)
+        blob (fmap/get-blob weather-data
+                            x-cells
+                            y-cells)]
+    (save-data blob (gstring/format "%d%02d%02d.fmap"
+                                    (:day t)
+                                    (:hour t)
+                                    (:minute t)))))
+
+(defn save-settings
+  [_]
+  (save-data (js/Blob. #js[(pr-str {:weather-params @weather-params
+                                    :movement-params @movement-params
+                                    :display-params @display-params
+                                    :revision revision})]
+                       #js{:type "text/plain"})
+             "weathergen-settings.edn"))
+
+(defn load-settings
+  [_]
+  (let [i (gdom/createElement "input")
+        ch (async/chan)]
+    (-> i .-type (set! "file"))
+    (-> (gdom/getDocument) .-body (gdom/appendChild i))
+    (gstyle/showElement i false)
+    (-> i .-onchange (set! (fn [e]
+                             (async/put! ch e)
+                             (async/close! ch))))
+    (.click i)
+    (go
+      (let [e (<! ch)]
+        (when-let [file (aget (.. e -target -files) 0)]
+          (let [reader (js/FileReader.)]
+            (-> reader
+                .-onload
+                (set! #(let [data (-> %
+                                      .-target
+                                      .-result
+                                      reader/read-string)]
+                         (dosync
+                          (swap! weather-params merge (:weather-params data))
+                          (swap! display-params merge (:display-params data))
+                          (swap! movement-params merge (:movement-params data))))))
+            (.readAsText reader file)))))))
+
+;;; Utility
+
+(defn invert-map
+  [m]
+  (zipmap (vals m) (keys m)))
+
+(def map-name->key
+  {"Israel" :israel
+   "Balkans" :balkans
+   "Korea" :korea})
+
+(def map-key->name
+  (invert-map map-name->key))
+
+(def map-image
+  {:korea "images/kto.jpg"
+   :balkans "images/balkans.png"
+   :israel "images/ito.jpg"})
+
+(defn map-image-id
+  [map]
+  (str "map-image-" (name map)))
+
+(def display-name->key
+  {"Weather Type" :type
+   "Pressure" :pressure
+   "Temperature" :temperature})
+
+(def display-key->name
+  (invert-map display-name->key))
+
+(def overlay-name->key
+  {"Wind" :wind
+   "Pressure" :pressure
+   "Temperature" :temperature
+   "Weather Type" :type})
+
+(def overlay-key->name
+  (invert-map overlay-name->key))
+
+(def type-name->key
+  {"Sunny" :sunny
+   "Fair" :fair
+   "Poor" :poor
+   "Inclement" :inclement})
+
+(def type-key->name
+  (invert-map type-name->key))
+
+;;; Grid interaction
+
+(defn grid-click
+  "Handle the mouse clicking on the canvas"
+  [e canvas-id cell-count dimensions]
+  (let [[width height] dimensions
+        [nx ny] cell-count
+        canvas (gdom/getElement canvas-id)
+        r (.getBoundingClientRect canvas)
+        x (-> e .-clientX (- (.-left r)) (/ width) (* nx) int)
+        y (-> e .-clientY (- (.-top r)) (/ height) (* ny) int)]
+    (println "setting selected cell to" [x y])
+    (reset! selected-cell [x y])))
+
+;;; Grid rendering
+
+(def weather-color
+  {:sunny [255 255 255 0.25]
+   :fair [0 255 0 1]
+   :poor [255 255 0 1]
+   :inclement [192 0 0 1]
+   nil [255 0 0 1]})
+
+(def pressure-map
+  {28.5 [192 0 0 1]
+   28.9 [192 0 0 1]
+   29.3 [255 255 0 1]
+   29.5 [0 255 0 1]
+   29.9 [0 128 255 1]
+   30.2 [255 255 255 1]
+   31.0 [255 255 255 1]})
+
+(defn gradient-color
+  [color-map val]
+  (let [[[low l] [high h]] (->> color-map
+                                (into (sorted-map))
+                                (partition 2 1)
+                                (filter (fn [[[low l] [high h]]]
+                                          (<= low val high)))
+                                first)]
+    (math/vector-interpolate l h val low high)))
+
+(defn pressure-color
+  [pressure]
+  (let [[r g b a] (gradient-color pressure-map pressure)]
+    [(long r) (long g) (long b) a]))
+
+(def temp-map
+  {0  [0 0 255 1]
+   20 [0 255 0 1]
+   40 [255 0 0 1]})
+
+(defn temperature-color
+  [temp]
+  (let [[r g b a] (gradient-color temp-map temp)]
+    [(long r) (long g) (long b) a]))
+
+(defn fill-color
+  [display w]
+  ;;(println "fill-color" :w w :display display :alpha alpha)
+  (case display
+    :type (-> w :type weather-color)
+    :pressure (-> w
+                  :pressure
+                  pressure-color)
+    :temperature (-> w
+                     :temperature
+                     temperature-color)))
+
+(defn clear-transform
+  "Reset the current transform to the identity transform"
+  [ctx]
+  (.setTransform ctx 1 0 0 1 0 0))
+
+;; TODO: There should be a way to set a base transform so that the
+;; grid x and y map in a way that don't make us carry around the
+;; dimensions everywhere. Maybe grid cells are 1x1, and the integer
+;; x,y coordinates specify the center.
+(defn set-transform
+  "Sets the transform so that the grid cell at the specified x and y
+  map to the unit square centered at the origin."
+  [ctx x y cell-count canvas-dimensions]
+  (let [[x-cells y-cells] cell-count
+        [w h] canvas-dimensions
+        width (/ w x-cells)
+        height (/ h y-cells)]
+    (doto ctx
+      (clear-transform)
+      ;; Some sort of weird bug where this doesn't work when x is 17
+      (.translate (* (double (+ x 0.000001)) width) (* (double (+ y 0.00001)) height))
+      (.scale (/ w x-cells) (/ h y-cells))
+      (.translate 0.5 0.5))))
+
+(defn set-fill
+  [ctx r g b a]
+  (-> ctx .-fillStyle (set!  (str "rgba("
+                                  r ","
+                                  g ","
+                                  b ","
+                                  a ")"))))
+
+(defmulti prep-overlay (fn [ctx overlay] overlay))
+
+(defmethod prep-overlay :default
+  [_ _])
+
+(defmethod prep-overlay :wind
+  [ctx _]
+  (-> ctx .-lineWidth (set! 0.07)))
+
+(defn prep-text-overlay
+  [ctx]
+  (set-fill ctx 0 0 0 1)
+  ;;(-> ctx .-lineStyle (set! "0.2"))
+  (-> ctx .-lineWidth (set! "0.05"))
+  (-> ctx .-font (set! "0.4px serif")))
+
+(defmethod prep-overlay :temperature
+  [ctx _]
+  (prep-text-overlay ctx))
+
+(defmethod prep-overlay :pressure
+  [ctx _]
+  (prep-text-overlay ctx))
+
+(defmethod prep-overlay :coords
+  [ctx _]
+  (prep-text-overlay ctx))
+
+(defmethod prep-overlay :type
+  [ctx _]
+  (prep-text-overlay ctx))
+
+(defmulti stroke-overlay (fn [ctx overlay weather] overlay))
+
+(defmethod stroke-overlay :default
+  [_ _ _])
+
+(defmethod stroke-overlay :wind
+  [ctx overlay weather]
+  (let [{:keys [speed heading]} (:wind weather)
+        effective-speed (math/nearest speed 5)
+        ticks (math/clamp 1 100 (int (/ effective-speed 5)))
+        full-tails (int (/ ticks 2))
+        half-tail? (odd? ticks)
+        scale 1
+        offset 0.1
+        tail-step 0.18
+        tail-slant 0.1
+        tail-width (* 0.25 1.5)]
+    (.scale ctx scale scale)
+    (.translate ctx 0 offset)
+    ;; Vector line
+    (doto ctx
+      (.rotate (math/deg->rad heading))
+      (.moveTo 0 (- 0.5 tail-slant))
+      (.lineTo 0 (+ -0.5 tail-slant)))
+
+    ;; Full tails
+    (dotimes [n full-tails]
+      (.moveTo ctx 0 (+ (+ -0.5 tail-slant)
+                        (* tail-step n)))
+      (.lineTo ctx tail-width (+ -0.50 (* tail-step n))))
+
+    ;; Half tails
+    (when half-tail?
+      (.moveTo ctx
+               0
+               (+ (+ -0.50 tail-slant)
+                  (* tail-step full-tails)))
+      (.lineTo ctx
+               (* tail-width 0.5)
+               (+ -0.50 (+ (* tail-step full-tails)
+                           (* 0.5 tail-step)))))))
+
+(defn stroke-text-overlay
+  [ctx text]
+  (.strokeText ctx
+               text
+               (-> text count (* -0.08))
+               0.2))
+
+(defmethod stroke-overlay :pressure
+  [ctx overlay weather]
+  (stroke-text-overlay ctx (-> weather :pressure (.toFixed 2))))
+
+(defmethod stroke-overlay :temperature
+  [ctx overlay weather]
+  (stroke-text-overlay ctx (-> weather :temperature (.toFixed 1))))
+
+(defmethod stroke-overlay :type
+  [ctx overlay weather]
+  (stroke-text-overlay ctx (-> weather :type {:sunny "S"
+                                              :fair "F"
+                                              :poor "P"
+                                              :inclement "I"})))
+
+(defmethod stroke-overlay :coords
+  [ctx overlay weather]
+  (stroke-text-overlay ctx (str (:x weather) "," (:y weather))))
+
+(defn draw-map
+  "Draws the map, unless the image is not ready. In that case, returns
+  a channel that will close when it is."
+  [ctx map [w h]]
+  (when (map-image map)
+    (let [img (gdom/getElement (map-image-id map))]
+      (if (.-complete img)
+        (do (.drawImage ctx
+                        img
+                        0 0
+                        w h)
+            nil)
+        (let [ch (async/chan)]
+          (-> img .-onload (set! (fn [_]
+                                   (async/put! ch :done)
+                                   (async/close! ch))))
+          ch)))))
+
+(defn draw-data
+  "Draws the data layer"
+  [ctx display opacity weather-data cell-count dimensions]
+  (when (display-key->name display)
+    (.save ctx)
+    (println "drawing data" :display display :cells (count weather-data))
+    (doseq [[[x y] weather] weather-data
+            :let [[r g b a] (fill-color display weather)]]
+      (set-transform ctx x y cell-count dimensions)
+      (set-fill ctx r g b (* a opacity))
+      (.fillRect ctx -0.5 -0.5 1 1))
+    (.restore ctx)))
+
+(defn draw-overlay
+  "Draws the overlay layer"
+  [ctx overlay weather-data cell-count dimensions]
+  (.save ctx)
+  (prep-overlay ctx overlay)
+  (.beginPath ctx)
+  (doseq [[[x y] weather] weather-data
+          :let [weather (assoc weather :x x :y y)]]
+    (set-transform ctx x y cell-count dimensions)
+    (stroke-overlay ctx overlay weather))
+  (.stroke ctx)
+  (.restore ctx))
+
+(defn draw-selected-cell
+  "Draws a border around the currently selected cell"
+  [ctx [x y] cell-count dimensions]
+  (when (and x y)
+    (.save ctx)
+    (set-transform ctx x y cell-count dimensions)
+    (.setLineDash ctx #js [0.2 0.12])
+    (-> ctx .-lineWidth (set! "0.15"))
+    (-> ctx .-lineDashOffset (set! 2))
+    (-> ctx .-fillStyle (set! "rgba(0,0,0,0.5)"))
+    (.fillRect ctx -0.5 -0.5 1 1)
+    (.strokeRect ctx -0.5 -0.5 1 1)
+    (.restore ctx)))
+
+(defn draw-wind-stability
+  "Draws a border around the wind stability areas"
+  [ctx areas cell-count dimensions]
+  (doseq [[x y width height] areas]
+    (.save ctx)
+    (set-transform ctx x y cell-count dimensions)
+    (.setLineDash ctx #js [0.15 0.2])
+    (-> ctx .-lineDashOffset (set! 0))
+    (-> ctx .-lineWidth (set! "0.15"))
+    (.strokeRect ctx -0.5 -0.5 width height)
+    (.restore ctx)))
+
+(defn draw-grid
+  [{:keys [display-params cell-count wind-stability-areas weather-data selected-cell] :as data}]
+  (println "draw-grid")
+  (let [canvas (gdom/getElement "weather-grid")
+        {:keys [map
+                opacity
+                dimensions
+                display
+                overlay]} display-params
+        [w h]  dimensions]
+    (println "canvas" :width (.-width canvas)
+             :w w)
+    (if-not (= w (.-width canvas))
+      (let [ch (async/chan)]
+        (println "canvas is not done loading")
+        #_(.addEventListener js/document
+                           "DOMContentLoaded"
+                           (fn [e]
+                             (println "canvas finished loading")
+                             (async/put! ch :done)
+                             (async/close! ch)))
+        (go
+          (<! (async/timeout 25))
+          (draw-grid data)))
+      (let [ctx               (.getContext canvas "2d")
+            [x-cells y-cells] cell-count
+            cell-width        (/ w x-cells)
+            cell-height       (/ h y-cells)]
+        (clear-transform ctx)
+        (.clearRect ctx 0 0 w h)
+
+        ;; Draw the map if it's ready
+        (if-let [ch (draw-map ctx map dimensions)]
+          (go
+            (<! ch)
+            (draw-grid data))
+
+          (do
+            (draw-data ctx display opacity weather-data cell-count dimensions)
+            (draw-overlay ctx overlay weather-data cell-count dimensions)
+
+            ;; Draw bounding boxes
+            #_(doseq [x (range x-cells)
+                      y (range y-cells)]
+                (set-transform ctx x y cell-count dimensions)
+                (.strokeRect ctx -0.5 -0.5 1 1))
+
+            (draw-selected-cell ctx selected-cell cell-count dimensions)
+            (draw-wind-stability ctx wind-stability-areas cell-count dimensions)))))))
+
+;;; User Interface
+
+(def ESCAPE_KEY 27)
+(def ENTER_KEY 13)
+
+(defn two-column
+  [left right]
+  (div :class "two-column"
+       (div :class "left-column" left)
+       (div :class "right-column" right)))
+
+(defn edit-field
+  [c path]
+  ;; TODO: Add conversion to/from string and validation
+  (input :type "text"
+         :value (cell= (get-in c path))
+         :change #(swap! c assoc-in path (js/Number @%))))
+
+(defn time-entry
+  [c path]
+  ;; TODO: Make fancier
+  (table
+   :class "time-params"
+   (thead
+    (tr (map #(td :class "time-entry-label" %) ["Day" "Hour" "Minute"])))
+   (tbody
+    (tr (map #(td (edit-field c (conj path %))) [:day :hour :minute])))))
+
+(defn button-bar
+  []
+  (div :class "button-bar"
+       ;; Unfortunately, the way that Hoplon changes elements means
+       ;; that the canvas resizes asynchronously, which screws up
+       ;; redrawing. TODO: Fix this
+       (button :id "enlarge-grid"
+               :click #(swap! display-params
+                              update
+                              :dimensions
+                              (fn [[x y]]
+                                [(+ x 50) (+ y 50)]))
+               :title "Enlarge grid"
+               (img :src "images/bigger.png"))
+       (button :id "shrink-grid"
+               :click #(swap! display-params
+                              update
+                              :dimensions
+                              (fn [[x y]]
+                                [(- x 50) (- y 50)]))
+               :title "Shrink grid"
+               (img :src "images/smaller.png"))
+       #_(for [mode [:select :wind-stability]]
+         (input :class "exclusive-button"
+                :type "radio"
+                :name "mode"
+                :checked (cell= false)
+                :change (fn [e] (println "Change mouse mode to" mode))))))
+
+(defn weather-grid
+  []
+  (-> (for [[k v] map-image]
+         (img :id (map-image-id k)
+              :style "display: none"
+              :src v))
+       vector
+       (conj
+        (canvas :id "weather-grid"
+                :width (cell= (first dimensions))
+                :height (cell= (second dimensions))
+                :click #(grid-click % "weather-grid" @cell-count @dimensions)))))
+
+(defn display-controls
+  []
+  (let [select-row (fn [{:keys [label k key->name name->key]}]
+                     (tr (td label)
+                         (td (select
+                              :change #(do
+                                        (println "Setting" :k k :val (name->key @%))
+                                        (swap! display-params assoc k (name->key @%)))
+                              (for [name (conj (keys name->key) "None")]
+                                (option
+                                 :value name
+                                 :selected (cell= (-> display-params
+                                                      k
+                                                      key->name
+                                                      (= name)))
+                                 name))))))]
+    (fieldset
+     (legend "Display controls")
+     (div
+      :class "display-controls"
+      (table
+       (tbody
+        (select-row {:label "Map"
+                     :k :map
+                     :key->name map-key->name
+                     :name->key map-name->key})
+        (select-row {:label "Display"
+                     :k :display
+                     :key->name display-key->name
+                     :name->key display-name->key})
+        (select-row {:label "Overlay"
+                     :k :overlay
+                     :key->name overlay-key->name
+                     :name->key overlay-name->key})
+        (tr (td "Opacity:")
+            (td (input {:type "range"
+                        :min 0
+                        :max 100
+                        :value (cell= (-> display-params
+                                          :opacity
+                                          (* 100)
+                                          long))
+                        :change #(swap! display-params
+                                       assoc
+                                       :opacity
+                                       (/ @% 100.0))})))))))))
+
+(defn weather-parameters
+  []
+  (fieldset
+   (legend "Weather parameters")
+   (table
+    :id "general-params"
+    (tbody
+     (for [[label selector]
+           [["Seed"             [:seed]]
+            ["Crossfade"        [:crossfade]]
+            ["Weather heading"  [:direction :heading]]
+            ["Weather speed"    [:direction :speed]]
+            ["Evolution (min)"  [:time :evolution]]
+            ["Zoom"             [:feature-size]]
+            ["Max pressure"     [:pressure :max]]
+            ["Min pressure"     [:pressure :min]]
+            ["Prevailing wind"  [:prevailing-wind :heading]]
+            ["Wind uniformity"  [:wind-uniformity]]
+            ["Temp uniformity"  [:temp-uniformity]]
+            ["Warp strength"    [:turbulence :power]]
+            ;;["Turbulence size"  [:turbulence :size]]
+            ]]
+       (tr (td label)
+           (td (edit-field weather-params selector))))))))
+
+(defn wind-stability-parameters
+  []
+  (fieldset
+   (legend "Wind stability region")
+   (table
+    :id "wind-stability-params"
+    (tbody
+     (tr (td "NW corner")
+         (td (edit-field weather-params [:wind-stability-areas 0 0]))
+         (td (edit-field weather-params [:wind-stability-areas 0 1])))
+     (tr (td "Width/height")
+         (td (edit-field weather-params [:wind-stability-areas 0 2]))
+         (td (edit-field weather-params [:wind-stability-areas 0 3])))))
+   (button
+    :click #(swap! weather-params
+                   assoc
+                   :wind-stability-areas
+                   [[nil nil nil nil]])
+    "Clear")))
+
+(defn weather-type-configuration
+  []
+  (fieldset
+   (legend "Weather type configuration")
+   (table
+    :id "category-params"
+    (thead
+     (tr (td "")
+         (td "")
+         (td :colspan 3 "Wind")
+         (td :colspan 3 "Temperature"))
+     (tr (map td ["" "Weight" "Min" "Mean" "Max" "Min" "Mean" "Max"])))
+    (tbody
+     (for [category [:sunny :fair :poor :inclement]]
+       (tr (td (type-key->name category))
+           (td
+            (div :class "edit-field"
+                 (edit-field weather-params [:categories category :weight])))
+           (for [param [:wind :temp]
+                 metric [:min :mean :max]]
+             (td :class (str (name param) " " (name metric))
+                 (div :class "edit-field"
+                      (edit-field weather-params [:categories category param metric]))))))))))
+
+(defn step-controls
+  []
+  (fieldset
+   :id "time-location-params"
+   (legend "Time/location controls")
+   (table
+    (tbody
+     (tr (map td ["X Offset" (edit-field weather-params [:origin 0])]))
+     (tr (map td ["Y Offset" (edit-field weather-params [:origin 1])]))
+     (tr (map td ["T Offset" (edit-field weather-params [:time :offset])]))
+     (tr (map td ["Start Time" (time-entry weather-params [:time :start])]))
+     (tr (map td ["Current Time" (time-entry weather-params [:time :current])]))
+     (tr (map td ["Step interval" (edit-field movement-params [:step])]))))
+   (button :title "Step back in time"
+           :click #(move -1)
+           "<< Step Back")
+   (button :title "Step forward in time"
+           :click #(move 1)
+           "Step Forward >>")))
+
+(defn weather-controls
+  []
+  (two-column
+   (div
+    (weather-parameters)
+    (wind-stability-parameters))
+   (div
+    (weather-type-configuration)
+    (step-controls))))
+
+(defn serialization-controls
+  []
+  (fieldset
+   :id "load-save-controls"
+   (legend "Load/save")
+   (div
+    (button :click (fn []
+                     (save-fmap @weather-params @weather-data)
+                     (move 1))
+            "Save Current as Single FMAP")
+    "(Steps forward in time)")
+   (div
+    (button :click save-settings "Save Settings"))
+   (div
+    (button :click load-settings "Load Settings"))))
+
+(defn forecast
+  []
+  (fieldset
+   (legend "Forecast")
+   (table
+    (tbody
+     (for [[label val]
+           [["X" (cell= (str (first selected-cell)))]
+            ["Y" (cell= (str (second selected-cell)))]
+            ["Weather Type" (cell= (-> selected-cell-weather
+                                       :type
+                                       type-key->name))]
+            ["Pressure" (cell= (some-> selected-cell-weather
+                                       :pressure
+                                       (.toFixed 2)))]
+            ["Temperature" (cell= (some-> selected-cell-weather
+                                          :temperature
+                                          (.toFixed 1)))]
+            ["Wind Speed" (cell= (some-> selected-cell-weather
+                                         :wind
+                                         :speed
+                                         (.toFixed 0)))]
+            ["Wind Heading" (cell= (some-> selected-cell-weather
+                                           :wind
+                                           :heading
+                                           (.toFixed 0)))]]]
+       (tr (td label)
+           (td val)))))))
+
+(defn debug-info
+  []
+  #_(div "Debug info"))
+
+(html
+ (head
+  (title "WeatherGen")
+  (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
+  (link :href "https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300"
+        :rel "stylesheet"
+        :type "text/css"))
+ (body
+  (div
+   :id "app"
+   (div :id "title" "WeatherGen")
+   (div :class "two-column"
+        (div :class "left-column"
+             (button-bar)
+             (weather-grid))
+        (div :class "right-column"
+             (display-controls)
+             (weather-controls)
+             (serialization-controls)
+             (forecast)))
+   (debug-info))))
+
+;;; Triggers
+
+(add-watch grid-data
+           :redraw-triggers
+           (fn [k r o n]
+             (draw-grid n)))
+
+;;; Initialization
+
+(draw-grid @grid-data)
+
+(comment
+  (defc test1 {:a 1 :b 2})
+
+  (defc= test2 {:c 3 :d (:a test1)})
+
+  (add-watch test2
+             :test2
+             (fn [k r o n]
+               (println "test2 changed" :n n)))
+
+  (swap! test1 assoc :a 4)
+  (swap! test1 assoc :b 5)
+  (swap! test1 assoc :a 6))

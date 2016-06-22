@@ -1,0 +1,106 @@
+/* some style */
+
+body {
+    font-family: 'Open Sans Condensed', sans-serif;
+    font-weight: bold;
+    background-color: #FDFFD9;
+}
+
+#title {
+    font-size: 175%;
+    background: black;
+    color: white;
+    padding: 4px 13px;
+    margin-bottom: 2px;
+}
+
+#category-params input {
+    width: 40px;
+}
+
+#category-params thead {
+    text-align: center;
+}
+
+#category-params .min {
+    padding-left: 10px;
+}
+
+#general-params {
+    min-width: 270px;
+}
+
+.time-params input {
+    width: 30px;
+}
+
+#time-location-params td {
+    vertical-align: bottom;
+}
+
+#load-save-controls button {
+    margin-right: 10px;
+}
+
+#wind-stability-params input {
+    width: 30px;
+}
+
+svg {
+    display: inline-block;
+}
+
+#controls {
+    display: inline-block;
+}
+
+.two-column {
+    display: flex;
+}
+
+.left-column {
+}
+
+.right-column {
+    width: 100%;
+}
+
+rect.sunny {
+    fill: rgba(0,128,255,0);
+}
+
+rect.fair {
+    fill: rgb(0,255,0);
+}
+
+rect.poor {
+    fill: rgb(255,255,0);
+}
+
+rect.inclement {
+    fill: rgb(192, 0, 0);
+}
+
+.cell {
+    opacity: 0.75;
+}
+
+.button-bar {
+    display: inline-block;
+}
+
+#enlarge-grid, #shrink-grid {
+    background-color: white;
+    padding: 2px 0 0 2px;
+}
+
+
+#enlarge-grid img {
+    width: 24px;
+    height: 24px;
+}
+
+#shrink-grid img {
+    width: 24px;
+    height: 24px;
+}

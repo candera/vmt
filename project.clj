@@ -10,7 +10,7 @@
                  [org.clojure/clojurescript "1.8.51"]
                  [org.clojure/core.async "0.2.374"
                   :exclusions [org.clojure/tools.reader]]
-                 [org.omcljs/om "1.0.0-alpha34"]
+                 [org.omcljs/om "1.0.0-alpha36"]
                  [quil "2.4.0"]
                  ;;[butler "0.2.0"]
                  ]

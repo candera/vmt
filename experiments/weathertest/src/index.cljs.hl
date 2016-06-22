@@ -1,0 +1,95 @@
+(page "index.html"
+      (:require [hoplon.svg :as svg]
+                [goog.string :as gstring]))
+
+
+(def size [59 59])
+(def dimensions [800 800])
+
+(defn random-weather [factor]
+  {:wind {:speed (rand-int 30)
+          :heading (rand-int 360)}
+   :pressure (+ (rand-int 4) 28)
+   :temperature (+ 12 (rand-int 10))
+   :type (rand-nth (reduce into [[]
+                                 (repeat factor :sunny)
+                                 [:fair :poor :inclement]]))})
+
+
+(defc params {:weather-params {:a 1
+                               :b 2}
+              :selected-cell nil})
+
+(defc= weather-data (let [[width height] size]
+                      (->> (for [x (range width)
+                                 y (range height)]
+                             [[x y] (random-weather (get-in params [:weather-params :a]))])
+                           (into (sorted-map)))))
+
+
+(def weather-color
+  {:sunny [0 128 255 0]
+   :fair [0 255 0 1]
+   :poor [255 255 0 1]
+   :inclement [192 0 0 1]
+   nil [255 0 0 1]})
+
+(defn redraw-grid [k r o n]
+  (let [canvas (.getElementById js/document "weather-grid")
+        ctx (.getContext canvas "2d")
+        [x-cells y-cells] size
+        [w h]             dimensions
+        cell-width        (/ w x-cells)
+        cell-height       (/ h y-cells)]
+    (.clearRect ctx 0 0 w h)
+    (doseq [[[x y] weather] n
+            :let [type (:type weather)
+                  [r g b a] (weather-color type)]]
+      (-> ctx
+          .-fillStyle
+          (set! (str "rgba("
+                     r ","
+                     g ","
+                     b ","
+                     a ")")))
+      (.fillRect ctx
+                 (* cell-width x)
+                 (* cell-height y)
+                 cell-width
+                 cell-height))))
+
+(add-watch weather-data
+           :redraw-grid
+           redraw-grid)
+
+(defn canvas-click
+  [e]
+  (let [r (-> js/document (.getElementById "the-canvas") .getBoundingClientRect)
+        [nx ny] size
+        [w h] dimensions]
+    (.log js/console (str "click: "
+                          (-> e .-clientX (- (.-left r)) (/ w) (* nx) int) " "
+                          (-> e .-clientY (- (.-top r)) (/ h) (* ny) int)))))
+(def ESCAPE_KEY 27)
+(def ENTER_KEY 13)
+
+(defn input-keydown
+  [e path val]
+  (condp == (.-keyCode e)
+    ESCAPE_KEY
+    (swap! params update-in path identity)
+    ENTER_KEY
+    (swap! params assoc-in path val)))
+
+(html
+ (head
+  (link :href "app.css" :rel "stylesheet"))
+ (body
+  (let [[w h] dimensions]
+    (canvas :width w :height h :id "the-canvas"
+            :click canvas-click))
+  (input :type "text"
+         :value (cell= (-> params :weather-params :a))
+         :change #(swap! params assoc-in [:weather-params :a] (js/Number @%)))
+  ;;(button :click randomize "Randomize")
+  (h1 "Hello, Hoplon!")))

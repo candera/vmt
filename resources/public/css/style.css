@@ -65,20 +65,26 @@ svg {
     width: 100%;
 }
 
-/* These next classes don't work until I figure out if React can
-   support classes on SVG rects */
 rect.sunny {
     fill: rgba(0,128,255,0);
 }
 
 rect.fair {
-    fill: rgba(0,255,0,1);
+    fill: rgb(0,255,0);
 }
 
 rect.poor {
-    fill: rgba(255,255,0,1);
+    fill: rgb(255,255,0);
 }
 
 rect.inclement {
-    fill: rgba(192, 0, 0, 1);
+    fill: rgb(192, 0, 0);
+}
+
+.cell {
+    opacity: 0.75;
+}
+
+.button-bar {
+    display: inline-block;
 }

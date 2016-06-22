@@ -1,4 +1,5 @@
 (ns weathergen.model
+  "A library for modeling weather systems."
   (:require [weathergen.math :as math]
             [org.craigandera.weathergen.pattern-space :as pat]))
 
@@ -244,8 +245,8 @@
      :p           p}))
 
 (defn weather-grid
-  [{:keys [map-fn size] :as params}]
-  (let [[width height] size
+  [{:keys [map-fn cell-count] :as params}]
+  (let [[width height] cell-count
         ;; This is so we can pass in pmap when we're in a non-CLJS context
         map-fn (or map-fn map)]
     (->>  (for [x (range width)
