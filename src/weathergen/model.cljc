@@ -162,8 +162,8 @@
   [{:keys [wind-stability-areas x y] :as params}]
   (some (fn [[x1 y1 width height]]
           (and x1 y1 width height
-               (<= x1 x (+ x1 width))
-               (<= y1 y (+ y1 height))))
+               (<= x1 x) (< x (+ x1 width))
+               (<= y1 y) (< y (+ y1 height))))
         wind-stability-areas))
 
 (defn temperature
@@ -194,9 +194,9 @@
         delta-t (-> (falcon-time->minutes current)
                     (- (falcon-time->minutes start))
                     (+ offset))
-        [x-off y-off] (-> (->> [0 1]
-                               (math/rotate (- heading))
-                               (math/scale (* delta-t (/ speed 60 9)))))
+        [x-off y-off] (->> [0 1]
+                           (math/rotate (- heading))
+                           (math/scale (* delta-t (/ speed 60 9))))
         x* (/ (+ origin-x x x-off) feature-size)
         y* (/ (+ origin-y y y-off) feature-size)
         ;; TODO: Why do we need this 10 here?
@@ -267,6 +267,30 @@
                add-time
                delta-t)))
 
+(defn forecast
+  "Return a map, keyed by time, with the weather forecast for the
+  given location. First forecast is for start time from weather
+  params, with `steps` forecasts in total. Step size is as specified
+  by movement params."
+  [[x y] weather-params movement-params steps]
+  (let [{:keys [direction time]} weather-params
+        {:keys [heading speed]} direction
+        {:keys [step]} movement-params]
+    (->> (for [n (range steps)
+               :let [delta-t (* -1 step n)
+                     offset (->> [0 1]
+                                 (math/rotate (- heading))
+                                 (math/scale (* -1 delta-t (/ speed 60 9))))]]
+           [(add-time (:current time) (* n step))
+            (-> weather-params
+                (assoc :x x :y y)
+                (update :origin math/vector-add offset)
+                weather)])
+         (into (sorted-map-by (fn [a b]
+                                (compare (falcon-time->minutes a)
+                                         (falcon-time->minutes b)))))
+         )))
+
 (comment
   (clojure.pprint/pprint
    (weather-grid {:origin          [(* 100 (rand))
@@ -300,6 +324,7 @@
                                                          :mean 15
                                                          :max  25}
                                                 :temp   {:min  0
+
                                                          :mean 10
                                                          :max  20}}
                                     :poor      {:weight 1
@@ -326,7 +351,63 @@
           :direction {:heading 135 :speed 30}}
          1))
 
+  (;;clojure.pprint/pprint
+   def f
+   (forecast [10 10]
+             {:origin          [(* 100 (rand))
+                                (* 100 (rand))]
+              :time            {:offset 1234
+                                :start {:day 1 :hour 5 :minute 0}
+                                :current {:day 1 :hour 13 :minute 30}
+                                :evolution 600}
+              :direction       {:speed 30 :heading 135}
+              :seed            1
+              :size            [4 4]
+              :feature-size    10
+              :turbulence       {:size 1
+                                 :power 30}
+              :pressure        {:min  28.5
+                                :max  31.0}
+              :prevailing-wind {:heading 45}
+              :crossfade       0.1
+              :wind-uniformity 0.7
+              :temp-uniformity 0.7
+              :wind-stability-areas [[0 0 1 1]]
+              :categories      {:sunny     {:weight 5
+                                            :wind   {:min  0
+                                                     :mean 10
+                                                     :max  20}
+                                            :temp   {:min  0
+                                                     :mean 10
+                                                     :max  20}}
+                                :fair      {:weight 3
+                                            :wind   {:min  5
+                                                     :mean 15
+                                                     :max  25}
+                                            :temp   {:min  0
 
+                                                     :mean 10
+                                                     :max  20}}
+                                :poor      {:weight 1
+                                            :wind   {:min  15
+                                                     :mean 25
+                                                     :max  45}
+                                            :temp   {:min  0
+                                                     :mean 10
+                                                     :max  20}}
+                                :inclement {:weight 1
+                                            :wind   {:min 25
+                                                     :mean 40
+                                                     :max 80}
+                                            :temp   {:min  0
+                                                     :mean 10
+                                                     :max  20}}}}
+             {:step 60
+              :start {:day 1 :hour 5 :minute 0}
+              :current {:day 1 :hour 5 :minute 0}
+              :direction {:heading 135 :speed 30}}
+             10
+             ))
 
   (weather-grid @weathergen.quil/state)
   )

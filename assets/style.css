@@ -6,12 +6,45 @@ body {
     background-color: #FDFFD9;
 }
 
-#title {
-    font-size: 175%;
+#titlebar {
     background: black;
     color: white;
     padding: 4px 13px;
     margin-bottom: 2px;
+    height: 64px;
+}
+
+#words {
+    padding-top: 16px;
+    font-size: 200%;
+    display: inline-block;
+}
+
+#byline {
+    font-size: 50%;
+    padding-left: 10px;
+}
+
+#byline a {
+    padding-left: 5px;
+}
+
+#byline a:link {
+    color: white;
+}
+
+#byline a:visited {
+    color: white;
+}
+
+#byline a:hover {
+    color: lightblue;
+}
+
+#winglogo {
+    height: 64px;
+    display: inline-block;
+    float: right;
 }
 
 #category-params input {
@@ -27,7 +60,11 @@ body {
 }
 
 #general-params {
-    min-width: 270px;
+    min-width: 160px;
+}
+
+#general-params td input {
+    width: 40px;
 }
 
 .time-params input {
@@ -103,4 +140,19 @@ rect.inclement {
 #shrink-grid img {
     width: 24px;
     height: 24px;
+}
+
+#forecast table {
+    border-collapse: collapse;
+    border: solid 1px;
+}
+
+#forecast thead tr td {
+    background: lightgray;
+    border-bottom: 1px solid black;
+    padding-right: 7px;
+}
+
+#forecast table tr:nth-child(even) {
+    background: #F2F0E0;
 }

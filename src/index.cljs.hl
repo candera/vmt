@@ -52,18 +52,24 @@
 (defc movement-params {:step          60
                        :end           {:day 1 :hour 14 :minute 0}})
 
-(defc selected-cell nil)
+;; TODO: Flip to portrait layout once the aspect ratio goes below a
+;; certain point. Maybe dynamically.
+(def initial-size (max 250 (- (.width (js/$ js/window)) 700)))
 
-(defc= weather-data (model/weather-grid weather-params))
-
-(defc= selected-cell-weather (get weather-data selected-cell))
-
-(defc display-params {:dimensions [800 800]
+(defc display-params {:dimensions [initial-size initial-size]
                       :opacity    0.75
                       :display    :type
                       :map        :korea
                       :mouse-mode :select
                       :overlay    :wind})
+
+(defc selected-cell nil)
+
+;;; Formulas
+
+(defc= weather-data (model/weather-grid weather-params))
+
+(defc= selected-cell-weather (get weather-data selected-cell))
 
 
 (defc= cell-count (:cell-count weather-params))
@@ -75,6 +81,20 @@
                   :weather-data weather-data
                   :selected-cell selected-cell
                   :wind-stability-areas (:wind-stability-areas weather-params)})
+
+(defc= forecast (if-not selected-cell
+                  (println "No selected cell")
+                  (let [result (model/forecast
+                                selected-cell
+                                weather-params
+                                movement-params
+                                (math/clamp 5 (/ 360 (:step movement-params)) 15))]
+                    (println "Forecast computed" :count (count result))
+                    result)))
+
+;;; Mutations
+
+;; TODO: Put more of these here
 
 (defn move
   "Advances the weather by `steps` steps"
@@ -747,34 +767,34 @@
    (div
     (button :click load-settings "Load Settings"))))
 
-(defn forecast
+(defn forecast-display
   []
   (fieldset
    (legend "Forecast")
-   (table
-    (tbody
-     (for [[label val]
-           [["X" (cell= (str (first selected-cell)))]
-            ["Y" (cell= (str (second selected-cell)))]
-            ["Weather Type" (cell= (-> selected-cell-weather
-                                       :type
-                                       type-key->name))]
-            ["Pressure" (cell= (some-> selected-cell-weather
-                                       :pressure
-                                       (.toFixed 2)))]
-            ["Temperature" (cell= (some-> selected-cell-weather
-                                          :temperature
-                                          (.toFixed 1)))]
-            ["Wind Speed" (cell= (some-> selected-cell-weather
-                                         :wind
-                                         :speed
-                                         (.toFixed 0)))]
-            ["Wind Heading" (cell= (some-> selected-cell-weather
-                                           :wind
-                                           :heading
-                                           (.toFixed 0)))]]]
-       (tr (td label)
-           (td val)))))))
+   (div :id "forecast"
+    (cell=
+     (if-not forecast
+       "No location is selected. Click a location on the weather grid to get a forecast for it."
+       (let [[x y] selected-cell]
+         (div
+          (str "Forecast for location " x "," y)
+          (table
+           (thead
+            (tr (td "Day/Time")
+                (td "Weather Type")
+                (td "Pressure")
+                (td "Temperature")
+                (td "Wind Speed")
+                (td "Wind Heading")))
+           (tbody
+            (for [[time weather] forecast]
+              (tr (td (gstring/format "%02d/%02d%02d"
+                                      (:day time) (:hour time) (:minute time)))
+                  (td (-> weather :type type-key->name))
+                  (td (-> weather :pressure (.toFixed 2)))
+                  (td (-> weather :temperature (.toFixed 1)))
+                  (td (-> weather :wind :speed (.toFixed 0)))
+                  (td (-> weather :wind :heading (.toFixed 0))))))))))))))
 
 (defn debug-info
   []
@@ -790,7 +810,17 @@
  (body
   (div
    :id "app"
-   (div :id "title" "WeatherGen")
+   (div :id "titlebar"
+        (div :id "words"
+             (span :id "title"
+                   "WeatherGen")
+             (span :id "byline"
+                   "by"
+                   (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
+                      "Tyrant")))
+        (a :href "http://firstfighterwing.com"
+           (img :id "winglogo"
+                :src "images/1stVFW_Insignia.png")))
    (div :class "two-column"
         (div :class "left-column"
              (button-bar)
@@ -799,7 +829,7 @@
              (display-controls)
              (weather-controls)
              (serialization-controls)
-             (forecast)))
+             (forecast-display)))
    (debug-info))))
 
 ;;; Triggers
