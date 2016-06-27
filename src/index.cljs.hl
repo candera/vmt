@@ -6,17 +6,19 @@
             [goog.style :as gstyle]
             [weathergen.canvas :as canvas]
             [weathergen.fmap :as fmap]
+            [weathergen.help :as help]
             [weathergen.math :as math]
             [weathergen.model :as model]
             [cljs.core.async :as async
              :refer [<! >! timeout]]
-            [cljs.reader :as reader])
+            [cljs.reader :as reader]
+            [cljsjs.jquery-ui])
   (:require-macros
    [cljs.core.async.macros :refer [go]]))
 
 ;;; Constants
 
-(def revision 2)
+(def revision 5)
 
 ;;; State
 
@@ -40,17 +42,21 @@
                       :origin          [1000 1000]
                       :time            {:offset    1234
                                         :evolution 1200
-                                        :current   {:day 1 :hour 5 :minute 0}
-                                        :start     {:day 1 :hour 5 :minute 0}}
+                                        :current   {:day 1 :hour 5 :minute 0}}
                       :direction {:heading 135 :speed 30}
                       :wind-uniformity 0.7
                       :crossfade       0.1
                       :prevailing-wind {:heading 325}
                       :seed            1234
-                      :wind-stability-areas [[16 39 6 4]]})
+                      :wind-stability-areas [{:bounds {:x 16
+                                                       :y 39
+                                                       :width 6
+                                                       :height 4}
+                                              :wind {:speed 5
+                                                     :heading 0}
+                                              :index 0}]})
 
-(defc movement-params {:step          60
-                       :end           {:day 1 :hour 14 :minute 0}})
+(defc movement-params {:step          60})
 
 ;; TODO: Flip to portrait layout once the aspect ratio goes below a
 ;; certain point. Maybe dynamically.
@@ -65,22 +71,32 @@
 
 (defc selected-cell nil)
 
+(defc pending-wind-stability-area nil)
+
+(defc current-tool :select)
+
+(defc time-params
+  {:displayed {:day 1 :hour 5 :minute 0}})
+
 ;;; Formulas
 
 (defc= weather-data (model/weather-grid weather-params))
 
 (defc= selected-cell-weather (get weather-data selected-cell))
 
-
 (defc= cell-count (:cell-count weather-params))
 
 (defc= dimensions (:dimensions display-params))
+
+(defc= wind-stability-areas
+  (->> weather-params
+       :wind-stability-areas))
 
 (defc= grid-data {:display-params display-params
                   :cell-count cell-count
                   :weather-data weather-data
                   :selected-cell selected-cell
-                  :wind-stability-areas (:wind-stability-areas weather-params)})
+                  :wind-stability-areas wind-stability-areas})
 
 (defc= forecast (if-not selected-cell
                   (println "No selected cell")
@@ -99,10 +115,74 @@
 (defn move
   "Advances the weather by `steps` steps"
   [steps]
+  (dosync
+   (let [next (swap! weather-params
+                model/step
+                @movement-params
+                steps)]
+     (swap! time-params
+            assoc
+            :displayed
+            (get-in next [:time :current])))))
+
+(defn jump-to-time
+  "Adjust the time coordinate to match the displayed time."
+  []
   (swap! weather-params
-         model/step
-         @movement-params
-         steps))
+         assoc-in
+         [:time :current]
+         (:displayed @time-params)))
+
+(defn set-time
+  "Adjust the time coordinate so that the current time is adjusted to
+  match the displayed time without changing the location in weather
+  space."
+  []
+  (let [offset (get-in @weather-params [:time :offset])
+        current-time (get-in @weather-params [:time :current])
+        displayed-time (get-in @time-params [:displayed])
+        delta (- (model/falcon-time->minutes current-time)
+                 (model/falcon-time->minutes displayed-time))]
+    (dosync
+     (swap! weather-params
+            update-in
+            [:time :offset]
+            +
+            delta)
+     (swap! weather-params
+            assoc-in
+            [:time :current]
+            displayed-time))))
+
+(defn change-weather-heading
+  "Modify the weather heading in a way that doesn't change the
+  displayed weather."
+  [heading]
+  ;; TODO: Change origin
+  (swap! weather-params
+         assoc-in
+         [:direction :heading]
+         heading))
+
+(defn change-weather-speed
+  "Modify the weather speed in a way that doesn't change the displayed
+  weather."
+  [speed]
+  ;; TODO: Change origin
+  (swap! weather-params
+         assoc-in
+         [:direction :speed]
+         speed))
+
+(defn change-evolution
+  "Modify the weather evolution in a way that doesn't change the
+  displayed weather."
+  [evolution]
+  ;; TODO: Change t offset
+  (swap! weather-params
+         assoc-in
+         [:time :evolution]
+         evolution))
 
 ;;; Serialization
 
@@ -167,6 +247,11 @@
 
 ;;; Utility
 
+(defn remove-nth
+  [coll n]
+  (println "remove-nth" :n n)
+  (vec (concat (take n coll) (drop (inc n) coll))))
+
 (defn invert-map
   [m]
   (zipmap (vals m) (keys m)))
@@ -213,6 +298,40 @@
 
 (def type-key->name
   (invert-map type-name->key))
+
+;;; Help
+
+(let [help-states (cell {})]
+  (defelem help [{:keys []} contents]
+    (let [id (str (gensym))
+          content-id (str "content-" id)
+          img-id (str "img-" id)]
+      (div
+       :class "help"
+       (div
+        :id content-id
+        :fade-toggle (cell= (get help-states id))
+        :class "content"
+        :click #(swap! help-states assoc id false)
+        contents)
+       (div
+        :id img-id
+        :class "img"
+        :click #(swap! help-states
+                       (fn [hs]
+                         (merge (zipmap (keys hs) (repeat false))
+                                {id (not (get hs id))})))
+        ;; TODO; Don't make the help go away if the place the mouse
+        ;; has gone is the help content.
+        ;; :mouseout (fn []
+        ;;             (go (<! (async/timeout 1000))
+        ;;                 (swap! help-states assoc id false)))
+        "?")))))
+
+(defn help-for
+  [help-path]
+  (help (or (get-in help/content help-path)
+            (p "Help content has not yet been written for this feature."))))
 
 ;;; Grid interaction
 
@@ -419,7 +538,7 @@
   "Draws the map, unless the image is not ready. In that case, returns
   a channel that will close when it is."
   [ctx map [w h]]
-  (when (map-image map)
+  #_(when (map-image map)
     (let [img (gdom/getElement (map-image-id map))]
       (if (.-complete img)
         (do (.drawImage ctx
@@ -476,7 +595,7 @@
 (defn draw-wind-stability
   "Draws a border around the wind stability areas"
   [ctx areas cell-count dimensions]
-  (doseq [[x y width height] areas]
+  (doseq [{:keys [x y width height]} (map :bounds areas)]
     (.save ctx)
     (set-transform ctx x y cell-count dimensions)
     (.setLineDash ctx #js [0.15 0.2])
@@ -488,6 +607,7 @@
 (defn draw-grid
   [{:keys [display-params cell-count wind-stability-areas weather-data selected-cell] :as data}]
   (println "draw-grid")
+  (.time js/console "draw-grid")
   (let [canvas (gdom/getElement "weather-grid")
         {:keys [map
                 opacity
@@ -533,7 +653,8 @@
                 (.strokeRect ctx -0.5 -0.5 1 1))
 
             (draw-selected-cell ctx selected-cell cell-count dimensions)
-            (draw-wind-stability ctx wind-stability-areas cell-count dimensions)))))))
+            (draw-wind-stability ctx wind-stability-areas cell-count dimensions))))))
+  (.timeEnd js/console "draw-grid"))
 
 ;;; User Interface
 
@@ -547,11 +668,15 @@
        (div :class "right-column" right)))
 
 (defn edit-field
-  [c path]
-  ;; TODO: Add conversion to/from string and validation
-  (input :type "text"
-         :value (cell= (get-in c path))
-         :change #(swap! c assoc-in path (js/Number @%))))
+  ([c path] (edit-field c path {}))
+  ([c path opts]
+   ;; TODO: Add conversion to/from string and validation
+   (let [{:keys [change-fn]} opts]
+    (input :type "text"
+           :value (cell= (get-in c path))
+           :change (if change-fn
+                     #(change-fn (js/Number @%))
+                     #(swap! c assoc-in path (js/Number @%)))))))
 
 (defn time-entry
   [c path]
@@ -585,34 +710,73 @@
                                 [(- x 50) (- y 50)]))
                :title "Shrink grid"
                (img :src "images/smaller.png"))
-       #_(for [mode [:select :wind-stability]]
-         (input :class "exclusive-button"
-                :type "radio"
-                :name "mode"
-                :checked (cell= false)
-                :change (fn [e] (println "Change mouse mode to" mode))))))
+       ;; TODO: Not quite there yet.
+       #_(for [tool [:select :wind-stability]
+             :let [id (str "tool-" (name tool))]]
+         [(input
+            :class (str "exclusive-button tool " (name tool))
+            :type "radio"
+            :name "tool"
+            :id id
+            :checked (cell= (= tool current-tool))
+            :change #(do (println "Changed tool to " tool)
+                         (reset! current-tool tool)))
+          (label :for id
+                 :css {:background-image (str "url('images/tool-" (name tool) ".png')")})
+])))
 
 (defn weather-grid
   []
-  (-> (for [[k v] map-image]
-         (img :id (map-image-id k)
-              :style "display: none"
-              :src v))
-       vector
-       (conj
-        (canvas :id "weather-grid"
-                :width (cell= (first dimensions))
-                :height (cell= (second dimensions))
-                :click #(grid-click % "weather-grid" @cell-count @dimensions)))))
+  (cell-let [[width height] dimensions
+             {:keys [map]}  display-params
+             [nx ny] cell-count]
+    (div :id "weather-grid-stack"
+         :width (cell= width)
+         :height (cell= height)
+         (for [[k v] map-image]
+           (img :id (map-image-id k)
+                :width (cell= width)
+                :height (cell= height)
+                :style (cell= (if (= k map)
+                                ""
+                                "display: none"))
+                :src v))
+         (img :id "blank-map"
+              :width (cell= width)
+              :height (cell= height)
+              :src "images/blank.png")
+         (canvas :id "weather-grid"
+                 :css (cell=
+                       {:cursor  (case current-tool
+                                   :select "pointer"
+                                   :wind-stability "crosshair")})
+                 :width (cell= width)
+                 :height (cell= height)
+                 :click #(grid-click % "weather-grid" @cell-count @dimensions))
+         ;; TODO: Add an SVG overlay when that starts to make sense.
+         #_(cell-let [x-size (/ width nx)
+                      y-size (/ height ny)]
+             (svg/svg
+              :id "weather-grid-overlay"
+              :width (cell= width)
+              :height (cell= height)
+              (for [x (range @nx)
+                    y (range @ny)]
+                (do
+                  (println :x x :y y :x-size @x-size :y-size @y-size :nx @nx :ny @ny)
+                  (svg/rect
+                   :style "stroke:black"
+                   :x (cell= (* x x-size))
+                   :y (cell= (* y y-size))
+                   :width x-size
+                   :height y-size))))))))
 
 (defn display-controls
   []
-  (let [select-row (fn [{:keys [label k key->name name->key]}]
+  (let [select-row (fn [{:keys [label k key->name name->key]} help-path]
                      (tr (td label)
                          (td (select
-                              :change #(do
-                                        (println "Setting" :k k :val (name->key @%))
-                                        (swap! display-params assoc k (name->key @%)))
+                              :change #(swap! display-params assoc k (name->key @%))
                               (for [name (conj (keys name->key) "None")]
                                 (option
                                  :value name
@@ -620,7 +784,8 @@
                                                       k
                                                       key->name
                                                       (= name)))
-                                 name))))))]
+                                 name))))
+                         (td (help-for help-path))))]
     (fieldset
      (legend "Display controls")
      (div
@@ -630,15 +795,18 @@
         (select-row {:label "Map"
                      :k :map
                      :key->name map-key->name
-                     :name->key map-name->key})
+                     :name->key map-name->key}
+                    [:display-controls :map])
         (select-row {:label "Display"
                      :k :display
                      :key->name display-key->name
-                     :name->key display-name->key})
+                     :name->key display-name->key}
+                    [:display-controls :display])
         (select-row {:label "Overlay"
                      :k :overlay
                      :key->name overlay-key->name
-                     :name->key overlay-name->key})
+                     :name->key overlay-name->key}
+                    [:display-controls :overlay])
         (tr (td "Opacity:")
             (td (input {:type "range"
                         :min 0
@@ -650,7 +818,8 @@
                         :change #(swap! display-params
                                        assoc
                                        :opacity
-                                       (/ @% 100.0))})))))))))
+                                       (/ @% 100.0))}))
+            (td (help-for [:display-controls :opacity])))))))))
 
 (defn weather-parameters
   []
@@ -659,43 +828,65 @@
    (table
     :id "general-params"
     (tbody
-     (for [[label selector]
+     (for [[label selector updater]
            [["Seed"             [:seed]]
             ["Crossfade"        [:crossfade]]
-            ["Weather heading"  [:direction :heading]]
-            ["Weather speed"    [:direction :speed]]
-            ["Evolution (min)"  [:time :evolution]]
+            ["Weather heading"  [:direction :heading] change-weather-heading]
+            ["Weather speed"    [:direction :speed] change-weather-speed]
+            ["Evolution (min)"  [:time :evolution] change-evolution]
             ["Zoom"             [:feature-size]]
             ["Max pressure"     [:pressure :max]]
             ["Min pressure"     [:pressure :min]]
             ["Prevailing wind"  [:prevailing-wind :heading]]
             ["Wind uniformity"  [:wind-uniformity]]
             ["Temp uniformity"  [:temp-uniformity]]
-            ["Warp strength"    [:turbulence :power]]
-            ;;["Turbulence size"  [:turbulence :size]]
-            ]]
+            ["Warp strength"    [:turbulence :power]]]]
        (tr (td label)
-           (td (edit-field weather-params selector))))))))
+           (td (edit-field weather-params selector {:change-fn updater}))
+           (td (help-for (into [:weather-params] selector)))))))))
 
-(defn wind-stability-parameters
-  []
-  (fieldset
-   (legend "Wind stability region")
-   (table
-    :id "wind-stability-params"
-    (tbody
-     (tr (td "NW corner")
-         (td (edit-field weather-params [:wind-stability-areas 0 0]))
-         (td (edit-field weather-params [:wind-stability-areas 0 1])))
-     (tr (td "Width/height")
-         (td (edit-field weather-params [:wind-stability-areas 0 2]))
-         (td (edit-field weather-params [:wind-stability-areas 0 3])))))
-   (button
-    :click #(swap! weather-params
-                   assoc
-                   :wind-stability-areas
-                   [[nil nil nil nil]])
-    "Clear")))
+(let [indexed-wind-stability-areas (->> weather-params
+                                        :wind-stability-areas
+                                        (map-indexed vector)
+                                        cell=)]
+  (defn wind-stability-parameters
+    []
+    (fieldset
+     (legend "Wind stability regions"
+             (help-for [:wind-stability-areas]))
+     (loop-tpl :bindings [[index area] indexed-wind-stability-areas]
+       (div
+        :class "wind-stability-params"
+        (table
+         (tbody
+          (tr (td "NW corner")
+              (td (edit-field weather-params [:wind-stability-areas @index :bounds :x]))
+              (td (edit-field weather-params [:wind-stability-areas @index :bounds :y])))
+          (tr (td "Width/height")
+              (td (edit-field weather-params [:wind-stability-areas @index :bounds :width]))
+              (td (edit-field weather-params [:wind-stability-areas @index :bounds :height])))
+          (tr (td "Wind spd/hdg")
+              (td (edit-field weather-params [:wind-stability-areas @index :wind :speed]))
+              (td (edit-field weather-params [:wind-stability-areas @index :wind :heading])))))
+        (button
+         :click #(swap! weather-params
+                        update
+                        :wind-stability-areas
+                        (fn [areas]
+                          (remove-nth areas @index)))
+         "Remove")
+        (hr)))
+     (button
+      :click #(swap! weather-params
+                     update
+                     :wind-stability-areas
+                     (fn [areas]
+                       (conj areas
+                             {:bounds {:x 0 :y 0 :width 10 :height 10}
+                              :wind {:heading 45
+                                     :speed 5}
+                              :index (count areas)})))
+      "Add New"))))
 
 (defn weather-type-configuration
   []
@@ -706,12 +897,20 @@
     (thead
      (tr (td "")
          (td "")
-         (td :colspan 3 "Wind")
-         (td :colspan 3 "Temperature"))
-     (tr (map td ["" "Weight" "Min" "Mean" "Max" "Min" "Mean" "Max"])))
+         (td :colspan 3 "Wind" (help-for [:weather-type-config :wind]))
+         (td :colspan 3 "Temperature" (help-for [:weather-type-config :temp])))
+     (tr (map #(apply td %)
+              [""
+               [:class "weight" "Weight" (help-for [:weather-type-config :weight])]
+               ["Min"] ["Mean"] ["Max"]
+               ["Min"] ["Mean"] ["Max"]])))
     (tbody
      (for [category [:sunny :fair :poor :inclement]]
-       (tr (td (type-key->name category))
+       (tr (td
+            :class (str "weather-type " (name category))
+            :css {"background-color" (let [[r g b] (weather-color category)]
+                                       (str "rgb(" r "," g "," b ")"))}
+            (type-key->name category))
            (td
             (div :class "edit-field"
                  (edit-field weather-params [:categories category :weight])))
@@ -728,12 +927,27 @@
    (legend "Time/location controls")
    (table
     (tbody
-     (tr (map td ["X Offset" (edit-field weather-params [:origin 0])]))
-     (tr (map td ["Y Offset" (edit-field weather-params [:origin 1])]))
-     (tr (map td ["T Offset" (edit-field weather-params [:time :offset])]))
-     (tr (map td ["Start Time" (time-entry weather-params [:time :start])]))
-     (tr (map td ["Current Time" (time-entry weather-params [:time :current])]))
-     (tr (map td ["Step interval" (edit-field movement-params [:step])]))))
+     (tr (map td ["X Offset"
+                  (edit-field weather-params [:origin 0])
+                  (help-for [:origin :x])]))
+     (tr (map td ["Y Offset"
+                  (edit-field weather-params [:origin 1])
+                  (help-for [:origin :y])]))
+     (tr (map td ["T Offset"
+                  (edit-field weather-params [:time :offset])
+                  (help-for [:origin :t])]))
+     ;; (tr (map td ["Start Time" (time-entry weather-params [:time :start])]))
+     (tr (map td [["Time" (help-for [:displayed-time])]
+                  (time-entry time-params [:displayed])
+                  (button
+                   :click jump-to-time
+                   "Jump to")
+                  (button
+                   :click set-time
+                   "Set to")]))
+     (tr (map td ["Step interval"
+                  (edit-field movement-params [:step])
+                  (help-for [:step])]))))
    (button :title "Step back in time"
            :click #(move -1)
            "<< Step Back")
@@ -770,7 +984,8 @@
 (defn forecast-display
   []
   (fieldset
-   (legend "Forecast")
+   (legend "Forecast"
+           (help-for [:forecast]))
    (div :id "forecast"
     (cell=
      (if-not forecast
@@ -817,10 +1032,15 @@
              (span :id "byline"
                    "by"
                    (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
-                      "Tyrant")))
+                      "Tyrant"))
+             (span :id "helpstring"
+                   "Help? Bug? Feature request? Click"
+                   (a :href "help.html"
+                      "here")
+                   "."))
         (a :href "http://firstfighterwing.com"
            (img :id "winglogo"
-                :src "images/1stVFW_Insignia.png")))
+                :src "images/1stVFW_Insignia-64.png")))
    (div :class "two-column"
         (div :class "left-column"
              (button-bar)
@@ -843,6 +1063,8 @@
 
 (draw-grid @grid-data)
 
+;;(-> js/document js/jQuery .tooltip)
+
 (comment
   (defc test1 {:a 1 :b 2})
 
@@ -856,3 +1078,4 @@
   (swap! test1 assoc :a 4)
   (swap! test1 assoc :b 5)
   (swap! test1 assoc :a 6))
+p

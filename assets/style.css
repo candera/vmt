@@ -59,8 +59,12 @@ body {
     padding-left: 10px;
 }
 
+#category-params .weight {
+    min-width: 64px;
+}
+
 #general-params {
-    min-width: 160px;
+    min-width: 180px;
 }
 
 #general-params td input {
@@ -79,7 +83,7 @@ body {
     margin-right: 10px;
 }
 
-#wind-stability-params input {
+.wind-stability-params input {
     width: 30px;
 }
 
@@ -155,4 +159,119 @@ rect.inclement {
 
 #forecast table tr:nth-child(even) {
     background: #F2F0E0;
+}
+
+#weather-grid-stack {
+    position: relative;
+}
+
+#weather-grid {
+    position: absolute;
+    left: 0;
+    top: 0; 
+}
+
+#weather-grid-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.exclusive-button.tool:checked {
+    border: solid 1px blue;
+}
+
+.tool + img {
+    height: 32px;
+}
+
+.tool input {
+    position: absolute;
+    left: -100px;
+}
+
+.tool + label {
+    background-size: contain;
+    background-size: 24px;
+    background-position-x: 2px;
+    background-position-y: 2px;
+    background-repeat: no-repeat;
+    color: rgba(0,0,0,0);
+    padding-right: 27px;
+    padding-left: 4px;
+    padding-top: 8px;
+    vertical-align: bottom;
+}
+
+.tool:checked + label {
+    background-color: lightblue;
+    border-style: groove;
+    border-width: 1px;
+    border-color: grey;
+}
+
+.help {
+    display: inline-block;
+    position: relative;
+}
+
+.help .img {
+    width: 20px;
+    height: 20px;
+    color: white;
+    background: darkblue;
+    border-radius: 10px;
+    text-align: center;
+    display: inline-block;
+    margin-left: 5px;
+}
+
+.help .content {
+    position: absolute;
+    top: -3px;
+    left: 28px;
+    border: 1px solid black;
+    background: #f9f29a;
+    width: auto;
+    min-width: 300px;
+    z-index: 100;
+    display: none;
+    text-align: left;
+    padding: 0 4px;
+}
+
+.help .hidden {
+    display: none;
+}
+
+.help .content p {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.weather-type {
+    padding: 0 3px;
+}
+
+.weather-type.inclement {
+    color: white;
+}
+
+#helpstring {
+    font-size: 50%;
+    position: absolute;
+    right: 100px;
+    top: 45px;
+}
+
+#helpstring a {
+    margin-left: 0.2em;
+}
+
+#helpstring a:visited {
+    color: white
+}
+
+#helpstring a {
+    color: white
 }

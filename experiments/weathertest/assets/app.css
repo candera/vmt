@@ -6,3 +6,13 @@ body {
 h1 {
     color: blue;
 }
+
+#weather-grid-stack {
+    position: relative;
+}
+
+#weather-grid {
+    position: absolute;
+    left: 0;
+    top: 0; 
+}

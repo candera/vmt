@@ -156,15 +156,21 @@
         max  (mix-on categories mixture [:wind :max])]
     (math/distribute v min mean max 1)))
 
-(defn stabilize-wind?
-  "Return logical true if the current cell is in a wind-stablized
-  region"
-  [{:keys [wind-stability-areas x y] :as params}]
-  (some (fn [[x1 y1 width height]]
-          (and x1 y1 width height
-               (<= x1 x) (< x (+ x1 width))
-               (<= y1 y) (< y (+ y1 height))))
-        wind-stability-areas))
+(defn in-area?
+  "Return true if x*,y* is within the bounds of area."
+  [{:keys [x y width height] :as bounds} x* y*]
+  (and x y width height
+       (<= x x*) (< x* (+ x width))
+       (<= y y*) (< y* (+ y height))))
+
+(defn stabilize-wind
+  "Returns the wind, stabilized if appropriate by a wind stability region"
+  [{:keys [wind-stability-areas x y]} pattern-wind]
+  (as-> wind-stability-areas ?
+    (filter #(in-area? (:bounds %) x y) ?)
+    (first ?)
+    (:wind ?)
+    (or ? pattern-wind)))
 
 (defn temperature
   [categories mixture v]
@@ -188,11 +194,10 @@
            feature-size]
     :as params}]
   (let [{:keys [heading speed]} direction
-        {:keys [current start offset evolution]} time
+        {:keys [current offset evolution]} time
         [origin-x origin-y] origin
         [width height] size
         delta-t (-> (falcon-time->minutes current)
-                    (- (falcon-time->minutes start))
                     (+ offset))
         [x-off y-off] (->> [0 1]
                            (math/rotate (- heading))
@@ -235,11 +240,9 @@
      :type        (key (last (sort-by val mixture)))
      :temperature (temperature categories mixture temp-var)
      ;;:info        info
-     :wind        (if (stabilize-wind? params*)
-                    {:heading (:heading prevailing-wind)
-                     :speed (get-in categories [:fair :wind :mean])}
-                    {:heading (math/heading wind-dir)
-                     :speed (wind-speed categories mixture wind-var)})
+     :wind        (stabilize-wind params*
+                                  {:heading (math/heading wind-dir)
+                                   :speed (wind-speed categories mixture wind-var)})
      :wind-var    wind-var
      :wind-vec    wind-dir
      :p           p}))

@@ -11,7 +11,8 @@
                  #_[adzerk/boot-cljs-repl     "0.3.0"]
                  #_[com.cemerick/piggieback "0.2.1" :scope "test"]
                  #_[weasel "0.7.0" :scope "test"]
-                 [org.clojure/tools.nrepl "0.2.12" :scope "test"]]
+                 [org.clojure/tools.nrepl "0.2.12" :scope "test"]
+                 [cljsjs/jquery-ui "1.11.4-0"]]
  :source-paths #{"src"}
  :asset-paths  #{"assets"})
 
