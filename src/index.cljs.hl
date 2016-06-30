@@ -14,11 +14,39 @@
             [cljs.reader :as reader]
             [cljsjs.jquery-ui])
   (:require-macros
-   [cljs.core.async.macros :refer [go]]))
+   [cljs.core.async.macros :refer [go go-loop]]))
 
 ;;; Constants
 
 (def revision 6)
+
+;;; Browser detection
+
+(def agents (let [is-agent? (fn [agent]
+                              (-> js/navigator
+                                  .-userAgent
+                                  (.indexOf agent)
+                                  neg?
+                                  not))
+                  agent-props {:chrome  "Chrome"
+                               :ie      "MSIE"
+                               :firefox "Firefox"
+                               :safari  "Safari"
+                               :opera   "op"}]
+              (zipmap (keys agent-props)
+                      (map is-agent? (vals agent-props)))))
+
+(cond
+  (and (:safari agents)
+       (not (:chrome agents)))
+  (js/alert "WeatherGen does not work well in Safari, due to Safari's atrocious Javascript performance and some weird layout issues. Chrome and Firefox are the recommended/supported browsers.")
+
+  (or (:firefox agents) (:chrome agents))
+  (println "Chrome or Firefox detected")
+
+  :else
+  (js/alert "Browsers other than Chrome and Firefox are not currently supported by WeatherGen. Some features may not behave as expected. Use of Chrome/Firefox is recommended."))
+
 
 ;;; State
 
@@ -60,7 +88,7 @@
 
 ;; TODO: Flip to portrait layout once the aspect ratio goes below a
 ;; certain point. Maybe dynamically.
-(def initial-size (max 250 (- (.width (js/$ js/window)) 700)))
+(def initial-size (max 250 (- (.width (js/$ js/window)) 710)))
 
 (defc display-params {:dimensions [initial-size initial-size]
                       :opacity    0.75
@@ -585,20 +613,24 @@
              :w w)
     (if-not (= w (.-width canvas))
       (let [ch (async/chan)]
-        (println "canvas is not done loading")
-        #_(.addEventListener js/document
-                           "DOMContentLoaded"
-                           (fn [e]
-                             (println "canvas finished loading")
-                             (async/put! ch :done)
-                             (async/close! ch)))
-        (go
-          (<! (async/timeout 25))
-          (draw-grid data)))
+        (println "canvas is not done loading" :dimensions dimensions
+                 :width (.-width canvas)
+                 :height (.-height canvas))
+        (go-loop [n 200]
+          (<! (async/timeout 10))
+          (when (pos? n)
+            (if (= w (.-width canvas))
+              (draw-grid data)
+              (do
+                (println "Still waiting for canvas" :n n)
+                (recur (dec n)))))))
       (let [ctx               (.getContext canvas "2d")
             [x-cells y-cells] cell-count
             cell-width        (/ w x-cells)
             cell-height       (/ h y-cells)]
+        (println "Canvas is correct size" :dimensions dimensions
+                 :width (.-width canvas)
+                 :height (.-height canvas))
         (clear-transform ctx)
         (.clearRect ctx 0 0 w h)
 
@@ -1048,4 +1080,4 @@
   (swap! test1 assoc :a 4)
   (swap! test1 assoc :b 5)
   (swap! test1 assoc :a 6))
-p
+
