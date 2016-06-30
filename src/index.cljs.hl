@@ -18,7 +18,7 @@
 
 ;;; Constants
 
-(def revision 5)
+(def revision 6)
 
 ;;; State
 
@@ -40,10 +40,9 @@
                                                     :temp   {:min 12 :mean 14 :max 16}}}
                       :turbulence      {:size 1 :power 250}
                       :origin          [1000 1000]
-                      :time            {:offset    1234
-                                        :evolution 1200
-                                        :current   {:day 1 :hour 5 :minute 0}}
-                      :direction {:heading 135 :speed 30}
+                      :evolution       3600
+                      :time            {:offset 1234
+                                        :current {:day 1 :hour 5 :minute 0}}
                       :wind-uniformity 0.7
                       :crossfade       0.1
                       :prevailing-wind {:heading 325}
@@ -56,7 +55,8 @@
                                                      :heading 0}
                                               :index 0}]})
 
-(defc movement-params {:step          60})
+(defc movement-params {:step 60
+                       :direction {:heading 135 :speed 30}})
 
 ;; TODO: Flip to portrait layout once the aspect ratio goes below a
 ;; certain point. Maybe dynamically.
@@ -116,73 +116,36 @@
   "Advances the weather by `steps` steps"
   [steps]
   (dosync
-   (let [next (swap! weather-params
-                model/step
-                @movement-params
-                steps)]
+   (let [{:keys [time]} (swap! weather-params
+                               model/step
+                               @movement-params
+                               steps)]
      (swap! time-params
             assoc
             :displayed
-            (get-in next [:time :current])))))
+            (:current time)))))
 
 (defn jump-to-time
   "Adjust the time coordinate to match the displayed time."
   []
-  (swap! weather-params
-         assoc-in
-         [:time :current]
-         (:displayed @time-params)))
+  (dosync
+   (let [{:keys [time]} (swap! weather-params
+                               model/jump-to-time
+                               @movement-params
+                               (:displayed @time-params))]
+     (swap! time-params
+            assoc
+            :displayed
+            (:current time)))))
 
 (defn set-time
   "Adjust the time coordinate so that the current time is adjusted to
   match the displayed time without changing the location in weather
   space."
   []
-  (let [offset (get-in @weather-params [:time :offset])
-        current-time (get-in @weather-params [:time :current])
-        displayed-time (get-in @time-params [:displayed])
-        delta (- (model/falcon-time->minutes current-time)
-                 (model/falcon-time->minutes displayed-time))]
-    (dosync
-     (swap! weather-params
-            update-in
-            [:time :offset]
-            +
-            delta)
-     (swap! weather-params
-            assoc-in
-            [:time :current]
-            displayed-time))))
-
-(defn change-weather-heading
-  "Modify the weather heading in a way that doesn't change the
-  displayed weather."
-  [heading]
-  ;; TODO: Change origin
   (swap! weather-params
-         assoc-in
-         [:direction :heading]
-         heading))
-
-(defn change-weather-speed
-  "Modify the weather speed in a way that doesn't change the displayed
-  weather."
-  [speed]
-  ;; TODO: Change origin
-  (swap! weather-params
-         assoc-in
-         [:direction :speed]
-         speed))
-
-(defn change-evolution
-  "Modify the weather evolution in a way that doesn't change the
-  displayed weather."
-  [evolution]
-  ;; TODO: Change t offset
-  (swap! weather-params
-         assoc-in
-         [:time :evolution]
-         evolution))
+         model/set-time
+         (:displayed @time-params)))
 
 ;;; Serialization
 
@@ -598,9 +561,12 @@
   (doseq [{:keys [x y width height]} (map :bounds areas)]
     (.save ctx)
     (set-transform ctx x y cell-count dimensions)
-    (.setLineDash ctx #js [0.15 0.2])
+    (.setLineDash ctx #js [0.5 0.5])
+    (-> ctx .-lineWidth (set! "0.2"))
     (-> ctx .-lineDashOffset (set! 0))
-    (-> ctx .-lineWidth (set! "0.15"))
+    (.strokeRect ctx -0.5 -0.5 width height)
+    (-> ctx .-strokeStyle (set! "white"))
+    (-> ctx .-lineDashOffset (set! 0.5))
     (.strokeRect ctx -0.5 -0.5 width height)
     (.restore ctx)))
 
@@ -831,9 +797,6 @@
      (for [[label selector updater]
            [["Seed"             [:seed]]
             ["Crossfade"        [:crossfade]]
-            ["Weather heading"  [:direction :heading] change-weather-heading]
-            ["Weather speed"    [:direction :speed] change-weather-speed]
-            ["Evolution (min)"  [:time :evolution] change-evolution]
             ["Zoom"             [:feature-size]]
             ["Max pressure"     [:pressure :max]]
             ["Min pressure"     [:pressure :min]]
@@ -929,14 +892,21 @@
     (tbody
      (tr (map td ["X Offset"
                   (edit-field weather-params [:origin 0])
-                  (help-for [:origin :x])]))
+                  (help-for [:weather-params :origin :x])]))
      (tr (map td ["Y Offset"
                   (edit-field weather-params [:origin 1])
-                  (help-for [:origin :y])]))
+                  (help-for [:weather-params :origin :y])]))
      (tr (map td ["T Offset"
                   (edit-field weather-params [:time :offset])
-                  (help-for [:origin :t])]))
+                  (help-for [:weather-params :time :offset])]))
      ;; (tr (map td ["Start Time" (time-entry weather-params [:time :start])]))
+     (for [[c label path help]
+           [[movement-params "Weather heading" [:direction :heading] :movement-params]
+            [movement-params "Weather speed"   [:direction :speed]   :movement-params]
+            [weather-params  "Evolution (min)" [:evolution]          :weather-params]]]
+       (tr (map td [label
+                    (edit-field c path)
+                    (help-for (into [help] path))])))
      (tr (map td [["Time" (help-for [:displayed-time])]
                   (time-entry time-params [:displayed])
                   (button

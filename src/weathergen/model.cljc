@@ -180,11 +180,10 @@
     (math/distribute v min mean max 1)))
 
 (defn weather
+  "x and y are in cells, t is in minutes."
   [{:keys [x y t seed
            origin
-           size
-           time
-           direction
+           evolution
            categories
            crossfade
            wind-uniformity
@@ -193,19 +192,11 @@
            pressure
            feature-size]
     :as params}]
-  (let [{:keys [heading speed]} direction
-        {:keys [current offset evolution]} time
-        [origin-x origin-y] origin
-        [width height] size
-        delta-t (-> (falcon-time->minutes current)
-                    (+ offset))
-        [x-off y-off] (->> [0 1]
-                           (math/rotate (- heading))
-                           (math/scale (* delta-t (/ speed 60 9))))
-        x* (/ (+ origin-x x x-off) feature-size)
-        y* (/ (+ origin-y y y-off) feature-size)
+  (let [[origin-x origin-y] origin
+        x* (/ (+ origin-x x) feature-size)
+        y* (/ (+ origin-y y) feature-size)
         ;; TODO: Why do we need this 10 here?
-        t* (/ delta-t evolution 10)
+        t* (/ t evolution 10)
         max-pressure (:max pressure)
         min-pressure (:min pressure)
         params* (assoc params
@@ -248,27 +239,40 @@
      :p           p}))
 
 (defn weather-grid
-  [{:keys [map-fn cell-count] :as params}]
+  [{:keys [map-fn cell-count origin time] :as params}]
   (let [[width height] cell-count
+        [origin-x origin-y] origin
+        {:keys [offset current]} time
         ;; This is so we can pass in pmap when we're in a non-CLJS context
         map-fn (or map-fn map)]
     (->>  (for [x (range width)
                 y (range height)]
-            [[x y] (assoc params :x x :y y)])
+            [[x y] (assoc params
+                          :x x
+                          :y y
+                          :t (+ offset (falcon-time->minutes current)))])
           (map-fn (fn [[[x y] params]]
                     [[x y] (weather params)]))
           (into (sorted-map)))))
 
 (defn step
-  "Returns an updated weather-params that has been moved in time
-  according to movement-params by `steps`."
+  "Returns an updated weather-params that has been moved in time and
+  space according to movement-params by `steps`."
   [weather-params movement-params steps]
-  (let [{:keys [step]} movement-params
-        delta-t        (* steps step)]
-    (update-in weather-params
-               [:time :current]
-               add-time
-               delta-t)))
+  (let [{:keys [step direction]} movement-params
+        {:keys [speed heading]} direction
+        delta-t (* steps step)]
+    (-> weather-params
+        (update-in
+         [:time :current]
+         add-time
+         delta-t)
+        (update
+         :origin
+         math/vector-add
+         (->> [0 1]
+              (math/rotate (- heading))
+              (math/scale (* delta-t (/ speed 60 9))))))))
 
 (defn forecast
   "Return a map, keyed by time, with the weather forecast for the
@@ -276,23 +280,65 @@
   params, with `steps` forecasts in total. Step size is as specified
   by movement params."
   [[x y] weather-params movement-params steps]
-  (let [{:keys [direction time]} weather-params
+  (let [{:keys [time]} weather-params
+        {:keys [offset current]} time
+        {:keys [direction step]} movement-params
         {:keys [heading speed]} direction
-        {:keys [step]} movement-params]
+        now (+ offset (falcon-time->minutes current))]
     (->> (for [n (range steps)
-               :let [delta-t (* -1 step n)
-                     offset (->> [0 1]
-                                 (math/rotate (- heading))
-                                 (math/scale (* -1 delta-t (/ speed 60 9))))]]
-           [(add-time (:current time) (* n step))
-            (-> weather-params
-                (assoc :x x :y y)
-                (update :origin math/vector-add offset)
-                weather)])
+               :let [dt (* -1 step n)
+                     [dx dy :as dpos] (->> [0 1]
+                                           (math/rotate (- heading))
+                                           (math/scale (* -1 dt (/ speed 60 9))))]]
+           (do
+             (println :current current :offset offset :now now)
+             [(add-time current (* step n))
+              (-> weather-params
+                  (assoc :x x :y y :t now)
+                  (update :origin math/vector-add dpos)
+                  weather)]))
          (into (sorted-map-by (fn [a b]
                                 (compare (falcon-time->minutes a)
-                                         (falcon-time->minutes b)))))
-         )))
+                                         (falcon-time->minutes b))))))))
+
+(defn jump-to-time
+  "Return a new weather params that has been moved to the specified
+  time. Weather changes."
+  [weather-params movement-params t]
+  (let [{:keys [evolution direction]} movement-params
+        {:keys [speed heading]} direction
+        {:keys [time]} weather-params
+        {:keys [current]} time
+        delta-t (- (falcon-time->minutes t)
+                   (falcon-time->minutes current))
+        new (-> weather-params
+                (update :origin
+                        math/vector-add
+                        (->> [0 1]
+                             (math/rotate (- heading))
+                             (math/scale (* delta-t (/ speed 60 9)))))
+                (assoc-in [:time :current]
+                          t))]
+    (println :new new)
+    new))
+
+(defn set-time
+  "Adjust the time coordinate so that the current time is adjusted to
+  match the provided time without changing the location in weather
+  space."
+  [weather-params time]
+  (let [offset (get-in weather-params [:time :offset])
+        current-time (get-in weather-params [:time :current])
+        delta (- (falcon-time->minutes current-time)
+                 (falcon-time->minutes time))]
+    (-> weather-params
+        (update-in
+         [:time :offset]
+         +
+         delta)
+        (assoc-in
+         [:time :current]
+         time))))
 
 (comment
   (clojure.pprint/pprint
@@ -344,6 +390,8 @@
                                                 :temp   {:min  0
                                                          :mean 10
                                                          :max  20}}}}))
+
+
 
   (clojure.pprint/pprint
    (step {:origin [1 2]

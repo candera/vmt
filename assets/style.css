@@ -87,6 +87,16 @@ body {
     width: 30px;
 }
 
+.wind-stability-params  {
+    border: 2px dashed black;
+    padding: 4px;
+    margin-bottom: 3px;
+}
+
+.wind-stability-params hr {
+    display: none;
+}
+
 svg {
     display: inline-block;
 }
@@ -216,14 +226,15 @@ rect.inclement {
 }
 
 .help .img {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     color: white;
     background: darkblue;
-    border-radius: 10px;
+    border-radius: 9px;
     text-align: center;
     display: inline-block;
     margin-left: 5px;
+    font-size: 80%;
 }
 
 .help .content {
