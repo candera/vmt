@@ -133,9 +133,9 @@ forward and backward in time. ")}
 
     :temp
     (p "The minimum, maximum, and mean temperatures for each weather
-     type. Due to crossfading, these values are not strict - wind can
-     be higher than the maximum or lower than the minimum near the
-     edges of other weather types.")}
+     type. Due to crossfading, these values are not strict -
+     temperature can be higher than the maximum or lower than the
+     minimum near the edges of other weather types.")}
 
    :displayed-time
    [(p "Controls the Falcon Time that the current weather corresponds
