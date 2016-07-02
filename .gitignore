@@ -11,3 +11,4 @@ pom.xml
 .nrepl-port
 /target
 /resources/public/js/compiled/
+/website/

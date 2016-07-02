@@ -126,14 +126,12 @@
                   :selected-cell selected-cell
                   :wind-stability-areas wind-stability-areas})
 
-(defc= forecast (if-not selected-cell
-                  (println "No selected cell")
+(defc= forecast (when selected-cell
                   (let [result (model/forecast
                                 selected-cell
                                 weather-params
                                 movement-params
                                 (math/clamp 5 (/ 360 (:step movement-params)) 15))]
-                    (println "Forecast computed" :count (count result))
                     result)))
 
 ;;; Mutations
@@ -231,16 +229,16 @@
                                       .-result
                                       reader/read-string)]
                          (dosync
-                          (swap! weather-params merge (:weather-params data))
-                          (swap! display-params merge (:display-params data))
-                          (swap! movement-params merge (:movement-params data))))))
+                          (let [{:keys [time]} (swap! weather-params merge (:weather-params data))]
+                            (swap! display-params merge (:display-params data))
+                            (swap! movement-params merge (:movement-params data))
+                            (swap! time-params assoc :displayed (:current time)))))))
             (.readAsText reader file)))))))
 
 ;;; Utility
 
 (defn remove-nth
   [coll n]
-  (println "remove-nth" :n n)
   (vec (concat (take n coll) (drop (inc n) coll))))
 
 (defn invert-map
@@ -335,7 +333,6 @@
         r (.getBoundingClientRect canvas)
         x (-> e .-clientX (- (.-left r)) (/ width) (* nx) int)
         y (-> e .-clientY (- (.-top r)) (/ height) (* ny) int)]
-    (println "setting selected cell to" [x y])
     (reset! selected-cell [x y])))
 
 ;;; Grid rendering
@@ -438,8 +435,8 @@
   [ctx]
   (set-fill ctx 0 0 0 1)
   ;;(-> ctx .-lineStyle (set! "0.2"))
-  (-> ctx .-lineWidth (set! "0.05"))
-  (-> ctx .-font (set! "0.4px serif")))
+  (-> ctx .-lineWidth (set! "0.07"))
+  (-> ctx .-font (set! "1px bold serif")))
 
 (defmethod prep-overlay :temperature
   [ctx _]
@@ -501,10 +498,14 @@
 
 (defn stroke-text-overlay
   [ctx text]
-  (.strokeText ctx
-               text
-               (-> text count (* -0.08))
-               0.2))
+  (.save ctx)
+  ;; Firefox bug workaround - it seems to enforce a minimum text size
+  (.scale ctx 0.42 0.42)
+  (.fillText ctx
+             text
+             (-> text count (* -0.24))
+             0.2)
+  (.restore ctx))
 
 (defmethod stroke-overlay :pressure
   [ctx overlay weather]
@@ -548,7 +549,6 @@
   [ctx display opacity weather-data cell-count dimensions]
   (when (display-key->name display)
     (.save ctx)
-    (println "drawing data" :display display :cells (count weather-data))
     (doseq [[[x y] weather] weather-data
             :let [[r g b a] (fill-color display weather)]]
       (set-transform ctx x y cell-count dimensions)
@@ -600,7 +600,6 @@
 
 (defn draw-grid
   [{:keys [display-params cell-count wind-stability-areas weather-data selected-cell] :as data}]
-  (println "draw-grid")
   (.time js/console "draw-grid")
   (let [canvas (gdom/getElement "weather-grid")
         {:keys [map
@@ -609,8 +608,6 @@
                 display
                 overlay]} display-params
         [w h]  dimensions]
-    (println "canvas" :width (.-width canvas)
-             :w w)
     (if-not (= w (.-width canvas))
       (let [ch (async/chan)]
         (println "canvas is not done loading" :dimensions dimensions
@@ -973,15 +970,40 @@
    :id "load-save-controls"
    (legend "Load/save")
    (div
-    (button :click (fn []
-                     (save-fmap @weather-params @weather-data)
-                     (move 1))
-            "Save Current as Single FMAP")
+    :class "button-container"
+    (cell=
+     (let [t (get-in weather-params [:time :current])
+           [x-cells y-cells] (:cell-count weather-params)
+           blob (fmap/get-blob weather-data
+                               x-cells
+                               y-cells)
+           url (-> js/window .-URL (.createObjectURL blob))
+           download (gstring/format "%d%02d%02d.fmap"
+                                    (:day t)
+                                    (:hour t)
+                                    (:minute t))]
+       (a :href url
+          :download download
+          :click #(move 1)
+          :class "button"
+          "Save Current as FMAP")))
     "(Steps forward in time)")
    (div
-    (button :click save-settings "Save Settings"))
+    :class "button-container"
+    (cell=
+     (let [blob (js/Blob. (clj->js [(pr-str {:weather-params weather-params
+                                             :movement-params movement-params
+                                             :display-params display-params
+                                             :revision revision})])
+                          #js{:type "text/plain"})
+           url (-> js/window .-URL (.createObjectURL blob))]
+       (a :href url
+          :download "weathergen-settings.edn"
+          :class "button"
+          "Save Settings"))))
    (div
-    (button :click load-settings "Load Settings"))))
+    :class "button-container"
+    (button :class "button" :click load-settings "Load Settings"))))
 
 (defn forecast-display
   []
@@ -1034,13 +1056,16 @@
              (span :id "byline"
                    "by"
                    (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
+                      :target "_blank"
                       "Tyrant"))
              (span :id "helpstring"
                    "Help? Bug? Feature request? Click"
                    (a :href "help.html"
+                      :target "_blank"
                       "here")
                    "."))
         (a :href "http://firstfighterwing.com"
+           :target "_blank"
            (img :id "winglogo"
                 :src "images/1stVFW_Insignia-64.png")))
    (div :class "two-column"

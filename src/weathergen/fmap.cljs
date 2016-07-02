@@ -23,7 +23,7 @@
 
 (defn blob
   [bw]
-  (js/Blob. #js [(:array-buffer bw)] #js {:type "application/octet-stream"}))
+  (js/Blob. #js [(:array-buffer bw)] #js {:type "application/x-falcon-bms-fmap"}))
 
 (defn weather-type
   [w]
