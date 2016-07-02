@@ -92,7 +92,7 @@ var more = seq__14162__$1;
 var vec__14164 = clojure.string.split.cljs$core$IFn$_invoke$arity$3(f,/\./,(2));
 var f1 = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__14164,(0),null);
 var f2 = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__14164,(1),null);
-return clojure.string.join.cljs$core$IFn$_invoke$arity$2("/",cljs.core.reverse(cljs.core.conj.cljs$core$IFn$_invoke$arity$2(more,clojure.string.join.cljs$core$IFn$_invoke$arity$2(".",new cljs.core.PersistentVector(null, 2, 5, cljs.core.PersistentVector.EMPTY_NODE, [[cljs.core.str(f1),cljs.core.str("."),cljs.core.str("eedd81e4187340e59ecb6f9bbce236aa")].join(''),f2], null)))));
+return clojure.string.join.cljs$core$IFn$_invoke$arity$2("/",cljs.core.reverse(cljs.core.conj.cljs$core$IFn$_invoke$arity$2(more,clojure.string.join.cljs$core$IFn$_invoke$arity$2(".",new cljs.core.PersistentVector(null, 2, 5, cljs.core.PersistentVector.EMPTY_NODE, [[cljs.core.str(f1),cljs.core.str("."),cljs.core.str("a284e6e511dd4da792a43d4255863943")].join(''),f2], null)))));
 });
 hoplon.core.child_vec = (function hoplon$core$child_vec(this$){
 var x = this$.childNodes;
