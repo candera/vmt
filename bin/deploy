@@ -1,5 +1,38 @@
 #!/bin/bash
 
+# Die immediately if any command fails
+set -e
+
+# PROJECT_VERSION=$(head -1 project.clj | grep -oE '\d+\.\d+(\.\d+)?(-SNAPSHOT)?')
+GIT_VERSION=$(git describe --tags)
+GIT_SHA=$(git rev-parse HEAD)
+
+while [[ "$1" != "" ]]; do
+    case "$1" in
+        "--allow-dirty")
+            echo "Allowing uncommitted changes in the build."
+            ALLOW_DIRTY=yes
+            GIT_SHA="${GIT_SHA}-dirty"
+            GIT_VERSION="${GIT_VERSION}-dirty"
+            ;;
+        "--verbose" | "-v")
+            set -x
+            ;;
+    esac
+    shift
+done
+
+if [[ ("$ALLOW_DIRTY" != "yes") && (-n "$(git status --porcelain)") ]]; then
+  echo "Project directory has uncommitted changes. Refusing to build."
+  exit 1
+fi
+
 cd $(dirname $0)/..
-boot prod
-cp -R target/ ~/Dropbox/Public/weathergen/
+bin/build $*
+cd website
+git add .
+git commit -am "Deploy: ${GIT_VERSION}"
+git tag ${GIT_VERSION}
+git push
+git push --tags
+
