@@ -12,3 +12,4 @@ pom.xml
 /target
 /resources/public/js/compiled/
 /website/
+/.nrepl-history
