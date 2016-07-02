@@ -34,14 +34,14 @@ return cljs.core.mapv.cljs$core$IFn$_invoke$arity$3(interp,v1,v2);
 });
 weathergen.math.vector_add = (function weathergen$math$vector_add(var_args){
 var args__8209__auto__ = [];
-var len__8202__auto___19084 = arguments.length;
-var i__8203__auto___19085 = (0);
+var len__8202__auto___19086 = arguments.length;
+var i__8203__auto___19087 = (0);
 while(true){
-if((i__8203__auto___19085 < len__8202__auto___19084)){
-args__8209__auto__.push((arguments[i__8203__auto___19085]));
+if((i__8203__auto___19087 < len__8202__auto___19086)){
+args__8209__auto__.push((arguments[i__8203__auto___19087]));
 
-var G__19086 = (i__8203__auto___19085 + (1));
-i__8203__auto___19085 = G__19086;
+var G__19088 = (i__8203__auto___19087 + (1));
+i__8203__auto___19087 = G__19088;
 continue;
 } else {
 }
@@ -58,28 +58,28 @@ return cljs.core.apply.cljs$core$IFn$_invoke$arity$3(cljs.core.mapv,cljs.core._P
 
 weathergen.math.vector_add.cljs$lang$maxFixedArity = (0);
 
-weathergen.math.vector_add.cljs$lang$applyTo = (function (seq19083){
-return weathergen.math.vector_add.cljs$core$IFn$_invoke$arity$variadic(cljs.core.seq(seq19083));
+weathergen.math.vector_add.cljs$lang$applyTo = (function (seq19085){
+return weathergen.math.vector_add.cljs$core$IFn$_invoke$arity$variadic(cljs.core.seq(seq19085));
 });
 
 weathergen.math.scramble = (function weathergen$math$scramble(var_args){
-var args19087 = [];
-var len__8202__auto___19093 = arguments.length;
-var i__8203__auto___19094 = (0);
+var args19089 = [];
+var len__8202__auto___19095 = arguments.length;
+var i__8203__auto___19096 = (0);
 while(true){
-if((i__8203__auto___19094 < len__8202__auto___19093)){
-args19087.push((arguments[i__8203__auto___19094]));
+if((i__8203__auto___19096 < len__8202__auto___19095)){
+args19089.push((arguments[i__8203__auto___19096]));
 
-var G__19095 = (i__8203__auto___19094 + (1));
-i__8203__auto___19094 = G__19095;
+var G__19097 = (i__8203__auto___19096 + (1));
+i__8203__auto___19096 = G__19097;
 continue;
 } else {
 }
 break;
 }
 
-var G__19089 = args19087.length;
-switch (G__19089) {
+var G__19091 = args19089.length;
+switch (G__19091) {
 case 1:
 return weathergen.math.scramble.cljs$core$IFn$_invoke$arity$1((arguments[(0)]));
 
@@ -89,7 +89,7 @@ return weathergen.math.scramble.cljs$core$IFn$_invoke$arity$2((arguments[(0)]),(
 
 break;
 default:
-throw (new Error([cljs.core.str("Invalid arity: "),cljs.core.str(args19087.length)].join('')));
+throw (new Error([cljs.core.str("Invalid arity: "),cljs.core.str(args19089.length)].join('')));
 
 }
 });
@@ -99,10 +99,10 @@ return weathergen.math.scramble.cljs$core$IFn$_invoke$arity$2(x,(1));
 });
 
 weathergen.math.scramble.cljs$core$IFn$_invoke$arity$2 = (function (x,seed){
-var a = (function (){var G__19091 = (function (){var G__19092 = (x * seed);
-return Math.sin(G__19092);
+var a = (function (){var G__19093 = (function (){var G__19094 = (x * seed);
+return Math.sin(G__19094);
 })();
-return Math.abs(G__19091);
+return Math.abs(G__19093);
 })();
 var b = (a * 100000.0);
 return weathergen.math.frac(b);
@@ -111,23 +111,23 @@ return weathergen.math.frac(b);
 weathergen.math.scramble.cljs$lang$maxFixedArity = 2;
 
 weathergen.math.discrete_noise_field = (function weathergen$math$discrete_noise_field(var_args){
-var args19097 = [];
-var len__8202__auto___19100 = arguments.length;
-var i__8203__auto___19101 = (0);
+var args19099 = [];
+var len__8202__auto___19102 = arguments.length;
+var i__8203__auto___19103 = (0);
 while(true){
-if((i__8203__auto___19101 < len__8202__auto___19100)){
-args19097.push((arguments[i__8203__auto___19101]));
+if((i__8203__auto___19103 < len__8202__auto___19102)){
+args19099.push((arguments[i__8203__auto___19103]));
 
-var G__19102 = (i__8203__auto___19101 + (1));
-i__8203__auto___19101 = G__19102;
+var G__19104 = (i__8203__auto___19103 + (1));
+i__8203__auto___19103 = G__19104;
 continue;
 } else {
 }
 break;
 }
 
-var G__19099 = args19097.length;
-switch (G__19099) {
+var G__19101 = args19099.length;
+switch (G__19101) {
 case 2:
 return weathergen.math.discrete_noise_field.cljs$core$IFn$_invoke$arity$2((arguments[(0)]),(arguments[(1)]));
 
@@ -137,7 +137,7 @@ return weathergen.math.discrete_noise_field.cljs$core$IFn$_invoke$arity$3((argum
 
 break;
 default:
-throw (new Error([cljs.core.str("Invalid arity: "),cljs.core.str(args19097.length)].join('')));
+throw (new Error([cljs.core.str("Invalid arity: "),cljs.core.str(args19099.length)].join('')));
 
 }
 });
@@ -153,23 +153,23 @@ return weathergen.math.scramble.cljs$core$IFn$_invoke$arity$2(((x * (65521)) + y
 weathergen.math.discrete_noise_field.cljs$lang$maxFixedArity = 3;
 
 weathergen.math.continuous_noise_field = (function weathergen$math$continuous_noise_field(var_args){
-var args19104 = [];
-var len__8202__auto___19107 = arguments.length;
-var i__8203__auto___19108 = (0);
+var args19106 = [];
+var len__8202__auto___19109 = arguments.length;
+var i__8203__auto___19110 = (0);
 while(true){
-if((i__8203__auto___19108 < len__8202__auto___19107)){
-args19104.push((arguments[i__8203__auto___19108]));
+if((i__8203__auto___19110 < len__8202__auto___19109)){
+args19106.push((arguments[i__8203__auto___19110]));
 
-var G__19109 = (i__8203__auto___19108 + (1));
-i__8203__auto___19108 = G__19109;
+var G__19111 = (i__8203__auto___19110 + (1));
+i__8203__auto___19110 = G__19111;
 continue;
 } else {
 }
 break;
 }
 
-var G__19106 = args19104.length;
-switch (G__19106) {
+var G__19108 = args19106.length;
+switch (G__19108) {
 case 2:
 return weathergen.math.continuous_noise_field.cljs$core$IFn$_invoke$arity$2((arguments[(0)]),(arguments[(1)]));
 
@@ -179,7 +179,7 @@ return weathergen.math.continuous_noise_field.cljs$core$IFn$_invoke$arity$3((arg
 
 break;
 default:
-throw (new Error([cljs.core.str("Invalid arity: "),cljs.core.str(args19104.length)].join('')));
+throw (new Error([cljs.core.str("Invalid arity: "),cljs.core.str(args19106.length)].join('')));
 
 }
 });
@@ -199,23 +199,23 @@ return weathergen.math.interpolate(weathergen.math.interpolate(weathergen.math.d
 weathergen.math.continuous_noise_field.cljs$lang$maxFixedArity = 3;
 
 weathergen.math.fractal_field = (function weathergen$math$fractal_field(var_args){
-var args19111 = [];
-var len__8202__auto___19114 = arguments.length;
-var i__8203__auto___19115 = (0);
+var args19113 = [];
+var len__8202__auto___19116 = arguments.length;
+var i__8203__auto___19117 = (0);
 while(true){
-if((i__8203__auto___19115 < len__8202__auto___19114)){
-args19111.push((arguments[i__8203__auto___19115]));
+if((i__8203__auto___19117 < len__8202__auto___19116)){
+args19113.push((arguments[i__8203__auto___19117]));
 
-var G__19116 = (i__8203__auto___19115 + (1));
-i__8203__auto___19115 = G__19116;
+var G__19118 = (i__8203__auto___19117 + (1));
+i__8203__auto___19117 = G__19118;
 continue;
 } else {
 }
 break;
 }
 
-var G__19113 = args19111.length;
-switch (G__19113) {
+var G__19115 = args19113.length;
+switch (G__19115) {
 case 3:
 return weathergen.math.fractal_field.cljs$core$IFn$_invoke$arity$3((arguments[(0)]),(arguments[(1)]),(arguments[(2)]));
 
@@ -225,7 +225,7 @@ return weathergen.math.fractal_field.cljs$core$IFn$_invoke$arity$5((arguments[(0
 
 break;
 default:
-throw (new Error([cljs.core.str("Invalid arity: "),cljs.core.str(args19111.length)].join('')));
+throw (new Error([cljs.core.str("Invalid arity: "),cljs.core.str(args19113.length)].join('')));
 
 }
 });
@@ -241,10 +241,10 @@ while(true){
 if((z < floor)){
 return result;
 } else {
-var G__19118 = (result + (weathergen.math.continuous_noise_field.cljs$core$IFn$_invoke$arity$3((x / z),(y / z),seed) * ((z / zoom) / 2.0)));
-var G__19119 = (z / (2));
-result = G__19118;
-z = G__19119;
+var G__19120 = (result + (weathergen.math.continuous_noise_field.cljs$core$IFn$_invoke$arity$3((x / z),(y / z),seed) * ((z / zoom) / 2.0)));
+var G__19121 = (z / (2));
+result = G__19120;
+z = G__19121;
 continue;
 }
 break;
@@ -253,37 +253,37 @@ break;
 
 weathergen.math.fractal_field.cljs$lang$maxFixedArity = 5;
 
-weathergen.math.magnitude = (function weathergen$math$magnitude(p__19120){
-var vec__19125 = p__19120;
-var x = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19125,(0),null);
-var y = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19125,(1),null);
-var G__19128 = ((x * x) + (y * y));
-return Math.sqrt(G__19128);
+weathergen.math.magnitude = (function weathergen$math$magnitude(p__19122){
+var vec__19127 = p__19122;
+var x = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19127,(0),null);
+var y = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19127,(1),null);
+var G__19130 = ((x * x) + (y * y));
+return Math.sqrt(G__19130);
 });
-weathergen.math.heading = (function weathergen$math$heading(p__19129){
-var vec__19133 = p__19129;
-var x = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19133,(0),null);
-var y = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19133,(1),null);
+weathergen.math.heading = (function weathergen$math$heading(p__19131){
+var vec__19135 = p__19131;
+var x = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19135,(0),null);
+var y = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19135,(1),null);
 return cljs.core.mod(((Math.atan2(x,y) * 180.0) / Math.PI),(360));
 });
 weathergen.math.gradient = (function weathergen$math$gradient(var_args){
-var args19136 = [];
-var len__8202__auto___19143 = arguments.length;
-var i__8203__auto___19144 = (0);
+var args19138 = [];
+var len__8202__auto___19145 = arguments.length;
+var i__8203__auto___19146 = (0);
 while(true){
-if((i__8203__auto___19144 < len__8202__auto___19143)){
-args19136.push((arguments[i__8203__auto___19144]));
+if((i__8203__auto___19146 < len__8202__auto___19145)){
+args19138.push((arguments[i__8203__auto___19146]));
 
-var G__19145 = (i__8203__auto___19144 + (1));
-i__8203__auto___19144 = G__19145;
+var G__19147 = (i__8203__auto___19146 + (1));
+i__8203__auto___19146 = G__19147;
 continue;
 } else {
 }
 break;
 }
 
-var G__19138 = args19136.length;
-switch (G__19138) {
+var G__19140 = args19138.length;
+switch (G__19140) {
 case 4:
 return weathergen.math.gradient.cljs$core$IFn$_invoke$arity$4((arguments[(0)]),(arguments[(1)]),(arguments[(2)]),(arguments[(3)]));
 
@@ -293,7 +293,7 @@ return weathergen.math.gradient.cljs$core$IFn$_invoke$arity$5((arguments[(0)]),(
 
 break;
 default:
-throw (new Error([cljs.core.str("Invalid arity: "),cljs.core.str(args19136.length)].join('')));
+throw (new Error([cljs.core.str("Invalid arity: "),cljs.core.str(args19138.length)].join('')));
 
 }
 });
@@ -303,13 +303,13 @@ return weathergen.math.gradient.cljs$core$IFn$_invoke$arity$5(x,y,field,delta,(f
 });
 
 weathergen.math.gradient.cljs$core$IFn$_invoke$arity$5 = (function (x,y,field,delta,f0){
-var fx = (function (){var G__19139 = (x + delta);
-var G__19140 = y;
-return (field.cljs$core$IFn$_invoke$arity$2 ? field.cljs$core$IFn$_invoke$arity$2(G__19139,G__19140) : field.call(null,G__19139,G__19140));
-})();
-var fy = (function (){var G__19141 = x;
-var G__19142 = (y + delta);
+var fx = (function (){var G__19141 = (x + delta);
+var G__19142 = y;
 return (field.cljs$core$IFn$_invoke$arity$2 ? field.cljs$core$IFn$_invoke$arity$2(G__19141,G__19142) : field.call(null,G__19141,G__19142));
+})();
+var fy = (function (){var G__19143 = x;
+var G__19144 = (y + delta);
+return (field.cljs$core$IFn$_invoke$arity$2 ? field.cljs$core$IFn$_invoke$arity$2(G__19143,G__19144) : field.call(null,G__19143,G__19144));
 })();
 var dfdx = ((fx - f0) / delta);
 var dfdy = ((fy - f0) / delta);
@@ -334,22 +334,22 @@ return val;
  * Round x to the nearest n. E.g. (nearest 10 15) => 20
  */
 weathergen.math.nearest = (function weathergen$math$nearest(x,n){
-return ((function (){var G__19148 = (x / n);
-return Math.round(G__19148);
+return ((function (){var G__19150 = (x / n);
+return Math.round(G__19150);
 })() * n);
 });
 weathergen.math.scale = (function weathergen$math$scale(c,v){
-return cljs.core.mapv.cljs$core$IFn$_invoke$arity$2((function (p1__19149_SHARP_){
-return (c * p1__19149_SHARP_);
+return cljs.core.mapv.cljs$core$IFn$_invoke$arity$2((function (p1__19151_SHARP_){
+return (c * p1__19151_SHARP_);
 }),v);
 });
 weathergen.math.deg__GT_rad = (function weathergen$math$deg__GT_rad(deg){
 return ((deg * Math.PI) / 180.0);
 });
-weathergen.math.rotate = (function weathergen$math$rotate(deg,p__19150){
-var vec__19154 = p__19150;
-var x = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19154,(0),null);
-var y = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19154,(1),null);
+weathergen.math.rotate = (function weathergen$math$rotate(deg,p__19152){
+var vec__19156 = p__19152;
+var x = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19156,(0),null);
+var y = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19156,(1),null);
 var rad = weathergen.math.deg__GT_rad((- deg));
 var cs = Math.cos(rad);
 var sn = Math.sin(rad);
@@ -361,8 +361,8 @@ if((m === (0))){
 return v;
 } else {
 return cljs.core.mapv.cljs$core$IFn$_invoke$arity$2(((function (m){
-return (function (p1__19157_SHARP_){
-return (p1__19157_SHARP_ / m);
+return (function (p1__19159_SHARP_){
+return (p1__19159_SHARP_ / m);
 });})(m))
 ,v);
 }
@@ -375,9 +375,9 @@ return (p1__19157_SHARP_ / m);
  */
 weathergen.math.distribute = (function weathergen$math$distribute(x,min,mean,max,shape){
 var x1 = ((x * (2)) - (1));
-var x2 = (function (){var G__19160 = Math.abs(x1);
-var G__19161 = shape;
-return Math.pow(G__19160,G__19161);
+var x2 = (function (){var G__19162 = Math.abs(x1);
+var G__19163 = shape;
+return Math.pow(G__19162,G__19163);
 })();
 if((x1 < (0))){
 return ((((1) - x2) * (mean - min)) + min);

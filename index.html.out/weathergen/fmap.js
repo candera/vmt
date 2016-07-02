@@ -35,7 +35,7 @@ return (p1__19484_SHARP_ + (4));
 );
 });
 weathergen.fmap.blob = (function weathergen$fmap$blob(bw){
-return (new Blob([cljs.core.cst$kw$array_DASH_buffer.cljs$core$IFn$_invoke$arity$1(bw)],{"type": "application/octet-stream"}));
+return (new Blob([cljs.core.cst$kw$array_DASH_buffer.cljs$core$IFn$_invoke$arity$1(bw)],{"type": "application/x-falcon-bms-fmap"}));
 });
 weathergen.fmap.weather_type = (function weathergen$fmap$weather_type(w){
 return new cljs.core.PersistentArrayMap(null, 4, [cljs.core.cst$kw$sunny,(1),cljs.core.cst$kw$fair,(2),cljs.core.cst$kw$poor,(3),cljs.core.cst$kw$inclement,(4)], null).call(null,cljs.core.cst$kw$type.cljs$core$IFn$_invoke$arity$1(w));
