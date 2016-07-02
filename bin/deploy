@@ -32,7 +32,7 @@ bin/build $*
 cd website
 git add .
 git commit -am "Deploy: ${GIT_VERSION}"
-git tag ${GIT_VERSION}
+git tag "Deploy-${GIT_VERSION}"
 git push
 git push --tags
 
