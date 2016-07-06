@@ -425,3 +425,289 @@
       clojure.pprint/pprint
       ;;(map #(Math/abs %))
       ))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(println (map
+          vector
+          [ ;; Italy
+           "Amendola"
+           "Ampugnano"
+           "Asiago"
+           "Aviano"
+           "Bologna"
+           "Bolzano"
+           "Brindisi-Casale"
+           "Capodichino"
+           "Cervia"
+           "Ciampino"
+           "Crotone"
+           "Falconara"
+           "Fiumicino Intl."
+           "Forli"
+           "Frosinone"
+           "Ginolisa"
+           "Gioia del colle"
+           "Grazzanise"
+           "Grosseto"
+           "Grottaglie"
+           "Guidogna"
+           "Istrana"
+           "Lamezia Terme"
+           "Latina"
+           "Lecce"
+           "Matera"
+           "Mattarello"
+           "Padova"
+           "Palese Macchie (Lezhe in 4.5)"
+           "Peretola"
+           "Perugia"
+           "Pescara"
+           "Practica di Mare"
+           "Ravenna"
+           "Reggio Calabria"
+           "Rimini"
+           "Rivolto"
+           "Roma Urbe"
+           "Ronchi dei legionari"
+           "San Pancrazio"
+           "Treviso"
+           "Venezia Tessera"
+           "Vicenca"
+
+           ;; Sicily
+           "Catania Fontanarossa"
+           "Palermo"
+           "Pantelleria"
+           "Sigonella"
+           "Trapani Birgi"
+
+           ;; Greece
+           "Ioannina"
+           "Kefallinia"
+           "Preveza"
+           "Zakinthos"
+
+           ;; Macedonia
+           "Ohrid"
+
+           ;; Albania
+           "Berat"
+           "Cerrik airtsrip"
+           "Durres airstrip"
+           "Elbasan"
+           "Gjirokaster"
+           "Gramsh"
+           "Korce North"
+           "Kukes"
+           "Lushnje airstrip"
+           "Mifol"
+           "Peshkopi airstrip"
+           "Shkoder"
+           "Tirane Lapranka"
+           "Tirane Rinas"
+
+           ;; Slovenia
+           "Bloska Polica airstrip"
+           "Cerklje airstrip"
+           "Cerklje"
+           "Ljubljana"
+           "Maribor"
+           "Portoroz"
+           "Slovenj Gradec"
+
+           ;; Monetegro
+           "Danilovgrad airstrip"
+           "Gorazde airstrip"
+           "Ivangrad"
+           "Podgorica"
+           "Tivat"
+
+           ;; Serbia
+           "Batajnica"
+           "Beograd"
+           "Kovin"
+           "Kraljevo"
+           "Lepa Glava"
+           "Sabac airstrip"
+           "Sjenica"
+           "Sombor"
+
+           ;; Bosnia Herzegovnia
+           "Banja Luka"
+           "Bihac"
+           "Brcko airstrip"
+           "Mostar"
+           "Sarajevo Intl"
+           "Slavonski Brod airstrip"
+           "Tuzla"
+           "Trebinje airstrip"
+
+           ;; Croatia
+           "Bjelovar airstrip"
+           "Dubrovnic Intl"
+           "Karlovac airstrip"
+           "Osijek"
+           "Pula"
+           "Rijeka"
+           "Split"
+           "Udbina"
+           "Varazdin"
+           "Zadar"
+           "Zagreb"
+
+           ;; Hungary
+           "Nagykanisza"
+           "Ocseny"
+           "Pecs East"
+           "Satorhely"
+           "Szeged"
+           "Taszar"
+           ]
+          [
+           ;; Italy
+           [[41 07.44] [16 47.02]]
+           [[42 42.03] [11 19.43]]
+           [[45 08.59] [11 39.34]]
+           [[45 16.71] [13 05.20]]
+           [[43 54.23] [11 21.31]]
+           [[45 38.77] [11 23.51]]
+           [[40 19.77] [19 23.62]]
+           [[40 34.86] [14 58.03]]
+           [[43 36.99] [12 40.85]]
+           [[41 23.35] [12 57.83]]
+           [[38 47.63] [18 10.37]]
+           [[43 01.43] [13 59.48]]
+           [[41 22.28] [12 31.55]]
+           [[43 35.37] [12 20.72]]
+           [[41 16.35] [13 43.11]]
+           [[41 08.88] [16 31.88]]
+           [[40 26.24] [18 10.09]]
+           [[40 42.94] [14 43.58]]
+           [[42 16.70] [11 05.46]]
+           [[40 11.69] [18 43.12]]
+
+           [[41 34.13] [13 08.56]]
+           [[44 58.30] [12 25.01]]
+           [[38 43.86] [17 12.66]]
+           [[41 08.27] [13 18.44]]
+           [[39 27.14] [19 34.19]]
+           [[40 07.92] [17 42.08]]
+           [[45 16.68] [11 08.81]]
+           [[44 42.73] [12 01.80]]
+           [[40 45.64] [17 59.57]]
+           [[43 14.36] [11 15.16]]
+           [[42 35.56] [12 53.09]]
+           [[41 57.30] [14 55.13]]
+           [[41 14.73] [12 48.57]]
+           [[43 45.07] [12 32.87]]
+           [[37 55.36] [16 26.17]]
+           [[43 24.60] [13 02.02]]
+           [[45 13.44] [13 39.51]]
+           [[41 34.44] [12 53.36]]
+           [[45 06.36] [14 13.48]]
+           [[40 07.92] [19 15.11]]
+           [[44 55.12] [12 31.70]]
+
+           [[44 47.58] [12 45.92]]
+           [[44 52.43] [11 43.72]]
+
+           ;; Sicily
+           [[37 26.26] [15 39.26]]
+           [[38 02.80] [13 27.46]]
+           [[36 48.54] [12 06.29]]
+           [[37 19.80] [15 30.73]]
+           [[37 48.36] [12 45.37]]
+
+           ;; Greece
+           [[39 24.81] [22 40.60]]
+           [[38 00.75] [22 05.80]]
+           [[38 43.32] [22 31.70]]
+           [[37 39.73] [22 27.83]]
+
+           ;; Macedonia
+           [[40 48.33] [22 50.10]]
+
+           ;; Albania
+           [[40 26.78] [21 42.57]]
+           [[40 27.85] [22 13.19]]
+           [[40 59.11] [21 19.95]]
+           [[40 40.25] [21 56.80]]
+           [[39 46.90] [21 57.35]]
+           [[41 28.20] [21 34.63]]
+           [[40 18.69] [22 45.59]]
+           [[41 35.75] [22 35.67]]
+           [[40 39.17] [21 31.06]]
+           [[40 17.08] [21 09.24]]
+           [[41 15.27] [22 34.18]]
+           [[41 36.83] [21 31.72]]
+           [[40 56.95] [21 42.02]]
+           [[41 02.34] [21 38.32]]
+
+           ;; Slovenia
+           [[45 45.01] [15 39.37]]
+           [[45 06.98] [16 40.18]]
+           [[45 09.67] [16 53.44]]
+           [[45 26.91] [15 31.52]]
+           [[45 40.92] [17 10.60]]
+           [[44 44.34] [15 32.97]]
+           [[45 42.00] [16 23.66]]
+
+           ;; Montenegro
+           [[42 02.15] [21 06.88]]
+           [[42 59.81] [21 08.92]]
+           [[42 16.70] [22 00.92]]
+           [[41 52.99] [21 12.66]]
+           [[41 55.15] [20 33.90]]
+
+           ;; Serbia
+           [[44 15.79] [22 57.85]]
+           [[44 10.40] [22 57.85]]
+           [[44 07.16] [23 42.23]]
+           [[43 14.36] [23 06.72]]
+           [[43 15.15] [21 59.16]]
+           [[44 08.78] [22 04.96]]
+           [[42 43.10] [22 19.52]]
+           [[45 00.51] [21 29.92]]
+
+           ;; Bosnia Herzegovnia
+           [[44 16.32] [19 04.26]]
+           [[44 11.47] [17 03.36]]
+           [[44 17.40] [20 46.79]]
+           [[42 43.10] [19 34.50]]
+           [[43 14.90] [20 18.16]]
+           [[44 08.78] [22 04.96]]
+           [[44 50.46] [20 50.57]]
+           [[42 16.16] [20 10.87]]
+
+           ;; Croatia
+           [[45 07.51] [18 37.08]]
+           [[42 04.31] [19 34.50]]
+           [[44 42.19] [16 57.46]]
+           [[44 44.88] [21 05.83]]
+           [[44 13.09] [14 45.18]]
+           [[44 37.88] [15 32.97]]
+           [[42 59.27] [17 39.62]]
+           [[43 55.85] [17 04.01]]
+           [[45 30.15] [18 04.00]]
+           [[43 29.98] [16 32.43]]
+           [[45 00.51] [17 36.70]]
+
+           ;; Hungary
+           [[45 37.69] [18 51.95]]
+           [[45 30.69] [21 10.92]]
+           [[45 15.60] [20 26.11]]
+           [[45 10.75] [20 55.11]]
+           [[45 26.91] [22 56.23]]
+           [[45 37.15] [20 04.30]]
+           ]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(doseq [theater [:balkans :korea :israel]]
+  (->> (format "/tmp/%s.csv" (name theater))
+       clojure.java.io/reader
+       (db/import-objectives-csv theater)
+       (map #(select-keys % [:x :y :owner :name :type :id]))
+       (filterv #(#{"Airbase" "Airstrip"} (:type %)))
+       pr-str
+       (spit (clojure.java.io/writer (format "/tmp/%s-airbases.edn" (name theater))))))

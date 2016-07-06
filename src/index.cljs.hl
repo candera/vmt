@@ -5,6 +5,8 @@
             [goog.string.format]
             [goog.style :as gstyle]
             [weathergen.canvas :as canvas]
+            [weathergen.coordinates :as coords]
+            [weathergen.database :as db]
             [weathergen.fmap :as fmap]
             [weathergen.help :as help]
             [weathergen.math :as math]
@@ -110,7 +112,7 @@
 
 (defc= weather-data (model/weather-grid weather-params))
 
-(defc= selected-cell-weather (get weather-data selected-cell))
+(defc= selected-cell-weather (get weather-data (:coordinates selected-cell)))
 
 (defc= cell-count (:cell-count weather-params))
 
@@ -128,11 +130,76 @@
 
 (defc= forecast (when selected-cell
                   (let [result (model/forecast
-                                selected-cell
+                                (:coordinates selected-cell)
                                 weather-params
                                 movement-params
                                 (math/clamp 5 (/ 360 (:step movement-params)) 15))]
                     result)))
+
+(defc= airbases (->> (db/airbases (:map display-params))
+                     (map :name)
+                     sort))
+
+(defc= location-type
+  (cond
+    (-> selected-cell :location not-empty) :named
+    (:coordinates selected-cell) :coordinates
+    :else :none))
+
+;;; Utility
+
+(def log println)
+
+(defn remove-nth
+  [coll n]
+  (vec (concat (take n coll) (drop (inc n) coll))))
+
+(defn invert-map
+  [m]
+  (zipmap (vals m) (keys m)))
+
+(def map-name->key
+  {"Israel" :israel
+   "Balkans" :balkans
+   "Korea" :korea})
+
+(def map-key->name
+  (invert-map map-name->key))
+
+(def map-image
+  {:korea "images/kto.jpg"
+   :balkans "images/balkans.png"
+   :israel "images/ito.jpg"})
+
+(defn map-image-id
+  [map]
+  (str "map-image-" (name map)))
+
+(def display-name->key
+  {"Weather Type" :type
+   "Pressure" :pressure
+   "Temperature" :temperature})
+
+(def display-key->name
+  (invert-map display-name->key))
+
+(def overlay-name->key
+  {"Wind" :wind
+   "Pressure" :pressure
+   "Temperature" :temperature
+   "Weather Type" :type})
+
+(def overlay-key->name
+  (invert-map overlay-name->key))
+
+(def type-name->key
+  {"Sunny" :sunny
+   "Fair" :fair
+   "Poor" :poor
+   "Inclement" :inclement})
+
+(def type-key->name
+  (invert-map type-name->key))
 
 ;;; Mutations
 
@@ -172,6 +239,25 @@
   (swap! weather-params
          model/set-time
          (:displayed @time-params)))
+
+(defn change-location
+  [airbase]
+  (if (empty? airbase)
+    (reset! selected-cell nil)
+    (reset! selected-cell {:location airbase
+                           :coordinates (coords/airbase-coordinates
+                                         @cell-count
+                                         (:map @display-params)
+                                         airbase)})))
+
+(defn change-theater
+  [theater]
+  (dosync
+   (swap! selected-cell
+          #(if (= :named @location-type)
+             nil
+             %))
+   (swap! display-params assoc :map theater)))
 
 ;;; Serialization
 
@@ -235,59 +321,6 @@
                             (swap! time-params assoc :displayed (:current time)))))))
             (.readAsText reader file)))))))
 
-;;; Utility
-
-(defn remove-nth
-  [coll n]
-  (vec (concat (take n coll) (drop (inc n) coll))))
-
-(defn invert-map
-  [m]
-  (zipmap (vals m) (keys m)))
-
-(def map-name->key
-  {"Israel" :israel
-   "Balkans" :balkans
-   "Korea" :korea})
-
-(def map-key->name
-  (invert-map map-name->key))
-
-(def map-image
-  {:korea "images/kto.jpg"
-   :balkans "images/balkans.png"
-   :israel "images/ito.jpg"})
-
-(defn map-image-id
-  [map]
-  (str "map-image-" (name map)))
-
-(def display-name->key
-  {"Weather Type" :type
-   "Pressure" :pressure
-   "Temperature" :temperature})
-
-(def display-key->name
-  (invert-map display-name->key))
-
-(def overlay-name->key
-  {"Wind" :wind
-   "Pressure" :pressure
-   "Temperature" :temperature
-   "Weather Type" :type})
-
-(def overlay-key->name
-  (invert-map overlay-name->key))
-
-(def type-name->key
-  {"Sunny" :sunny
-   "Fair" :fair
-   "Poor" :poor
-   "Inclement" :inclement})
-
-(def type-key->name
-  (invert-map type-name->key))
-
 ;;; Help
 
 (let [help-states (cell {})]
@@ -333,7 +366,8 @@
         r (.getBoundingClientRect canvas)
         x (-> e .-clientX (- (.-left r)) (/ width) (* nx) int)
         y (-> e .-clientY (- (.-top r)) (/ height) (* ny) int)]
-    (reset! selected-cell [x y])))
+    (reset! selected-cell {:location nil
+                           :coordinates [x y]})))
 
 ;;; Grid rendering
 
@@ -610,7 +644,7 @@
         [w h]  dimensions]
     (if-not (= w (.-width canvas))
       (let [ch (async/chan)]
-        (println "canvas is not done loading" :dimensions dimensions
+        #_(println "canvas is not done loading" :dimensions dimensions
                  :width (.-width canvas)
                  :height (.-height canvas))
         (go-loop [n 200]
@@ -625,7 +659,7 @@
             [x-cells y-cells] cell-count
             cell-width        (/ w x-cells)
             cell-height       (/ h y-cells)]
-        (println "Canvas is correct size" :dimensions dimensions
+        #_(println "Canvas is correct size" :dimensions dimensions
                  :width (.-width canvas)
                  :height (.-height canvas))
         (clear-transform ctx)
@@ -647,7 +681,7 @@
                 (set-transform ctx x y cell-count dimensions)
                 (.strokeRect ctx -0.5 -0.5 1 1))
 
-            (draw-selected-cell ctx selected-cell cell-count dimensions)
+            (draw-selected-cell ctx (:coordinates selected-cell) cell-count dimensions)
             (draw-wind-stability ctx wind-stability-areas cell-count dimensions))))))
   (.timeEnd js/console "draw-grid"))
 
@@ -747,31 +781,16 @@
                                    :wind-stability "crosshair")})
                  :width (cell= width)
                  :height (cell= height)
-                 :click #(grid-click % "weather-grid" @cell-count @dimensions))
-         ;; TODO: Add an SVG overlay when that starts to make sense.
-         #_(cell-let [x-size (/ width nx)
-                      y-size (/ height ny)]
-             (svg/svg
-              :id "weather-grid-overlay"
-              :width (cell= width)
-              :height (cell= height)
-              (for [x (range @nx)
-                    y (range @ny)]
-                (do
-                  (println :x x :y y :x-size @x-size :y-size @y-size :nx @nx :ny @ny)
-                  (svg/rect
-                   :style "stroke:black"
-                   :x (cell= (* x x-size))
-                   :y (cell= (* y y-size))
-                   :width x-size
-                   :height y-size))))))))
+                 :click #(grid-click % "weather-grid" @cell-count @dimensions)))))
 
 (defn display-controls
   []
-  (let [select-row (fn [{:keys [label k key->name name->key]} help-path]
+  (let [select-row (fn [{:keys [label k key->name name->key change]} help-path]
                      (tr (td label)
                          (td (select
-                              :change #(swap! display-params assoc k (name->key @%))
+                              :change (if change
+                                        #(change (name->key @%))
+                                        #(swap! display-params assoc k (name->key @%)))
                               (for [name (conj (keys name->key) "None")]
                                 (option
                                  :value name
@@ -790,7 +809,8 @@
         (select-row {:label "Map"
                      :k :map
                      :key->name map-key->name
-                     :name->key map-name->key}
+                     :name->key map-name->key
+                     :change change-theater}
                     [:display-controls :map])
         (select-row {:label "Display"
                      :k :display
@@ -1011,29 +1031,44 @@
    (legend "Forecast"
            (help-for [:forecast]))
    (div :id "forecast"
-    (cell=
-     (if-not forecast
-       "No location is selected. Click a location on the weather grid to get a forecast for it."
-       (let [[x y] selected-cell]
-         (div
-          (str "Forecast for location " x "," y)
-          (table
-           (thead
-            (tr (td "Day/Time")
-                (td "Weather Type")
-                (td "Pressure")
-                (td "Temperature")
-                (td "Wind Speed")
-                (td "Wind Heading")))
-           (tbody
-            (for [[time weather] forecast]
-              (tr (td (gstring/format "%02d/%02d%02d"
-                                      (:day time) (:hour time) (:minute time)))
-                  (td (-> weather :type type-key->name))
-                  (td (-> weather :pressure (.toFixed 2)))
-                  (td (-> weather :temperature (.toFixed 1)))
-                  (td (-> weather :wind :speed (.toFixed 0)))
-                  (td (-> weather :wind :heading (.toFixed 0))))))))))))))
+        (cell=
+         (let [[x y] (:coordinates selected-cell)]
+           (div
+            (label :for "locations"
+                   "Forecast for:")
+            (select
+               :id "locations"
+               :change #(change-location @%)
+               (option :selected (not= :named location-type)
+                       :value ""
+                       (case location-type
+                         :coordinates (str "Cell " x "," y)
+                         :named ""
+                         :none "None selected"))
+               (for [ab airbases]
+                 (option :value ab
+                         :selected (= ab (:location selected-cell))
+                         ab)))
+            (table
+             (thead
+              (tr (td "Day/Time")
+                  (td "Weather Type")
+                  (td "Pressure")
+                  (td "Temperature")
+                  (td "Wind Speed")
+                  (td "Wind Heading")))
+             (tbody
+              (if-not forecast
+                (tr (td :colspan 6
+                        "No location is selected. Choose a location from the list, or click on the weather map to select one."))
+                (for [[time weather] forecast]
+                  (tr (td (gstring/format "%02d/%02d%02d"
+                                          (:day time) (:hour time) (:minute time)))
+                      (td (-> weather :type type-key->name))
+                      (td (-> weather :pressure (.toFixed 2)))
+                      (td (-> weather :temperature (.toFixed 1)))
+                      (td (-> weather :wind :speed (.toFixed 0)))
+                      (td (-> weather :wind :heading (.toFixed 0))))))))))))))
 
 (defn debug-info
   []
@@ -1091,18 +1126,3 @@
 (draw-grid @grid-data)
 
 ;;(-> js/document js/jQuery .tooltip)
-
-(comment
-  (defc test1 {:a 1 :b 2})
-
-  (defc= test2 {:c 3 :d (:a test1)})
-
-  (add-watch test2
-             :test2
-             (fn [k r o n]
-               (println "test2 changed" :n n)))
-
-  (swap! test1 assoc :a 4)
-  (swap! test1 assoc :b 5)
-  (swap! test1 assoc :a 6))
-

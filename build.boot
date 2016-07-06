@@ -12,7 +12,8 @@
                  #_[com.cemerick/piggieback "0.2.1" :scope "test"]
                  #_[weasel "0.7.0" :scope "test"]
                  [org.clojure/tools.nrepl "0.2.12" :scope "test"]
-                 [cljsjs/jquery-ui "1.11.4-0"]]
+                 [cljsjs/jquery-ui "1.11.4-0"]
+                 [org.clojure/data.csv "0.1.3"]]
  :source-paths #{"src"}
  :asset-paths  #{"assets"})
 
