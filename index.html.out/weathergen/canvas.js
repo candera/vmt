@@ -6,12 +6,12 @@ goog.require('cljs.core');
  *   coordinates
  */
 weathergen.canvas.create_context = (function weathergen$canvas$create_context(canvas,cell_count,dimensions){
-var vec__19077 = cell_count;
-var x_cells = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19077,(0),null);
-var y_cells = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19077,(1),null);
-var vec__19080 = dimensions;
-var w = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19080,(0),null);
-var h = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19080,(1),null);
+var vec__19218 = cell_count;
+var x_cells = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19218,(0),null);
+var y_cells = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19218,(1),null);
+var vec__19221 = dimensions;
+var w = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19221,(0),null);
+var h = cljs.core.nth.cljs$core$IFn$_invoke$arity$3(vec__19221,(1),null);
 var cell_width = (w / x_cells);
 var cell_height = (h / y_cells);
 var ctx = canvas.getContext("2d");
