@@ -1,5 +1,6 @@
 ;;; Directory Local Variables
 ;;; For more information see (info "(emacs) Directory Variables")
 
-((nil
-  (inf-clojure-buffer . "weathergen-repl")))
+((clojure-mode
+  (inf-clojure-buffer . "weathergen-repl")
+  (use-inf-clojure . t)))
