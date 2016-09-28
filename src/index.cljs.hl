@@ -844,8 +844,13 @@
    (table
     :id "general-params"
     (tbody
-     (for [[label selector updater]
-           [["Seed"             [:seed]]
+     (for [[label selector extra]
+           [["Seed"             [:seed] (button
+                                         :click #(swap! weather-params
+                                                        assoc
+                                                        :seed
+                                                        (+ (rand-int 5000) 100))
+                                         "Random")]
             ["Crossfade"        [:crossfade]]
             ["Zoom"             [:feature-size]]
             ["Max pressure"     [:pressure :max]]
@@ -855,7 +860,8 @@
             ["Temp uniformity"  [:temp-uniformity]]
             ["Warp strength"    [:turbulence :power]]]]
        (tr (td label)
-           (td (edit-field weather-params selector {:change-fn updater}))
+           (td (edit-field weather-params selector)
+               (or extra []))
            (td (help-for (into [:weather-params] selector)))))))))
 
 (let [indexed-wind-stability-areas (->> weather-params

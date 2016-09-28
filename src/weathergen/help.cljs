@@ -54,9 +54,9 @@
 
    :weather-params
    {:seed
-    (p "The 'random seed': selects a weather system. Changing this
-    will change the weather pattern entirely. Use any number, decimal
-    or integer.")
+    (p "The seed selects a weather system. Changing this will change
+    the weather pattern entirely. Use any whole number. Click the
+    'Random' button to have the system choose a seed randomly.")
 
     :crossfade
     (p "The degree to which adjacent weather types will be blended
