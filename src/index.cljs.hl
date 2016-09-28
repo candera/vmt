@@ -16,7 +16,8 @@
             [cljs.reader :as reader]
             [cljsjs.jquery-ui])
   (:require-macros
-   [cljs.core.async.macros :refer [go go-loop]]))
+   [cljs.core.async.macros :refer [go go-loop]]
+   [weathergen.cljs.macros :refer [with-time]]))
 
 ;;; Constants
 
@@ -110,7 +111,8 @@
 
 ;;; Formulas
 
-(defc= weather-data (model/weather-grid weather-params))
+(defc= weather-data (with-time "Compute model"
+                      (model/weather-grid weather-params)))
 
 (defc= selected-cell-weather (get weather-data (:coordinates selected-cell)))
 
@@ -634,56 +636,55 @@
 
 (defn draw-grid
   [{:keys [display-params cell-count wind-stability-areas weather-data selected-cell] :as data}]
-  (.time js/console "draw-grid")
-  (let [canvas (gdom/getElement "weather-grid")
-        {:keys [map
-                opacity
-                dimensions
-                display
-                overlay]} display-params
-        [w h]  dimensions]
-    (if-not (= w (.-width canvas))
-      (let [ch (async/chan)]
-        #_(println "canvas is not done loading" :dimensions dimensions
-                 :width (.-width canvas)
-                 :height (.-height canvas))
-        (go-loop [n 200]
-          (<! (async/timeout 10))
-          (when (pos? n)
-            (if (= w (.-width canvas))
-              (draw-grid data)
-              (do
-                (println "Still waiting for canvas" :n n)
-                (recur (dec n)))))))
-      (let [ctx               (.getContext canvas "2d")
-            [x-cells y-cells] cell-count
-            cell-width        (/ w x-cells)
-            cell-height       (/ h y-cells)]
-        #_(println "Canvas is correct size" :dimensions dimensions
-                 :width (.-width canvas)
-                 :height (.-height canvas))
-        (clear-transform ctx)
-        (.clearRect ctx 0 0 w h)
+  (with-time "draw-grid"
+    (let [canvas (gdom/getElement "weather-grid")
+          {:keys [map
+                  opacity
+                  dimensions
+                  display
+                  overlay]} display-params
+          [w h]  dimensions]
+      (if-not (= w (.-width canvas))
+        (let [ch (async/chan)]
+          #_(println "canvas is not done loading" :dimensions dimensions
+                     :width (.-width canvas)
+                     :height (.-height canvas))
+          (go-loop [n 200]
+            (<! (async/timeout 10))
+            (when (pos? n)
+              (if (= w (.-width canvas))
+                (draw-grid data)
+                (do
+                  (println "Still waiting for canvas" :n n)
+                  (recur (dec n)))))))
+        (let [ctx               (.getContext canvas "2d")
+              [x-cells y-cells] cell-count
+              cell-width        (/ w x-cells)
+              cell-height       (/ h y-cells)]
+          #_(println "Canvas is correct size" :dimensions dimensions
+                     :width (.-width canvas)
+                     :height (.-height canvas))
+          (clear-transform ctx)
+          (.clearRect ctx 0 0 w h)
 
-        ;; Draw the map if it's ready
-        (if-let [ch (draw-map ctx map dimensions)]
-          (go
-            (<! ch)
-            (draw-grid data))
+          ;; Draw the map if it's ready
+          (if-let [ch (draw-map ctx map dimensions)]
+            (go
+              (<! ch)
+              (draw-grid data))
 
-          (do
-            (draw-data ctx display opacity weather-data cell-count dimensions)
-            (draw-overlay ctx overlay weather-data cell-count dimensions)
+            (do
+              (draw-data ctx display opacity weather-data cell-count dimensions)
+              (draw-overlay ctx overlay weather-data cell-count dimensions)
 
-            ;; Draw bounding boxes
-            #_(doseq [x (range x-cells)
-                      y (range y-cells)]
-                (set-transform ctx x y cell-count dimensions)
-                (.strokeRect ctx -0.5 -0.5 1 1))
+              ;; Draw bounding boxes
+              #_(doseq [x (range x-cells)
+                        y (range y-cells)]
+                  (set-transform ctx x y cell-count dimensions)
+                  (.strokeRect ctx -0.5 -0.5 1 1))
 
-            (draw-selected-cell ctx (:coordinates selected-cell) cell-count dimensions)
-            (draw-wind-stability ctx wind-stability-areas cell-count dimensions))))))
-  (.timeEnd js/console "draw-grid"))
+              (draw-selected-cell ctx (:coordinates selected-cell) cell-count dimensions)
+              (draw-wind-stability ctx wind-stability-areas cell-count dimensions))))))))
 
 ;;; User Interface
 
