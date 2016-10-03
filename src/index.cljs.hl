@@ -17,7 +17,7 @@
             [cljsjs.jquery-ui])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-time]]))
+   [weathergen.cljs.macros :refer [with-time formula-of]]))
 
 ;;; Constants
 
@@ -686,10 +686,299 @@
               (draw-selected-cell ctx (:coordinates selected-cell) cell-count dimensions)
               (draw-wind-stability ctx wind-stability-areas cell-count dimensions))))))))
 
+(def max-wind-vector-speed 50)
+
+(defn wind-vector-id
+  [speed]
+  (str "wind-vector-" (math/clamp 5 max-wind-vector-speed (math/nearest speed 5))))
+
+(defn update-wind-layer
+  [weather-data display-params]
+  (with-time "update-wind-layer"
+    (doseq [[[x y] weather] weather-data
+            :let [{:keys [speed heading]} (:wind weather)
+                  cell (gdom/getElement (str "grid-wind-cell-" x "-" y))]]
+      (.setAttribute cell
+                     #_"http://www.w3.org/2000/svg"
+                     "transform"
+                     (str "rotate(" (long heading) ")"))
+      (.setAttributeNS cell
+                       "http://www.w3.org/1999/xlink"
+                       "href"
+                       (str "#" (wind-vector-id speed))))))
+
+(defmulti overlay-text
+  (fn [weather overlay] overlay))
+
+(defmethod overlay-text :default
+  [_ _]
+  "")
+
+(defmethod overlay-text :pressure
+  [weather _]
+  (-> weather :pressure (.toFixed 2)))
+
+(defmethod overlay-text :temperature
+  [weather overlay]
+  (-> weather :temperature (.toFixed 1)))
+
+(defmethod overlay-text :type
+  [weather overlay]
+  (-> weather :type {:sunny "S"
+                     :fair "F"
+                     :poor "P"
+                     :inclement "I"}))
+
+(defmethod overlay-text :coords
+  [weather overlay]
+  (str (:x weather) "," (:y weather)))
+
+(defn update-text-layer
+  [weather-data display-params]
+  (with-time "update-text-layer"
+    (doseq [[[x y] weather] weather-data
+            :let [text (overlay-text weather (:overlay display-params))
+                  cell (gdom/getElement (str "grid-text-cell-" x "-" y))]]
+      (-> cell .-innerHTML (set! text)))))
+
+(defn update-overlay
+  [weather-data display-params]
+  (with-time "update-overlay"
+   (condp contains? (:overlay display-params)
+     #{:wind}
+     (update-wind-layer weather-data display-params)
+
+     #{:type :pressure :temperature}
+     (update-text-layer weather-data display-params)
+     nil)))
+
+(defn update-primary-layer
+  [weather-data display-params]
+  (with-time "update-primary-layer"
+    (doseq [[[x y] weather] weather-data
+            :let [[r g b a] (fill-color (:display display-params) weather)
+                  cell (gdom/getElement (str "grid-primary-cell-" x "-" y))]]
+      (.setAttribute cell "fill" (str "rgba("
+                                      r ","
+                                      g ","
+                                      b ","
+                                      a ")")))))
+
+(defn update-grid-data
+  [weather-data display-params]
+  (with-time "update-grid-data"
+    (do
+      (update-primary-layer weather-data display-params)
+      (update-overlay weather-data display-params))))
+
+(defn update-grid
+  [{:keys [display-params
+           cell-count
+           wind-stability-areas
+           weather-data
+           selected-cell] :as new-data}]
+  (with-time "update-grid"
+    (update-grid-data weather-data display-params)))
+
+(def wind-vector-defs
+  (svg/defs
+    (for [speed (range 5 (inc max-wind-vector-speed) 5)]
+      (let [ticks (math/clamp 1 100 (int (/ speed 5)))
+            full-tails (int (/ ticks 2))
+            half-tail? (odd? ticks)
+            scale 1
+            offset 0.1
+            tail-step 0.18
+            tail-slant 0.1
+            tail-width (* 0.25 1.5)]
+        (svg/g
+         :id (wind-vector-id speed)
+         ;; Vector line
+         #_(doto ctx
+             (.rotate (math/deg->rad heading))
+             (.moveTo 0 (- 0.5 tail-slant))
+             (.lineTo 0 (+ -0.5 tail-slant)))
+         (svg/line
+          :attr {:class "wind-vector"}
+          :x1 0
+          :x2 0
+          :y1 (- 0.5 tail-slant)
+          :y2 (+ -0.5 tail-slant))
+
+         ;; Full tails
+         #_(dotimes [n full-tails]
+             (.moveTo ctx 0 (+ (+ -0.5 tail-slant)
+                               (* tail-step n)))
+             (.lineTo ctx tail-width (+ -0.50 (* tail-step n))))
+         (svg/g
+          :attr {:class "wind-vector full-tail"}
+          (for [n (range full-tails)]
+            (svg/line :x1 0
+                      :y1 (+ (+ -0.5 tail-slant)
+                             (* tail-step n))
+                      :x2 tail-width
+                      :y2 (+ -0.50 (* tail-step n)))))
+
+         ;; Half tails
+         #_(when half-tail?
+             (.moveTo ctx
+                      0
+                      (+ (+ -0.50 tail-slant)
+                         (* tail-step full-tails)))
+             (.lineTo ctx
+                      (* tail-width 0.5)
+                      (+ -0.50 (+ (* tail-step full-tails)
+                                  (* 0.5 tail-step)))))
+         (when half-tail?
+           (svg/line
+            :attr {:class "wind-vector half-tail"}
+            :x1 0
+            :y1 (+ (+ -0.50 tail-slant)
+                   (* tail-step full-tails))
+            :x2 (* tail-width 0.5)
+            :y2 (+ -0.50 (+ (* tail-step full-tails)
+                            (* 0.5 tail-step))))))))))
+
+(defelem grid
+  [{:keys [data weather-params]
+    :as attrs}]
+  (let [[nx ny] (-> @weather-params :cell-count)]
+    (let [primary-layer (svg/g
+                         :id "primary-layer"
+                         :css (cell= {:opacity (-> data :display-params :opacity)}))
+          wind-overlay (svg/g
+                        :id "wind-overlay"
+                        :toggle (cell= (-> data
+                                           :display-params
+                                           :overlay
+                                           (= :wind))))
+          text-overlay (svg/g
+                        :id "text-overlay"
+                        #_:attr #_{:class (-> data
+                                          :display-params
+                                          :overlay)}
+                        :toggle (cell= (-> data
+                                           :display-params
+                                           :overlay
+                                           #{:pressure :temperature :type})))]
+      (with-let [elem (svg/svg
+                       (-> attrs
+                           (dissoc :data :weather-params)
+                           (assoc :viewBox (gstring/format "0 0 %d %d" nx ny)
+                                  :width (cell= (-> data :display-params :dimensions first))
+                                  :height (cell= (-> data :display-params :dimensions second))
+                                  :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
+                                         "xmlns" "http://www.w3.org/2000/svg"}))
+                       wind-vector-defs
+                       ;; TODO: Not working in Firefox/Safari because
+                       ;; the image tag doesn't render as
+                       ;; self-closing. Not sure how to convince
+                       ;; Hoplon to change that.
+                       (svg/image
+                        :id "map-image"
+                        :toggle (cell= (-> display-params :map #{:none nil} not))
+                        :xlink-href (cell= (or (-> display-params :map map-image) ""))
+                        :x 0
+                        :y 0
+                        :width nx
+                        :height ny)
+                       primary-layer
+                       wind-overlay
+                       text-overlay)]
+        ;; TODO: We're capturing the value of the number of cells, but it
+        ;; never changes. One of these days I should probably factor this
+        ;; out. Either that or just react to changes in the number of
+        ;; cells by re-inserting the child rects.
+        (with-init!
+          (with-time "Initial create"
+            (do
+              ;; Primary layer
+              (let [frag (.createDocumentFragment js/document)]
+                (doseq [x (range nx)
+                        y (range ny)]
+                  (let [r (doto (.createElementNS
+                                 js/document
+                                 "http://www.w3.org/2000/svg"
+                                 "rect")
+                            (.setAttribute "id" (str "grid-primary-cell-" x "-" y))
+                            (.setAttribute "x" (str x))
+                            (.setAttribute "y" (str y))
+                            (.setAttribute "width" "1")
+                            (.setAttribute "height" "1"))]
+                    (gdom/appendChild frag r)))
+                (gdom/appendChild primary-layer frag))
+              ;; Wind vector layer
+              (let [frag (.createDocumentFragment js/document)]
+                (doseq [x (range nx)
+                        y (range ny)]
+                  (let [g (doto (.createElementNS
+                                 js/document
+                                 "http://www.w3.org/2000/svg"
+                                 "g")
+                            (.setAttribute "transform"
+                                           #_"http://www.w3.org/2000/svg"
+                                           (gstring/format "translate(%f, %f)"
+                                                           (+ x 0.5)
+                                                           (+ y 0.5))))
+                        r (doto (.createElementNS
+                                 js/document
+                                 "http://www.w3.org/2000/svg"
+                                 "use")
+                            (.setAttribute "id" (str "grid-wind-cell-" x "-" y)))]
+                    (gdom/appendChild g r)
+                    (gdom/appendChild frag g)))
+                (gdom/appendChild wind-overlay frag))
+              ;; Text overlay layer
+              (let [frag (.createDocumentFragment js/document)
+                    scale 0.02]
+                (doseq [x (range nx)
+                        y (range ny)]
+                  (let [t (doto (.createElementNS
+                                 js/document
+                                 "http://www.w3.org/2000/svg"
+                                 "text")
+                            (.setAttribute "transform"
+                                           ;; TODO: figure out how to center these stupid things
+                                           (gstring/format "scale(%f) translate(%f, %f)"
+                                                           scale
+                                                           (/ (+ x 0.1) scale)
+                                                           (/ (+ y 0.9) scale)))
+                            (.setAttribute "id" (str "grid-text-cell-" x "-" y)))]
+                    (gdom/appendChild frag t)))
+                (gdom/appendChild text-overlay frag))))
+          (formula-of [data] (update-grid data)))))))
+
+
 ;;; User Interface
 
 (def ESCAPE_KEY 27)
 (def ENTER_KEY 13)
+
+(defelem control-section
+  [attributes children]
+  (let [visible (cell false)
+        change-visibility #(swap! visible not)]
+    (fieldset
+     :class "controls"
+     attributes
+     (legend
+      (div
+       :click change-visibility
+       :class (formula-of [visible]
+                          {:toggle true
+                           :visible visible})
+       "")
+      (span
+       :click change-visibility
+       (:title attributes))
+      (if-let [h (:help-for attributes)]
+        (help-for h)
+        []))
+     (div
+      :class "control-container"
+      :toggle visible
+      :fade-toggle visible
+      children))))
 
 (defn two-column
   [left right]
@@ -801,8 +1090,8 @@
                                                       (= name)))
                                  name))))
                          (td (help-for help-path))))]
-    (fieldset
-     (legend "Display controls")
+    (control-section
+     :title "Display controls"
      (div
       :class "display-controls"
       (table
@@ -832,15 +1121,15 @@
                                           (* 100)
                                           long))
                         :change #(swap! display-params
-                                       assoc
-                                       :opacity
-                                       (/ @% 100.0))}))
+                                        assoc
+                                        :opacity
+                                        (/ @% 100.0))}))
             (td (help-for [:display-controls :opacity])))))))))
 
 (defn weather-parameters
   []
-  (fieldset
-   (legend "Weather parameters")
+  (control-section
+   :title "Weather parameters"
    (table
     :id "general-params"
     (tbody
@@ -870,9 +1159,9 @@
                                         cell=)]
   (defn wind-stability-parameters
     []
-    (fieldset
-     (legend "Wind stability regions"
-             (help-for [:wind-stability-areas]))
+    (control-section
+     :title "Wind stability regions"
+     :help-for [:wind-stability-areas]
      (loop-tpl :bindings [[index area] indexed-wind-stability-areas]
        (div
         :class "wind-stability-params"
@@ -909,8 +1198,8 @@
 
 (defn weather-type-configuration
   []
-  (fieldset
-   (legend "Weather type configuration")
+  (control-section
+   :title "Weather type configuration"
    (table
     :id "category-params"
     (thead
@@ -941,9 +1230,9 @@
 
 (defn step-controls
   []
-  (fieldset
+  (control-section
    :id "time-location-params"
-   (legend "Time/location controls")
+   :title "Time/location controls"
    (table
     (tbody
      (tr (map td ["X Offset"
@@ -981,21 +1270,11 @@
            :click #(move 1)
            "Step Forward >>")))
 
-(defn weather-controls
-  []
-  (two-column
-   (div
-    (weather-parameters)
-    (wind-stability-parameters))
-   (div
-    (weather-type-configuration)
-    (step-controls))))
-
 (defn serialization-controls
   []
-  (fieldset
+  (control-section
    :id "load-save-controls"
-   (legend "Load/save")
+   :title "Load/save"
    (div
     :class "button-container"
     (cell=
@@ -1034,9 +1313,9 @@
 
 (defn forecast-display
   []
-  (fieldset
-   (legend "Forecast"
-           (help-for [:forecast]))
+  (control-section
+   :title "Forecast"
+   :help-for [:forecast]
    (div :id "forecast"
         (cell=
          (let [[x y] (:coordinates selected-cell)]
@@ -1081,6 +1360,59 @@
   []
   #_(div "Debug info"))
 
+(defmethod do! :viewBox
+  [elem _ value]
+  (if (= false value)
+    (.removeAttribute elem "viewBox")
+    (.setAttribute elem "viewBox" value)))
+
+(defmethod do! :xlink-href
+  [elem _ value]
+  (if (= false value)
+    (.removeAttributeNS elem "http://www.w3.org/1999/xlink" "href")
+    (do
+      (log "Setting xlink attr")
+      (.setAttributeNS elem "http://www.w3.org/1999/xlink" "href" value))))
+
+(defmethod do! :preserveAspectRatio
+  [elem _ value]
+  (if (= false value)
+    (.removeAttribute elem "preserveAspectRatio")
+    (.setAttribute elem "preserveAspectRatio" value)))
+
+(defn test-region
+  []
+  (let [n 59
+        m (into {}
+                (for [x (range n)
+                      y (range n)]
+                  [[x y] (cell (rand-int 4))]))]
+    (with-time "test initial render"
+      [(svg/svg
+        :id "test"
+        :viewBox (gstring/format "0 0 %d %d" n n)
+        :width 600
+        :height 600
+        ;; :css {"display" "none"}
+        #_(for [[[x y] c] m]
+            (svg/rect
+             :attr (formula-of [c] {:class (str "test" c)})
+             :x x
+             :y y
+             :width 1
+             :height 1)))
+       (button
+        :click (fn []
+                 (.requestAnimationFrame
+                  js/window
+                  #(with-time "randomize"
+                     (doseq [x (range n)
+                             y (range n)]
+                       (-> (str "cell-" x "-" y)
+                           gdom/getElement
+                           (.setAttribute "class" (str "test" (rand-int 4))))))))
+        "Randomize")])))
+
 (html
  (head
   (title "WeatherGen")
@@ -1113,10 +1445,14 @@
    (div :class "two-column"
         (div :class "left-column"
              (button-bar)
-             (weather-grid))
+             (grid :data grid-data :weather-params weather-params)
+             #_(weather-grid))
         (div :class "right-column"
              (display-controls)
-             (weather-controls)
+             (weather-parameters)
+             (weather-type-configuration)
+             (wind-stability-parameters)
+             (step-controls)
              (serialization-controls)
              (forecast-display)))
    (debug-info))))
@@ -1126,7 +1462,8 @@
 (add-watch grid-data
            :redraw-triggers
            (fn [k r o n]
-             (draw-grid n)))
+             #_(draw-grid n)
+             #_(update-grid o n)))
 
 ;;; Initialization
 

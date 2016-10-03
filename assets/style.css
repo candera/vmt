@@ -312,3 +312,61 @@ rect.inclement {
     margin-left: 7px;
 }
 
+.controls .toggle {
+    display: inline-block;
+    /* margin-right: 3px; */
+    /* background: black; */
+    /* color: white; */
+    /* padding: 0 2px 2px 2px; */
+    /* font-family: monospace; */
+
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid black;
+    display: inline-block;
+    margin-right: 3px;
+    vertical-align: middle;
+    transform: rotate(-90deg);
+}
+
+.controls .toggle.visible {
+    transform: rotate(0);
+}
+
+.controls legend {
+    margin-left: -10px;
+}
+
+/******************************************/
+
+.test0 {
+    fill: red;
+}
+
+.test1 {
+    fill: yellow;
+}
+
+.test2 {
+    fill: green;
+}
+
+.test3 {
+    fill: blue;
+}
+
+/* Wind Vectors ***************************/
+
+.wind-vector {
+    stroke: black;
+    stroke-width: 0.1px;
+}
+
+/* Text overlay ***************************/
+
+#text-overlay {
+    stroke: black;
+    font-size: 0.7;
+}

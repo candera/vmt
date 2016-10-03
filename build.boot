@@ -1,3 +1,5 @@
+(def project 'lsobot)
+
 (set-env!
  :dependencies '[[org.clojure/clojurescript "1.9.76"]
                  [adzerk/boot-cljs          "1.7.228-1"]
@@ -50,3 +52,18 @@
     (hoplon)
     (cljs :optimizations :advanced)
     (target :dir #{"target"})))
+
+(defn run-repl-server
+  [port]
+  (clojure.core.server/start-server {:port port
+                                     :name (name project)
+                                     :accept 'clojure.core.server/repl
+                                     :daemon false}))
+
+(deftask repl-server
+  "Run a REPL socket server"
+  [p port PORT int "Port to run the server on. Defaults to 5555."]
+  (let [port (or port 5559)]
+    (run-repl-server port)
+    (println "Server is running on port" port)
+    (Thread/sleep Long/MAX_VALUE)))
