@@ -380,3 +380,17 @@ rect.inclement {
     stroke-dasharray: 0.2 0.2;
     stroke-width: 0.1;
 }
+
+/* Wind stability areas ********************/
+
+.wind-stability-area {
+    fill: none;
+    stroke: black;
+    stroke-width: 0.2px;
+    stroke-dasharray: 0.6 0.6;
+}
+
+.wind-stability-area.alternate {
+    stroke: white;
+    stroke-dashoffset: 0.6;
+}

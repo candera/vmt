@@ -770,11 +770,7 @@
       (update-overlay weather-data display-params))))
 
 (defn update-grid
-  [{:keys [display-params
-           cell-count
-           wind-stability-areas
-           weather-data
-           selected-cell] :as new-data}]
+  [weather-data display-params]
   (with-time "update-grid"
     (update-grid-data weather-data display-params)))
 
@@ -841,6 +837,7 @@
   [{:keys [display-params
            selected-cell
            weather-data
+           wind-stability-areas
            nx
            ny]
     :as attrs}]
@@ -860,6 +857,24 @@
                       :toggle (cell= (-> display-params
                                          :overlay
                                          #{:pressure :temperature :type})))
+        wind-stability-overlay (formula-of
+                                [wind-stability-areas]
+                                (svg/g
+                                 :id "wind-stability-overlay"
+                                 (for [area wind-stability-areas]
+                                   (let [{:keys [x y width height]} (:bounds area)]
+                                     [(svg/rect
+                                       :attr {:class "wind-stability-area"}
+                                       :x x
+                                       :y y
+                                       :width width
+                                       :height height)
+                                      (svg/rect
+                                       :attr {:class "wind-stability-area alternate"}
+                                       :x x
+                                       :y y
+                                       :width width
+                                       :height height)]))))
         selected-cell-overlay (formula-of
                                [selected-cell]
                                (let [[x y] (:coordinates selected-cell)]
@@ -895,6 +910,7 @@
                      primary-layer
                      wind-overlay
                      text-overlay
+                     wind-stability-overlay
                      selected-cell-overlay)]
       ;; TODO: We're capturing the value of the number of cells, but it
       ;; never changes. One of these days I should probably factor this
@@ -1467,6 +1483,7 @@
              (grid :display-params display-params
                    :weather-data weather-data
                    :selected-cell selected-cell
+                   :wind-stability-areas wind-stability-areas
                    ;; TODO: Make these reactive, although they never
                    ;; change, so maybe not
                    :nx (first (:cell-count @weather-params))
