@@ -91,7 +91,7 @@
 
 ;; TODO: Flip to portrait layout once the aspect ratio goes below a
 ;; certain point. Maybe dynamically.
-(def initial-size (max 250 (- (.width (js/$ js/window)) 710)))
+(def initial-size (max 250 (- (.width (js/$ js/window)) 600)))
 
 (defc display-params {:dimensions [initial-size initial-size]
                       :opacity    0.75
@@ -991,7 +991,7 @@
 
 (defelem control-section
   [attributes children]
-  (let [visible (cell false)
+  (let [visible (cell true)
         change-visibility #(swap! visible not)]
     (fieldset
      :class "controls"

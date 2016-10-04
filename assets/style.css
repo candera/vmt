@@ -107,13 +107,15 @@ svg {
 
 .two-column {
     display: flex;
+    flex-wrap: wrap;
 }
 
 .left-column {
 }
 
 .right-column {
-    width: 100%;
+    flex-grow: 1;
+    min-width: 550px;
 }
 
 rect.sunny {
@@ -137,7 +139,11 @@ rect.inclement {
 }
 
 .button-bar {
-    display: inline-block;
+    margin: 0 0 3px 0;
+}
+
+.button-bar button {
+    margin-right: 3px;
 }
 
 #enlarge-grid, #shrink-grid {
