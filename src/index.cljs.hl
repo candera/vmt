@@ -85,13 +85,22 @@
                                                        :height 4}
                                               :wind {:speed 5
                                                      :heading 0}
-                                              :index 0}]})
+                                              :index 0}]
+                      :weather-overrides [{:location {:x 22
+                                                      :y 45}
+                                           :radius-inner 2
+                                           :radius-outer 4
+                                           :begin {:day 1 :hour 5 :minute 0}
+                                           :peak {:day 1 :hour 6 :minute 0}
+                                           :taper {:day 1 :hour 8 :minute 0}
+                                           :end {:day 1 :hour 9 :minute 0}
+                                           :pressure 28.5
+                                           :strength 0.5
+                                           }]})
 
 (defc movement-params {:step 60
                        :direction {:heading 135 :speed 30}})
 
-;; TODO: Flip to portrait layout once the aspect ratio goes below a
-;; certain point. Maybe dynamically.
 (def initial-size (max 250 (- (.width (js/$ js/window)) 600)))
 
 (defc display-params {:dimensions [initial-size initial-size]
@@ -116,9 +125,6 @@
 
 ;;; Formulas
 
-#_(defc= weather-data (with-time "Compute model"
-                      (model/weather-grid weather-params)))
-
 (defc= selected-cell-weather (get weather-data (:coordinates selected-cell)))
 
 (defc= cell-count (:cell-count weather-params))
@@ -126,12 +132,6 @@
 (defc= wind-stability-areas
   (->> weather-params
        :wind-stability-areas))
-
-#_(defc= grid-data {:display-params display-params
-                  :cell-count cell-count
-                  :weather-data weather-data
-                  :selected-cell selected-cell
-                  :wind-stability-areas wind-stability-areas})
 
 (defc= forecast (when selected-cell
                   (let [result (model/forecast
@@ -343,7 +343,8 @@
                 (set! #(let [data (-> %
                                       .-target
                                       .-result
-                                      reader/read-string)]
+                                      reader/read-string
+                                      #_(upgrade revision))]
                          (dosync
                           (let [{:keys [time]} (swap! weather-params merge (:weather-params data))]
                             (swap! display-params merge (:display-params data))
@@ -454,265 +455,6 @@
                      :temperature
                      temperature-color)))
 
-(defn clear-transform
-  "Reset the current transform to the identity transform"
-  [ctx]
-  (.setTransform ctx 1 0 0 1 0 0))
-
-;; TODO: There should be a way to set a base transform so that the
-;; grid x and y map in a way that don't make us carry around the
-;; dimensions everywhere. Maybe grid cells are 1x1, and the integer
-;; x,y coordinates specify the center.
-(defn set-transform
-  "Sets the transform so that the grid cell at the specified x and y
-  map to the unit square centered at the origin."
-  [ctx x y cell-count canvas-dimensions]
-  (let [[x-cells y-cells] cell-count
-        [w h] canvas-dimensions
-        width (/ w x-cells)
-        height (/ h y-cells)]
-    (doto ctx
-      (clear-transform)
-      ;; Some sort of weird bug where this doesn't work when x is 17
-      (.translate (* (double (+ x 0.000001)) width) (* (double (+ y 0.00001)) height))
-      (.scale (/ w x-cells) (/ h y-cells))
-      (.translate 0.5 0.5))))
-
-(defn set-fill
-  [ctx r g b a]
-  (-> ctx .-fillStyle (set!  (str "rgba("
-                                  r ","
-                                  g ","
-                                  b ","
-                                  a ")"))))
-
-(defmulti prep-overlay (fn [ctx overlay] overlay))
-
-(defmethod prep-overlay :default
-  [_ _])
-
-(defmethod prep-overlay :wind
-  [ctx _]
-  (-> ctx .-lineWidth (set! 0.07)))
-
-(defn prep-text-overlay
-  [ctx]
-  (set-fill ctx 0 0 0 1)
-  ;;(-> ctx .-lineStyle (set! "0.2"))
-  (-> ctx .-lineWidth (set! "0.07"))
-  (-> ctx .-font (set! "1px bold serif")))
-
-(defmethod prep-overlay :temperature
-  [ctx _]
-  (prep-text-overlay ctx))
-
-(defmethod prep-overlay :pressure
-  [ctx _]
-  (prep-text-overlay ctx))
-
-(defmethod prep-overlay :coords
-  [ctx _]
-  (prep-text-overlay ctx))
-
-(defmethod prep-overlay :type
-  [ctx _]
-  (prep-text-overlay ctx))
-
-(defmulti stroke-overlay (fn [ctx overlay weather] overlay))
-
-(defmethod stroke-overlay :default
-  [_ _ _])
-
-(defmethod stroke-overlay :wind
-  [ctx overlay weather]
-  (let [{:keys [speed heading]} (:wind weather)
-        effective-speed (math/nearest speed 5)
-        ticks (math/clamp 1 100 (int (/ effective-speed 5)))
-        full-tails (int (/ ticks 2))
-        half-tail? (odd? ticks)
-        scale 1
-        offset 0.1
-        tail-step 0.18
-        tail-slant 0.1
-        tail-width (* 0.25 1.5)]
-    (.scale ctx scale scale)
-    (.translate ctx 0 offset)
-    ;; Vector line
-    (doto ctx
-      (.rotate (math/deg->rad heading))
-      (.moveTo 0 (- 0.5 tail-slant))
-      (.lineTo 0 (+ -0.5 tail-slant)))
-
-    ;; Full tails
-    (dotimes [n full-tails]
-      (.moveTo ctx 0 (+ (+ -0.5 tail-slant)
-                        (* tail-step n)))
-      (.lineTo ctx tail-width (+ -0.50 (* tail-step n))))
-
-    ;; Half tails
-    (when half-tail?
-      (.moveTo ctx
-               0
-               (+ (+ -0.50 tail-slant)
-                  (* tail-step full-tails)))
-      (.lineTo ctx
-               (* tail-width 0.5)
-               (+ -0.50 (+ (* tail-step full-tails)
-                           (* 0.5 tail-step)))))))
-
-(defn stroke-text-overlay
-  [ctx text]
-  (.save ctx)
-  ;; Firefox bug workaround - it seems to enforce a minimum text size
-  (.scale ctx 0.42 0.42)
-  (.fillText ctx
-             text
-             (-> text count (* -0.24))
-             0.2)
-  (.restore ctx))
-
-(defmethod stroke-overlay :pressure
-  [ctx overlay weather]
-  (stroke-text-overlay ctx (-> weather :pressure (.toFixed 2))))
-
-(defmethod stroke-overlay :temperature
-  [ctx overlay weather]
-  (stroke-text-overlay ctx (-> weather :temperature (.toFixed 1))))
-
-(defmethod stroke-overlay :type
-  [ctx overlay weather]
-  (stroke-text-overlay ctx (-> weather :type {:sunny "S"
-                                              :fair "F"
-                                              :poor "P"
-                                              :inclement "I"})))
-
-(defmethod stroke-overlay :coords
-  [ctx overlay weather]
-  (stroke-text-overlay ctx (str (:x weather) "," (:y weather))))
-
-(defn draw-map
-  "Draws the map, unless the image is not ready. In that case, returns
-  a channel that will close when it is."
-  [ctx map [w h]]
-  #_(when (map-image map)
-    (let [img (gdom/getElement (map-image-id map))]
-      (if (.-complete img)
-        (do (.drawImage ctx
-                        img
-                        0 0
-                        w h)
-            nil)
-        (let [ch (async/chan)]
-          (-> img .-onload (set! (fn [_]
-                                   (async/put! ch :done)
-                                   (async/close! ch))))
-          ch)))))
-
-(defn draw-data
-  "Draws the data layer"
-  [ctx display opacity weather-data cell-count dimensions]
-  (when (display-key->name display)
-    (.save ctx)
-    (doseq [[[x y] weather] weather-data
-            :let [[r g b a] (fill-color display weather)]]
-      (set-transform ctx x y cell-count dimensions)
-      (set-fill ctx r g b (* a opacity))
-      (.fillRect ctx -0.5 -0.5 1 1))
-    (.restore ctx)))
-
-(defn draw-overlay
-  "Draws the overlay layer"
-  [ctx overlay weather-data cell-count dimensions]
-  (.save ctx)
-  (prep-overlay ctx overlay)
-  (.beginPath ctx)
-  (doseq [[[x y] weather] weather-data
-          :let [weather (assoc weather :x x :y y)]]
-    (set-transform ctx x y cell-count dimensions)
-    (stroke-overlay ctx overlay weather))
-  (.stroke ctx)
-  (.restore ctx))
-
-(defn draw-selected-cell
-  "Draws a border around the currently selected cell"
-  [ctx [x y] cell-count dimensions]
-  (when (and x y)
-    (.save ctx)
-    (set-transform ctx x y cell-count dimensions)
-    (.setLineDash ctx #js [0.2 0.12])
-    (-> ctx .-lineWidth (set! "0.15"))
-    (-> ctx .-lineDashOffset (set! 2))
-    (-> ctx .-fillStyle (set! "rgba(0,0,0,0.5)"))
-    (.fillRect ctx -0.5 -0.5 1 1)
-    (.strokeRect ctx -0.5 -0.5 1 1)
-    (.restore ctx)))
-
-(defn draw-wind-stability
-  "Draws a border around the wind stability areas"
-  [ctx areas cell-count dimensions]
-  (doseq [{:keys [x y width height]} (map :bounds areas)]
-    (.save ctx)
-    (set-transform ctx x y cell-count dimensions)
-    (.setLineDash ctx #js [0.5 0.5])
-    (-> ctx .-lineWidth (set! "0.2"))
-    (-> ctx .-lineDashOffset (set! 0))
-    (.strokeRect ctx -0.5 -0.5 width height)
-    (-> ctx .-strokeStyle (set! "white"))
-    (-> ctx .-lineDashOffset (set! 0.5))
-    (.strokeRect ctx -0.5 -0.5 width height)
-    (.restore ctx)))
-
-(defn draw-grid
-  [{:keys [display-params cell-count wind-stability-areas weather-data selected-cell] :as data}]
-  (with-time "draw-grid"
-    (let [canvas (gdom/getElement "weather-grid")
-          {:keys [map
-                  opacity
-                  dimensions
-                  display
-                  overlay]} display-params
-          [w h]  dimensions]
-      (if-not (= w (.-width canvas))
-        (let [ch (async/chan)]
-          #_(println "canvas is not done loading" :dimensions dimensions
-                     :width (.-width canvas)
-                     :height (.-height canvas))
-          (go-loop [n 200]
-            (<! (async/timeout 10))
-            (when (pos? n)
-              (if (= w (.-width canvas))
-                (draw-grid data)
-                (do
-                  (println "Still waiting for canvas" :n n)
-                  (recur (dec n)))))))
-        (let [ctx               (.getContext canvas "2d")
-              [x-cells y-cells] cell-count
-              cell-width        (/ w x-cells)
-              cell-height       (/ h y-cells)]
-          #_(println "Canvas is correct size" :dimensions dimensions
-                     :width (.-width canvas)
-                     :height (.-height canvas))
-          (clear-transform ctx)
-          (.clearRect ctx 0 0 w h)
-
-          ;; Draw the map if it's ready
-          (if-let [ch (draw-map ctx map dimensions)]
-            (go
-              (<! ch)
-              (draw-grid data))
-
-            (do
-              (draw-data ctx display opacity weather-data cell-count dimensions)
-              (draw-overlay ctx overlay weather-data cell-count dimensions)
-
-              ;; Draw bounding boxes
-              #_(doseq [x (range x-cells)
-                        y (range y-cells)]
-                  (set-transform ctx x y cell-count dimensions)
-                  (.strokeRect ctx -0.5 -0.5 1 1))
-
-              (draw-selected-cell ctx (:coordinates selected-cell) cell-count dimensions)
-              (draw-wind-stability ctx wind-stability-areas cell-count dimensions))))))))
 
 (def max-wind-vector-speed 50)
 
@@ -727,7 +469,6 @@
             :let [{:keys [speed heading]} (:wind weather)
                   cell (gdom/getElement (str "grid-wind-cell-" x "-" y))]]
       (.setAttribute cell
-                     #_"http://www.w3.org/2000/svg"
                      "transform"
                      (str "rotate(" (long heading) ")"))
       (.setAttributeNS cell
@@ -817,11 +558,9 @@
             tail-width (* 0.25 1.5)]
         (svg/g
          :id (wind-vector-id speed)
+         ;; TODO: Combine the vector line and the first tail into a
+         ;; single stroke so we eliminate the corner artifacts.
          ;; Vector line
-         #_(doto ctx
-             (.rotate (math/deg->rad heading))
-             (.moveTo 0 (- 0.5 tail-slant))
-             (.lineTo 0 (+ -0.5 tail-slant)))
          (svg/line
           :attr {:class "wind-vector"}
           :x1 0
@@ -830,10 +569,6 @@
           :y2 (+ -0.5 tail-slant))
 
          ;; Full tails
-         #_(dotimes [n full-tails]
-             (.moveTo ctx 0 (+ (+ -0.5 tail-slant)
-                               (* tail-step n)))
-             (.lineTo ctx tail-width (+ -0.50 (* tail-step n))))
          (svg/g
           :attr {:class "wind-vector full-tail"}
           (for [n (range full-tails)]
@@ -844,15 +579,6 @@
                       :y2 (+ -0.50 (* tail-step n)))))
 
          ;; Half tails
-         #_(when half-tail?
-             (.moveTo ctx
-                      0
-                      (+ (+ -0.50 tail-slant)
-                         (* tail-step full-tails)))
-             (.lineTo ctx
-                      (* tail-width 0.5)
-                      (+ -0.50 (+ (* tail-step full-tails)
-                                  (* 0.5 tail-step)))))
          (when half-tail?
            (svg/line
             :attr {:class "wind-vector half-tail"}
@@ -881,9 +607,6 @@
                                          (= :wind))))
         text-overlay (svg/g
                       :id "text-overlay"
-                      #_:attr #_{:class (-> data
-                                            :display-params
-                                            :overlay)}
                       :toggle (cell= (-> display-params
                                          :overlay
                                          #{:pressure :temperature :type})))
@@ -976,7 +699,6 @@
                                "http://www.w3.org/2000/svg"
                                "g")
                           (.setAttribute "transform"
-                                         #_"http://www.w3.org/2000/svg"
                                          (gstring/format "translate(%f, %f)"
                                                          (+ x 0.5)
                                                          (+ y 0.5))))
@@ -1113,34 +835,6 @@
                  :css {:background-image (str "url('images/tool-" (name tool) ".png')")})
 ])))
 
-#_(defn weather-grid
-  []
-  (cell-let [[width height] dimensions
-             {:keys [map]}  display-params
-             [nx ny] cell-count]
-    (div :id "weather-grid-stack"
-         :width (cell= width)
-         :height (cell= height)
-         (for [[k v] map-image]
-           (img :id (map-image-id k)
-                :width (cell= width)
-                :height (cell= height)
-                :style (cell= (if (= k map)
-                                ""
-                                "display: none"))
-                :src v))
-         (img :id "blank-map"
-              :width (cell= width)
-              :height (cell= height)
-              :src "images/blank.png")
-         (canvas :id "weather-grid"
-                 :css (cell=
-                       {:cursor  (case current-tool
-                                   :select "pointer"
-                                   :wind-stability "crosshair")})
-                 :width (cell= width)
-                 :height (cell= height)
-                 :click #(grid-click % "weather-grid" @cell-count @dimensions)))))
 
 (defn display-controls
   []
@@ -1521,8 +1215,7 @@
                    ;; TODO: Make these reactive, although they never
                    ;; change, so maybe not
                    :nx (first (:cell-count @weather-params))
-                   :ny (second (:cell-count @weather-params)))
-             #_(weather-grid))
+                   :ny (second (:cell-count @weather-params))))
         (div :class "right-column"
              (serialization-controls)
              (step-controls)
@@ -1530,19 +1223,7 @@
              (weather-parameters)
              (forecast-display)
              (weather-type-configuration)
-             (wind-stability-parameters)))
+             (wind-stability-parameters)
+             #_(weather-override-parameters)))
    (debug-info))))
 
-;;; Triggers
-
-#_(add-watch grid-data
-           :redraw-triggers
-           (fn [k r o n]
-             #_(draw-grid n)
-             #_(update-grid o n)))
-
-;;; Initialization
-
-#_(draw-grid @grid-data)
-
-;;(-> js/document js/jQuery .tooltip)
