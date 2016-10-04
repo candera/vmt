@@ -1,0 +1,3 @@
+{:require  [weathergen.worker]
+ :init-fns [weathergen.worker/main]
+ :compiler-options {:optimizations :simple}}

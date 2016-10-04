@@ -2,10 +2,7 @@
 
 cd $(dirname $0)/..
 
-STAGE_DIR=~/Dropbox/Public/weathergen
-
 bin/build --allow-dirty
-rm -rf ${STAGE_DIR}
-mkdir -p ${STAGE_DIR}
-cp -R target/ ${STAGE_DIR}/
-open https://dl.dropboxusercontent.com/u/451150/weathergen/index.html
+aws s3 sync target/ s3://weathergen
+open https://weathergen.s3-website-us-east-1.amazonaws.com
+
