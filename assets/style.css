@@ -370,3 +370,13 @@ rect.inclement {
     stroke: black;
     font-size: 0.7;
 }
+
+/* Selected cell overlay ******************/
+
+#selected-cell-overlay {
+    fill: rgba(0,0,0,0.3);
+    stroke: black;
+    stroke-width: 0.1px;
+    stroke-dasharray: 0.2 0.2;
+    stroke-width: 0.1;
+}

@@ -118,13 +118,11 @@
 
 (defc= cell-count (:cell-count weather-params))
 
-(defc= dimensions (:dimensions display-params))
-
 (defc= wind-stability-areas
   (->> weather-params
        :wind-stability-areas))
 
-(defc= grid-data {:display-params display-params
+#_(defc= grid-data {:display-params display-params
                   :cell-count cell-count
                   :weather-data weather-data
                   :selected-cell selected-cell
@@ -840,113 +838,134 @@
                             (* 0.5 tail-step))))))))))
 
 (defelem grid
-  [{:keys [data weather-params]
+  [{:keys [display-params
+           selected-cell
+           weather-data
+           nx
+           ny]
     :as attrs}]
-  (let [[nx ny] (-> @weather-params :cell-count)]
-    (let [primary-layer (svg/g
-                         :id "primary-layer"
-                         :css (cell= {:opacity (-> data :display-params :opacity)}))
-          wind-overlay (svg/g
-                        :id "wind-overlay"
-                        :toggle (cell= (-> data
-                                           :display-params
-                                           :overlay
-                                           (= :wind))))
-          text-overlay (svg/g
-                        :id "text-overlay"
-                        #_:attr #_{:class (-> data
-                                          :display-params
-                                          :overlay)}
-                        :toggle (cell= (-> data
-                                           :display-params
-                                           :overlay
-                                           #{:pressure :temperature :type})))]
-      (with-let [elem (svg/svg
-                       (-> attrs
-                           (dissoc :data :weather-params)
-                           (assoc :viewBox (gstring/format "0 0 %d %d" nx ny)
-                                  :width (cell= (-> data :display-params :dimensions first))
-                                  :height (cell= (-> data :display-params :dimensions second))
-                                  :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
-                                         "xmlns" "http://www.w3.org/2000/svg"}))
-                       wind-vector-defs
-                       ;; TODO: Not working in Firefox/Safari because
-                       ;; the image tag doesn't render as
-                       ;; self-closing. Not sure how to convince
-                       ;; Hoplon to change that.
-                       (svg/image
-                        :id "map-image"
-                        :toggle (cell= (-> display-params :map #{:none nil} not))
-                        :xlink-href (cell= (or (-> display-params :map map-image) ""))
-                        :x 0
-                        :y 0
-                        :width nx
-                        :height ny)
-                       primary-layer
-                       wind-overlay
-                       text-overlay)]
-        ;; TODO: We're capturing the value of the number of cells, but it
-        ;; never changes. One of these days I should probably factor this
-        ;; out. Either that or just react to changes in the number of
-        ;; cells by re-inserting the child rects.
-        (with-init!
-          (with-time "Initial create"
-            (do
-              ;; Primary layer
-              (let [frag (.createDocumentFragment js/document)]
-                (doseq [x (range nx)
-                        y (range ny)]
-                  (let [r (doto (.createElementNS
-                                 js/document
-                                 "http://www.w3.org/2000/svg"
-                                 "rect")
-                            (.setAttribute "id" (str "grid-primary-cell-" x "-" y))
-                            (.setAttribute "x" (str x))
-                            (.setAttribute "y" (str y))
-                            (.setAttribute "width" "1")
-                            (.setAttribute "height" "1"))]
-                    (gdom/appendChild frag r)))
-                (gdom/appendChild primary-layer frag))
-              ;; Wind vector layer
-              (let [frag (.createDocumentFragment js/document)]
-                (doseq [x (range nx)
-                        y (range ny)]
-                  (let [g (doto (.createElementNS
-                                 js/document
-                                 "http://www.w3.org/2000/svg"
-                                 "g")
-                            (.setAttribute "transform"
-                                           #_"http://www.w3.org/2000/svg"
-                                           (gstring/format "translate(%f, %f)"
-                                                           (+ x 0.5)
-                                                           (+ y 0.5))))
-                        r (doto (.createElementNS
-                                 js/document
-                                 "http://www.w3.org/2000/svg"
-                                 "use")
-                            (.setAttribute "id" (str "grid-wind-cell-" x "-" y)))]
-                    (gdom/appendChild g r)
-                    (gdom/appendChild frag g)))
-                (gdom/appendChild wind-overlay frag))
-              ;; Text overlay layer
-              (let [frag (.createDocumentFragment js/document)
-                    scale 0.02]
-                (doseq [x (range nx)
-                        y (range ny)]
-                  (let [t (doto (.createElementNS
-                                 js/document
-                                 "http://www.w3.org/2000/svg"
-                                 "text")
-                            (.setAttribute "transform"
-                                           ;; TODO: figure out how to center these stupid things
-                                           (gstring/format "scale(%f) translate(%f, %f)"
-                                                           scale
-                                                           (/ (+ x 0.1) scale)
-                                                           (/ (+ y 0.9) scale)))
-                            (.setAttribute "id" (str "grid-text-cell-" x "-" y)))]
-                    (gdom/appendChild frag t)))
-                (gdom/appendChild text-overlay frag))))
-          (formula-of [data] (update-grid data)))))))
+  (let [primary-layer (svg/g
+                       :id "primary-layer"
+                       :css (cell= {:opacity (-> display-params :opacity)}))
+        wind-overlay (svg/g
+                      :id "wind-overlay"
+                      :toggle (cell= (-> display-params
+                                         :overlay
+                                         (= :wind))))
+        text-overlay (svg/g
+                      :id "text-overlay"
+                      #_:attr #_{:class (-> data
+                                            :display-params
+                                            :overlay)}
+                      :toggle (cell= (-> display-params
+                                         :overlay
+                                         #{:pressure :temperature :type})))
+        selected-cell-overlay (formula-of
+                               [selected-cell]
+                               (let [[x y] (:coordinates selected-cell)]
+                                 (if (and x y)
+                                   (svg/rect
+                                    :id "selected-cell-overlay"
+                                    :x x
+                                    :y y
+                                    :width 1
+                                    :height 1)
+                                   [])))]
+    (with-let [elem (svg/svg
+                     (-> attrs
+                         (dissoc :display-params :selected-cell :weather-data)
+                         (assoc :viewBox (gstring/format "0 0 %d %d" nx ny)
+                                :width (cell= (-> display-params :dimensions first))
+                                :height (cell= (-> display-params :dimensions second))
+                                :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
+                                       "xmlns" "http://www.w3.org/2000/svg"}))
+                     wind-vector-defs
+                     ;; TODO: Not working in Firefox/Safari because
+                     ;; the image tag doesn't render as
+                     ;; self-closing. Not sure how to convince
+                     ;; Hoplon to change that.
+                     (svg/image
+                      :id "map-image"
+                      :toggle (cell= (-> display-params :map #{:none nil} not))
+                      :xlink-href (cell= (or (-> display-params :map map-image) ""))
+                      :x 0
+                      :y 0
+                      :width nx
+                      :height ny)
+                     primary-layer
+                     wind-overlay
+                     text-overlay
+                     selected-cell-overlay)]
+      ;; TODO: We're capturing the value of the number of cells, but it
+      ;; never changes. One of these days I should probably factor this
+      ;; out. Either that or just react to changes in the number of
+      ;; cells by re-inserting the child rects.
+      (with-init!
+        (with-time "Initial create"
+          (do
+            ;; Primary layer
+            (let [frag (.createDocumentFragment js/document)]
+              (doseq [x (range nx)
+                      y (range ny)]
+                (let [r (doto (.createElementNS
+                               js/document
+                               "http://www.w3.org/2000/svg"
+                               "rect")
+                          (.setAttribute "id" (str "grid-primary-cell-" x "-" y))
+                          (.setAttribute "x" (str x))
+                          (.setAttribute "y" (str y))
+                          (.setAttribute "width" "1")
+                          (.setAttribute "height" "1")
+                          (-> .-onclick
+                              (set! #(reset! selected-cell {:location nil
+                                                            :coordinates [x y]}))))]
+                  (gdom/appendChild frag r)))
+              (gdom/appendChild primary-layer frag))
+            ;; Wind vector layer
+            (let [frag (.createDocumentFragment js/document)]
+              (doseq [x (range nx)
+                      y (range ny)]
+                (let [g (doto (.createElementNS
+                               js/document
+                               "http://www.w3.org/2000/svg"
+                               "g")
+                          (.setAttribute "transform"
+                                         #_"http://www.w3.org/2000/svg"
+                                         (gstring/format "translate(%f, %f)"
+                                                         (+ x 0.5)
+                                                         (+ y 0.5))))
+                      r (doto (.createElementNS
+                               js/document
+                               "http://www.w3.org/2000/svg"
+                               "use")
+                          (.setAttribute "id" (str "grid-wind-cell-" x "-" y)))]
+                  (gdom/appendChild g r)
+                  (gdom/appendChild frag g)))
+              (gdom/appendChild wind-overlay frag))
+            ;; Text overlay layer
+            (let [frag (.createDocumentFragment js/document)
+                  scale 0.02]
+              (doseq [x (range nx)
+                      y (range ny)]
+                (let [t (doto (.createElementNS
+                               js/document
+                               "http://www.w3.org/2000/svg"
+                               "text")
+                          (.setAttribute "transform"
+                                         ;; TODO: figure out how to center these stupid things
+                                         (gstring/format "scale(%f) translate(%f, %f)"
+                                                         scale
+                                                         (/ (+ x 0.1) scale)
+                                                         (/ (+ y 0.9) scale)))
+                          (.setAttribute "id" (str "grid-text-cell-" x "-" y)))]
+                  (gdom/appendChild frag t)))
+              (gdom/appendChild text-overlay frag))))
+        (let [display-params* (formula-of
+                               [display-params]
+                               (dissoc display-params :dimensions :opacity))]
+          (formula-of
+           [weather-data display-params*]
+           (update-grid weather-data display-params*)))))))
 
 
 ;;; User Interface
@@ -1044,7 +1063,7 @@
                  :css {:background-image (str "url('images/tool-" (name tool) ".png')")})
 ])))
 
-(defn weather-grid
+#_(defn weather-grid
   []
   (cell-let [[width height] dimensions
              {:keys [map]}  display-params
@@ -1445,7 +1464,13 @@
    (div :class "two-column"
         (div :class "left-column"
              (button-bar)
-             (grid :data grid-data :weather-params weather-params)
+             (grid :display-params display-params
+                   :weather-data weather-data
+                   :selected-cell selected-cell
+                   ;; TODO: Make these reactive, although they never
+                   ;; change, so maybe not
+                   :nx (first (:cell-count @weather-params))
+                   :ny (second (:cell-count @weather-params)))
              #_(weather-grid))
         (div :class "right-column"
              (display-controls)
@@ -1459,7 +1484,7 @@
 
 ;;; Triggers
 
-(add-watch grid-data
+#_(add-watch grid-data
            :redraw-triggers
            (fn [k r o n]
              #_(draw-grid n)
@@ -1467,6 +1492,6 @@
 
 ;;; Initialization
 
-(draw-grid @grid-data)
+#_(draw-grid @grid-data)
 
 ;;(-> js/document js/jQuery .tooltip)
