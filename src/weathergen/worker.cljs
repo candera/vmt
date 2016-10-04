@@ -1,14 +1,21 @@
 (ns weathergen.worker
-  ;;(:require [butler.core :as butler])
-  )
+  (:require [weathergen.model :as model]
+            [weathergen.encoding :refer [encode decode]]
+            [cljs.core.async :as async])
+  (:require-macros
+   [cljs.core.async.macros :refer [go go-loop]]
+   [weathergen.cljs.macros :refer [with-time]]))
 
-;; (defn generate-weather
-;;   [params]
-;;   (butler/bring! :weather-data
-;;                  ;; TODO: Generate weather data
-;;                  (rand-int 100)))
+(defn main
+  []
+  (set! js/onmessage
+        (fn [msg]
+          (let [val (->> msg .-data decode)]
+            #_(.log js/console
+                    "Worker received message"
+                    (pr-str val))
+            (js/postMessage
+             (with-time "Compute weather grid"
+               (encode (model/weather-grid val))))))))
 
-;; (defn main
-;;   []
-;;   (butler/serve! {:generate-weather generate-weather}))
 

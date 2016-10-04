@@ -15,7 +15,9 @@
                  #_[weasel "0.7.0" :scope "test"]
                  [org.clojure/tools.nrepl "0.2.12" :scope "test"]
                  [cljsjs/jquery-ui "1.11.4-0"]
-                 [org.clojure/data.csv "0.1.3"]]
+                 [org.clojure/data.csv "0.1.3"]
+                 ;; TODO: Update to later version
+                 [com.cognitect/transit-cljs "0.8.239"]]
  :source-paths #{"src"}
  :asset-paths  #{"assets"})
 
@@ -33,7 +35,7 @@
     (watch)
     (speak)
     (hoplon)
-    (reload)
+    ;;(reload)
     (cljs)
     (serve :port 8000)))
 

@@ -7,6 +7,7 @@
             [weathergen.canvas :as canvas]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
+            [weathergen.encoding :refer [encode decode]]
             [weathergen.fmap :as fmap]
             [weathergen.help :as help]
             [weathergen.math :as math]
@@ -109,9 +110,13 @@
 (defc time-params
   {:displayed {:day 1 :hour 5 :minute 0}})
 
+(defc weather-data nil)
+
+(defc computing true)
+
 ;;; Formulas
 
-(defc= weather-data (with-time "Compute model"
+#_(defc= weather-data (with-time "Compute model"
                       (model/weather-grid weather-params)))
 
 (defc= selected-cell-weather (get weather-data (:coordinates selected-cell)))
@@ -145,6 +150,31 @@
     (-> selected-cell :location not-empty) :named
     (:coordinates selected-cell) :coordinates
     :else :none))
+
+;;; Worker
+
+
+(def worker (js/Worker. "worker.js"))
+
+(def command-ch (async/chan (async/dropping-buffer 1)))
+(def worker-ch (async/chan))
+
+(-> worker
+    .-onmessage
+    (set! #(go (async/>! worker-ch (->> % .-data decode)))))
+
+(go-loop []
+  (let [[command data] (async/<! command-ch)]
+    (.postMessage worker (encode data))
+    (reset! computing true)
+    (reset! weather-data (<! worker-ch))
+    (reset! computing false)
+    (recur)))
+
+(formula-of
+ [weather-params]
+ (go
+   (async/>! command-ch [:compute-weather weather-params])))
 
 ;;; Utility
 
@@ -1045,9 +1075,13 @@
 (defn button-bar
   []
   (div :class "button-bar"
-       ;; Unfortunately, the way that Hoplon changes elements means
-       ;; that the canvas resizes asynchronously, which screws up
-       ;; redrawing. TODO: Fix this
+       (img
+        :id "computing-indicator"
+        :src (formula-of
+              [computing]
+              (if computing
+                "images/spinner.gif"
+                "images/checkmark.png")))
        (button :id "enlarge-grid"
                :click #(swap! display-params
                               update
@@ -1490,13 +1524,13 @@
                    :ny (second (:cell-count @weather-params)))
              #_(weather-grid))
         (div :class "right-column"
+             (serialization-controls)
+             (step-controls)
              (display-controls)
              (weather-parameters)
+             (forecast-display)
              (weather-type-configuration)
-             (wind-stability-parameters)
-             (step-controls)
-             (serialization-controls)
-             (forecast-display)))
+             (wind-stability-parameters)))
    (debug-info))))
 
 ;;; Triggers

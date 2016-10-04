@@ -138,6 +138,8 @@ rect.inclement {
     opacity: 0.75;
 }
 
+/* Button bar ********************/
+
 .button-bar {
     margin: 0 0 3px 0;
 }
@@ -161,6 +163,12 @@ rect.inclement {
     width: 24px;
     height: 24px;
 }
+
+#computing-indicator {
+    width: 24px;
+}
+
+/* Forecast ********************/
 
 #forecast table {
     border-collapse: collapse;
@@ -368,6 +376,7 @@ rect.inclement {
 .wind-vector {
     stroke: black;
     stroke-width: 0.1px;
+    pointer-events: none;
 }
 
 /* Text overlay ***************************/
@@ -400,3 +409,4 @@ rect.inclement {
     stroke: white;
     stroke-dashoffset: 0.6;
 }
+
