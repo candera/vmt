@@ -978,7 +978,7 @@
               (gdom/appendChild text-overlay frag))))
         (let [display-params* (formula-of
                                [display-params]
-                               (dissoc display-params :dimensions :opacity))]
+                               (dissoc display-params :dimensions :opacity :map))]
           (formula-of
            [weather-data display-params*]
            (update-grid weather-data display-params*)))))))
