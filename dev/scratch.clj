@@ -711,3 +711,103 @@
        (filterv #(#{"Airbase" "Airstrip"} (:type %)))
        pr-str
        (spit (clojure.java.io/writer (format "/tmp/%s-airbases.edn" (name theater))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(require :reload '[weathergen.model :as model])
+
+(clojure.pprint/pprint
+ (model/upgrade
+  {:revision 4
+   :weather-params
+   {:temp-uniformity 0.7
+    :pressure        {:min 28.5 :max 31}
+    :cell-count      [59 59]
+    :feature-size    10
+    :categories      {:sunny     {:weight 4
+                                  :wind   {:min 0 :mean 7 :max 20}
+                                  :temp   {:min 20 :mean 22 :max 24}}
+                      :fair      {:weight 1
+                                  :pressure 29.95
+                                  :wind   {:min 5 :mean 10 :max 30}
+                                  :temp   {:min 18 :mean 21 :max 23}}
+                      :poor      {:weight 2
+                                  :pressure 29.1
+                                  :wind   {:min 10 :mean 18 :max 30}
+                                  :temp   {:min 15 :mean 18 :max 21}}
+                      :inclement {:weight 3
+                                  :pressure 28.7
+                                  :wind   {:min 15 :mean 25 :max 60}
+                                  :temp   {:min 12 :mean 14 :max 16}}}
+    :turbulence      {:size 1 :power 250}
+    :origin          [1000 1000]
+    :evolution       3600
+    :time            {:offset 1234
+                      :current {:day 1 :hour 5 :minute 0}}
+    :wind-uniformity 0.7
+    :crossfade       0.1
+    :prevailing-wind {:heading 325}
+    :seed            1234
+    :wind-stability-areas [{:bounds {:x 16
+                                     :y 39
+                                     :width 6
+                                     :height 4}
+                            :wind {:speed 5
+                                   :heading 0}
+                            :index 0}]
+    :weather-overrides [{:location {:x 22
+                                    :y 45}
+                         :radius-inner 2
+                         :radius-outer 4
+                         :begin {:day 1 :hour 5 :minute 0}
+                         :peak {:day 1 :hour 6 :minute 0}
+                         :taper {:day 1 :hour 8 :minute 0}
+                         :end {:day 1 :hour 9 :minute 0}
+                         :pressure 28.5
+                         :strength 0.5
+                         }]}}
+  7))
+
+(model/weather-grid
+ {:temp-uniformity 0.7
+  :pressure        {:min 28.5 :max 31}
+  :cell-count      [59 59]
+  :feature-size    10
+  :categories      {:sunny     {:wind   {:min 0 :mean 7 :max 20}
+                                :temp   {:min 20 :mean 22 :max 24}}
+                    :fair      {:pressure 29.95
+                                :wind   {:min 5 :mean 10 :max 30}
+                                :temp   {:min 18 :mean 21 :max 23}}
+                    :poor      {:pressure 29.1
+                                :wind   {:min 10 :mean 18 :max 30}
+                                :temp   {:min 15 :mean 18 :max 21}}
+                    :inclement {:pressure 28.7
+                                :wind   {:min 15 :mean 25 :max 60}
+                                :temp   {:min 12 :mean 14 :max 16}}}
+  :turbulence      {:size 1 :power 250}
+  :origin          [1000 1000]
+  :evolution       3600
+  :time            {:offset 1234
+                    :current {:day 1 :hour 5 :minute 0}}
+  :wind-uniformity 0.7
+  :crossfade       0.1
+  :prevailing-wind {:heading 325}
+  :seed            1234
+  :wind-stability-areas [{:bounds {:x 16
+                                   :y 39
+                                   :width 6
+                                   :height 4}
+                          :wind {:speed 5
+                                 :heading 0}
+                          :index 0}]
+  :weather-overrides [{:location {:x 22
+                                  :y 45}
+                       :radius-inner 2
+                       :radius-outer 4
+                       :begin {:day 1 :hour 5 :minute 0}
+                       :peak {:day 1 :hour 6 :minute 0}
+                       :taper {:day 1 :hour 8 :minute 0}
+                       :end {:day 1 :hour 9 :minute 0}
+                       :pressure 28.5
+                       :strength 0.5
+                       }]})

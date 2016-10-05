@@ -22,12 +22,18 @@
 (def types [:inclement :poor :fair :sunny])
 
 (defn mix
-  [x fade type-params]
-  (let [cumulative        (->> types
-                               (map #(get-in type-params [% :weight]))
-                               (reductions +))
-        total             (last cumulative)
-        [i p f s]         (map #(/ % total) cumulative)
+  [x fade type-params min-pressure max-pressure]
+  (let [pressure-span     (- max-pressure min-pressure)
+        i                 (/ (- (get-in type-params [:inclement :pressure])
+                                min-pressure)
+                             pressure-span)
+        p                 (/ (- (get-in type-params [:poor :pressure])
+                                min-pressure)
+                             pressure-span)
+        f                 (/ (- (get-in type-params [:fair :pressure])
+                                min-pressure)
+                             pressure-span)
+        s                 1
         contour           [[0                           [1 0 0 0]]
                            [(* (- 1 fade) i)            [1 0 0 0]]
                            [(math/interpolate i p fade) [0 1 0 0]]
@@ -45,7 +51,6 @@
 
 (defn mix-on
   [categories mixture path]
-  #_(println "mix-on" :categories categories :mixture mixture :path path)
   (->> (for [[type weight] mixture]
          (* weight (get-in categories (into [type] path))))
        (reduce +)))
@@ -212,7 +217,11 @@
                        (* (- max-pressure min-pressure))
                        (+ min-pressure)
                        (math/clamp min-pressure max-pressure))
-        mixture   (mix value crossfade categories)
+        mixture   (mix value
+                       crossfade
+                       categories
+                       min-pressure
+                       max-pressure)
         wind-var  (math/reject-tails wind-uniformity
                                      (smoothed-noise-field (* x* feature-size)
                                                            (* y* feature-size)
@@ -340,6 +349,43 @@
          [:time :current]
          time))))
 
+;;; Migrations
+
+
+(defn upgrade-pressure-threshold
+  "Performs the upgrade from the weight-based thresholds to explicit
+  pressure thresholds."
+  [params]
+  (let [min-pressure  (get-in params [:weather-params :pressure :min])
+        max-pressure  (get-in params [:weather-params :pressure :max])
+        pressure-span (- max-pressure min-pressure)
+        normalize     (fn [relative]
+                        (+ min-pressure
+                           (* relative pressure-span)))
+        cumulative    (->> types
+                           (map #(get-in params [:weather-params :categories % :weight]))
+                           (reductions +))
+        total         (last cumulative)
+        thresholds    (zipmap types
+                              (map #(-> %
+                                        (/ total)
+                                        (* pressure-span)
+                                        (+ min-pressure)
+                                        (math/nearest 0.01))
+                                   cumulative))]
+    (reduce (fn [params type]
+              (assoc-in params
+                        [:weather-params :categories type :pressure]
+                        (thresholds type)))
+            params
+            types)))
+
+(defn upgrade
+  [{:keys [revision] :as params} new-revision]
+  (cond-> params
+    (< revision 6) upgrade-pressure-threshold
+    :always (assoc :revision new-revision)))
+
 (comment
   (clojure.pprint/pprint
    (weather-grid {:origin          [(* 100 (rand))
@@ -350,7 +396,7 @@
                                     :evolution 600}
                   :direction       {:speed 30 :heading 135}
                   :seed            1
-                  :size            [4 4]
+                  :cell-count      [4 4]
                   :feature-size    10
                   :turbulence       {:size 1
                                      :power 30}
@@ -361,14 +407,13 @@
                   :wind-uniformity 0.7
                   :temp-uniformity 0.7
                   :wind-stability-areas [[0 0 1 1]]
-                  :categories      {:sunny     {:weight 5
-                                                :wind   {:min  0
+                  :categories      {:sunny     {:wind   {:min  0
                                                          :mean 10
                                                          :max  20}
                                                 :temp   {:min  0
                                                          :mean 10
                                                          :max  20}}
-                                    :fair      {:weight 3
+                                    :fair      {:pressure 29.95
                                                 :wind   {:min  5
                                                          :mean 15
                                                          :max  25}
@@ -376,14 +421,14 @@
 
                                                          :mean 10
                                                          :max  20}}
-                                    :poor      {:weight 1
+                                    :poor      {:pressure 29.1
                                                 :wind   {:min  15
                                                          :mean 25
                                                          :max  45}
                                                 :temp   {:min  0
                                                          :mean 10
                                                          :max  20}}
-                                    :inclement {:weight 1
+                                    :inclement {:pressure 28.7
                                                 :wind   {:min 25
                                                          :mean 40
                                                          :max 80}
@@ -402,7 +447,7 @@
           :direction {:heading 135 :speed 30}}
          1))
 
-  (;;clojure.pprint/pprint
+  ( ;;clojure.pprint/pprint
    def f
    (forecast [10 10]
              {:origin          [(* 100 (rand))
@@ -424,14 +469,13 @@
               :wind-uniformity 0.7
               :temp-uniformity 0.7
               :wind-stability-areas [[0 0 1 1]]
-              :categories      {:sunny     {:weight 5
-                                            :wind   {:min  0
+              :categories      {:sunny     {:wind   {:min  0
                                                      :mean 10
                                                      :max  20}
                                             :temp   {:min  0
                                                      :mean 10
                                                      :max  20}}
-                                :fair      {:weight 3
+                                :fair      {:pressure 29.95
                                             :wind   {:min  5
                                                      :mean 15
                                                      :max  25}
@@ -439,14 +483,14 @@
 
                                                      :mean 10
                                                      :max  20}}
-                                :poor      {:weight 1
+                                :poor      {:pressure 29.1
                                             :wind   {:min  15
                                                      :mean 25
                                                      :max  45}
                                             :temp   {:min  0
                                                      :mean 10
                                                      :max  20}}
-                                :inclement {:weight 1
+                                :inclement {:pressure 28.7
                                             :wind   {:min 25
                                                      :mean 40
                                                      :max 80}

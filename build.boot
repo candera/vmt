@@ -17,7 +17,8 @@
                  [cljsjs/jquery-ui "1.11.4-0"]
                  [org.clojure/data.csv "0.1.3"]
                  ;; TODO: Update to later version
-                 [com.cognitect/transit-cljs "0.8.239"]]
+                 [com.cognitect/transit-cljs "0.8.239"]
+                 [clojure-complete "0.2.4" :scope "test"]]
  :source-paths #{"src"}
  :asset-paths  #{"assets"})
 

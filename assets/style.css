@@ -47,6 +47,8 @@ body {
     float: right;
 }
 
+/* Weather category config ********************/
+
 #category-params input {
     width: 40px;
 }
@@ -61,6 +63,11 @@ body {
 
 #category-params .weight {
     min-width: 64px;
+}
+
+#category-params .derived {
+    font-size: 75%;
+    text-align: center;
 }
 
 #general-params {

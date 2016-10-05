@@ -119,11 +119,10 @@ forward and backward in time. ")}
      change, even if not moving.")}
 
    :weather-type-config
-   {:weight
-    (p "How relatively common or uncommon this type of weather should
-     be. These numbers are not strict measurements, but rather
-     relative values. You will probably have to pick larger numbers
-     for sunny than for any of the others to get good results.")
+   {:pressure
+    (p "Weather types (sunny, fair, poor, and inclement) are
+    determined by the barometric pressure. Set the thresholds for
+    which pressures determine which weather types here. ")
 
     :wind
     (p "The minimum, maximum, and mean wind speeds for each weather

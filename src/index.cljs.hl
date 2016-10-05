@@ -58,16 +58,15 @@
                       :pressure        {:min 28.5 :max 31}
                       :cell-count      [59 59]
                       :feature-size    10
-                      :categories      {:sunny     {:weight 20
-                                                    :wind   {:min 0 :mean 7 :max 20}
+                      :categories      {:sunny     {:wind   {:min 0 :mean 7 :max 20}
                                                     :temp   {:min 20 :mean 22 :max 24}}
-                                        :fair      {:weight 0.7
+                                        :fair      {:pressure 29.95
                                                     :wind   {:min 5 :mean 10 :max 30}
                                                     :temp   {:min 18 :mean 21 :max 23}}
-                                        :poor      {:weight 5
+                                        :poor      {:pressure 29.1
                                                     :wind   {:min 10 :mean 18 :max 30}
                                                     :temp   {:min 15 :mean 18 :max 21}}
-                                        :inclement {:weight 2
+                                        :inclement {:pressure 28.7
                                                     :wind   {:min 15 :mean 25 :max 60}
                                                     :temp   {:min 12 :mean 14 :max 16}}}
                       :turbulence      {:size 1 :power 250}
@@ -344,7 +343,7 @@
                                       .-target
                                       .-result
                                       reader/read-string
-                                      #_(upgrade revision))]
+                                      (model/upgrade revision))]
                          (dosync
                           (let [{:keys [time]} (swap! weather-params merge (:weather-params data))]
                             (swap! display-params merge (:display-params data))
@@ -803,7 +802,12 @@
               [computing]
               (if computing
                 "images/spinner.gif"
-                "images/checkmark.png")))
+                "images/checkmark.png"))
+        :title (formula-of
+                [computing]
+                (if computing
+                  "Weather is being updated"
+                  "Weather computations complete")))
        (button :id "enlarge-grid"
                :click #(swap! display-params
                               update
@@ -822,18 +826,18 @@
                (img :src "images/smaller.png"))
        ;; TODO: Not quite there yet.
        #_(for [tool [:select :wind-stability]
-             :let [id (str "tool-" (name tool))]]
-         [(input
-            :class (str "exclusive-button tool " (name tool))
-            :type "radio"
-            :name "tool"
-            :id id
-            :checked (cell= (= tool current-tool))
-            :change #(do (println "Changed tool to " tool)
-                         (reset! current-tool tool)))
-          (label :for id
-                 :css {:background-image (str "url('images/tool-" (name tool) ".png')")})
-])))
+               :let [id (str "tool-" (name tool))]]
+           [(input
+             :class (str "exclusive-button tool " (name tool))
+             :type "radio"
+             :name "tool"
+             :id id
+             :checked (cell= (= tool current-tool))
+             :change #(do (println "Changed tool to " tool)
+                          (reset! current-tool tool)))
+            (label :for id
+                   :css {:background-image (str "url('images/tool-" (name tool) ".png')")})
+            ])))
 
 
 (defn display-controls
@@ -967,12 +971,12 @@
     :id "category-params"
     (thead
      (tr (td "")
-         (td "")
+         (td :colspan 2 "Pressure" (help-for [:weather-type-config :pressure]))
          (td :colspan 3 "Wind" (help-for [:weather-type-config :wind]))
          (td :colspan 3 "Temperature" (help-for [:weather-type-config :temp])))
      (tr (map #(apply td %)
-              [""
-               [:class "weight" "Weight" (help-for [:weather-type-config :weight])]
+              [[""]
+               ["From"] ["To"]
                ["Min"] ["Mean"] ["Max"]
                ["Min"] ["Mean"] ["Max"]])))
     (tbody
@@ -982,9 +986,49 @@
             :css {"background-color" (let [[r g b] (weather-color category)]
                                        (str "rgb(" r "," g "," b ")"))}
             (type-key->name category))
-           (td
-            (div :class "edit-field"
-                 (edit-field weather-params [:categories category :weight])))
+           (condp contains? category
+             #{:sunny}
+             [(td
+               :class "derived"
+               (formula-of
+                [weather-params]
+                (-> weather-params
+                    (get-in [:categories :fair :pressure])
+                    (.toFixed 2))))
+              (td
+               :class "derived"
+               (formula-of
+                [weather-params]
+                (-> weather-params
+                    (get-in [:pressure :max])
+                    (.toFixed 2))))]
+
+             #{:fair :poor}
+             [(td
+               :class "derived"
+               (formula-of
+                [weather-params]
+                (->  weather-params
+                     (get-in [:categories
+                              (if (= :fair category)
+                                :poor :inclement)
+                              :pressure])
+                     (.toFixed 2))))
+              (td (div
+                   :class "edit-field"
+                   (edit-field weather-params [:categories category :pressure])))]
+
+             #{:inclement}
+             [(td
+               :class "derived"
+               (formula-of
+                [weather-params]
+                (-> weather-params
+                    (get-in [:pressure :min])
+                    (.toFixed 2))))
+              (td (div
+                   :class "edit-field"
+                   (edit-field weather-params [:categories category :pressure])))])
            (for [param [:wind :temp]
                  metric [:min :mean :max]]
              (td :class (str (name param) " " (name metric))
@@ -1226,4 +1270,3 @@
              (wind-stability-parameters)
              #_(weather-override-parameters)))
    (debug-info))))
-
