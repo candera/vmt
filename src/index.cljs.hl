@@ -610,6 +610,10 @@
                                          (= :wind))))
         text-overlay (svg/g
                       :id "text-overlay"
+                      :attr (cell= {:class (str "text-overlay "
+                                                (-> display-params
+                                                    :overlay
+                                                    name))})
                       :toggle (cell= (-> display-params
                                          :overlay
                                          #{:pressure :temperature :type})))
@@ -732,7 +736,7 @@
               (gdom/appendChild wind-overlay frag))
             ;; Text overlay layer
             (let [frag (.createDocumentFragment js/document)
-                  scale 0.02]
+                  scale 0.03]
               (doseq [x (range nx)
                       y (range ny)]
                 (let [t (doto (.createElementNS
@@ -743,9 +747,10 @@
                                          ;; TODO: figure out how to center these stupid things
                                          (gstring/format "scale(%f) translate(%f, %f)"
                                                          scale
-                                                         (/ (+ x 0.1) scale)
+                                                         (/ (+ x 0.5) scale)
                                                          (/ (+ y 0.9) scale)))
-                          (.setAttribute "id" (str "grid-text-cell-" x "-" y)))]
+                          (.setAttribute "id" (str "grid-text-cell-" x "-" y))
+                          (.setAttribute "text-anchor" "middle"))]
                   (gdom/appendChild frag t)))
               (gdom/appendChild text-overlay frag))))
         (let [display-params* (formula-of

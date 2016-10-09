@@ -390,7 +390,15 @@ rect.inclement {
 
 #text-overlay {
     stroke: black;
-    font-size: 0.7;
+    pointer-events: none;
+}
+
+.text-overlay.temperature {
+    font-size: 120%;
+}
+
+.text-overlay.type {
+    font-size: 180%;
 }
 
 /* Selected cell overlay ******************/
