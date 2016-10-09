@@ -417,3 +417,22 @@ rect.inclement {
     stroke-dashoffset: 0.6;
 }
 
+/* Weather overrides ************************/
+
+.override-label {
+    vertical-align: bottom;
+    padding-bottom: 3px;
+}
+
+.weather-overrides input {
+    width: 50px;
+}
+
+.weather-override-area {
+    fill: none;
+    stroke-width: 0.2;
+    stroke: fuchsia;
+    stroke-dasharray: 0.2 0.1;
+}
+
+

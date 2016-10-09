@@ -802,12 +802,38 @@
                           :index 0}]
   :weather-overrides [{:location {:x 22
                                   :y 45}
-                       :radius-inner 2
-                       :radius-outer 4
+                       :radius 4
+                       :falloff 2
+                       :animate? false
                        :begin {:day 1 :hour 5 :minute 0}
                        :peak {:day 1 :hour 6 :minute 0}
                        :taper {:day 1 :hour 8 :minute 0}
                        :end {:day 1 :hour 9 :minute 0}
                        :pressure 28.5
-                       :strength 0.5
-                       }]})
+                       :strength 0.5}
+                      {:location {:x 22
+                                  :y 45}
+                       :radius 4
+                       :falloff 2
+                       :animate? false
+                       :begin {:day 1 :hour 5 :minute 0}
+                       :peak {:day 1 :hour 6 :minute 0}
+                       :taper {:day 1 :hour 8 :minute 0}
+                       :end {:day 1 :hour 9 :minute 0}
+                       :pressure 28.5
+                       :strength 0.5}]})
+
+
+(model/time-weight
+ {:location {:x 22
+             :y 45}
+  :radius 4
+  :falloff 2
+  :animate? true
+  :begin {:day 1 :hour 5 :minute 0}
+  :peak {:day 1 :hour 6 :minute 0}
+  :taper {:day 1 :hour 8 :minute 0}
+  :end {:day 1 :hour 9 :minute 0}
+  :pressure 28.5
+  :strength 0.5}
+ (model/falcon-time->minutes {:day 1 :hour 8 :minute 59}))

@@ -51,8 +51,12 @@
 
 (defn mix-on
   [categories mixture path]
-  (->> (for [[type weight] mixture]
-         (* weight (get-in categories (into [type] path))))
+  (->> mixture
+       (mapv (fn [[type weight]]
+               (-> categories
+                   (get type)
+                   (get-in path)
+                   (* weight))))
        (reduce +)))
 
 (defn smoothed-noise-field
@@ -184,6 +188,63 @@
         max  (mix-on categories mixture [:temp :max])]
     (math/distribute v min mean max 1)))
 
+(defn time-weight
+  "Given a weather override and a time, determine how much of the
+  override we should blend in based on the time."
+  [override current-time]
+  (let [{:keys [begin peak taper end animate?]} override
+        bm (falcon-time->minutes begin)
+        pm (falcon-time->minutes peak)
+        tm (falcon-time->minutes taper)
+        em (falcon-time->minutes end)
+        t (falcon-time->minutes current-time)]
+    (cond
+      (not animate?) 1
+      (< em t) 0
+      (< tm t) (- 1 (-> t (- tm) (/ (- em tm))))
+      (< pm t) 1
+      (< bm t) (-> t (- bm) (/ (- pm bm)))
+      :else 0)))
+
+(defn override
+  "Adjusts pressure value based on weather overrides, if any."
+  [params v]
+  (let [{:keys [x y t weather-overrides time]} params
+        min-pressure (-> params :pressure :min)
+        max-pressure (-> params :pressure :max)
+        pressure-span (- max-pressure min-pressure)]
+    (reduce (fn [v override]
+              (let [{:keys [location
+                            radius
+                            falloff
+                            strength
+                            animate?]} override
+                    locx (:x location)
+                    locy (:y location)
+                    dx (- locx x)
+                    dy (- locy y)
+                    d2 (+ (* dx dx) (* dy dy))
+                    r2 (* radius radius)
+                    fr (- radius falloff)
+                    f2 (* fr fr)
+                    position-weight (cond
+                                      (< d2 f2) 1
+                                      (< d2 r2) (- 1
+                                                   (-> d2
+                                                       Math/sqrt
+                                                       (- fr)
+                                                       (/ falloff)))
+                                      :else 0)
+                    tw (time-weight override (:current time))
+                    w (* position-weight tw strength)
+                    v* (-> override
+                           :pressure
+                           (- min-pressure)
+                           (/ pressure-span))]
+                (+ (* v* w) (* v (- 1 w)))))
+            v
+            weather-overrides)))
+
 (defn weather
   "x and y are in cells, t is in minutes."
   [{:keys [x y t seed
@@ -211,7 +272,7 @@
         ;; TODO: Introduce some sort of vector/matrix abstraction
         ;; Although meh: just make it run on the GPU
         p         (perturb params*)
-        value     (pressure-pattern p)
+        value     (override params (pressure-pattern p))
         wind-dir  (wind-direction p value params*)
         pressure  (->> value
                        (* (- max-pressure min-pressure))
@@ -350,7 +411,6 @@
          time))))
 
 ;;; Migrations
-
 
 (defn upgrade-pressure-threshold
   "Performs the upgrade from the weight-based thresholds to explicit

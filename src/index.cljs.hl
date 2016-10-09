@@ -87,15 +87,15 @@
                                               :index 0}]
                       :weather-overrides [{:location {:x 22
                                                       :y 45}
-                                           :radius-inner 2
-                                           :radius-outer 4
+                                           :radius 6
+                                           :falloff 3
+                                           :animate? false
                                            :begin {:day 1 :hour 5 :minute 0}
                                            :peak {:day 1 :hour 6 :minute 0}
                                            :taper {:day 1 :hour 8 :minute 0}
                                            :end {:day 1 :hour 9 :minute 0}
                                            :pressure 28.5
-                                           :strength 0.5
-                                           }]})
+                                           :strength 1}]})
 
 (defc movement-params {:step 60
                        :direction {:heading 135 :speed 30}})
@@ -131,6 +131,9 @@
 (defc= wind-stability-areas
   (->> weather-params
        :wind-stability-areas))
+
+(defc= weather-overrides
+  (:weather-overrides weather-params))
 
 (defc= forecast (when selected-cell
                   (let [result (model/forecast
@@ -593,6 +596,7 @@
            selected-cell
            weather-data
            wind-stability-areas
+           weather-overrides
            nx
            ny]
     :as attrs}]
@@ -637,10 +641,26 @@
                                     :y y
                                     :width 1
                                     :height 1)
-                                   [])))]
+                                   [])))
+        weather-overrides-overlay (formula-of
+                                   [weather-overrides]
+                                   (svg/g
+                                    :id "weather-overrides-overlay"
+                                    (for [override weather-overrides
+                                          :let [{:keys [location radius]} override
+                                                {:keys [x y]} location]]
+                                      (svg/circle
+                                       :attr {:class "weather-override-area"}
+                                       :cx (+ x 0.5)
+                                       :cy (+ y 0.5)
+                                       :r (- radius 0.5)))))]
     (with-let [elem (svg/svg
                      (-> attrs
-                         (dissoc :display-params :selected-cell :weather-data)
+                         (dissoc :display-params
+                                 :selected-cell
+                                 :weather-data
+                                 :wind-stability-areas
+                                 :weather-overrides)
                          (assoc :viewBox (gstring/format "0 0 %d %d" nx ny)
                                 :width (cell= (-> display-params :dimensions first))
                                 :height (cell= (-> display-params :dimensions second))
@@ -663,6 +683,7 @@
                      wind-overlay
                      text-overlay
                      wind-stability-overlay
+                     weather-overrides-overlay
                      selected-cell-overlay)]
       ;; TODO: We're capturing the value of the number of cells, but it
       ;; never changes. One of these days I should probably factor this
@@ -746,7 +767,7 @@
         change-visibility #(swap! visible not)]
     (fieldset
      :class "controls"
-     attributes
+     (dissoc attributes :title)
      (legend
       (div
        :click change-visibility
@@ -961,6 +982,90 @@
                               :wind {:heading 45
                                      :speed 5}
                               :index (count areas)})))
+      "Add New"))))
+
+(let [indexed-weather-overrides (formula-of
+                                 [weather-params]
+                                 (->> weather-params
+                                      :weather-overrides
+                                      (map-indexed vector)))]
+  (defn weather-override-parameters
+    []
+    (control-section
+     :title "Weather override regions"
+     :help-for [:weather-overrides]
+     (loop-tpl :bindings [[index override] indexed-weather-overrides]
+       (div
+        :class "weather-overrides"
+        (table
+         :id "weather-override-params"
+         (tbody
+          (tr (td :class "override-label" "Center X/Y")
+              (td (edit-field weather-params [:weather-overrides @index :location :x]))
+              (td (edit-field weather-params [:weather-overrides @index :location :y])))
+          (tr (td :class "override-label" "Radius")
+              (td (edit-field weather-params [:weather-overrides @index :radius])))
+          (tr (td :class "override-label" "Falloff")
+              (td (edit-field weather-params [:weather-overrides @index :falloff])))
+          (tr (td :class "override-label" "Pressure")
+              (td (edit-field weather-params [:weather-overrides @index :pressure])))
+          (tr (td :class "override-label" "Strength")
+              (td (edit-field weather-params [:weather-overrides @index :strength])))))
+        (let [id (gensym)]
+          (div
+           :class "weather-override-animate-checkbox"
+           (input :id id
+                  :type "checkbox"
+                  :checked (:animate? override)
+                  :change (fn [_] (swap! weather-params update-in [:weather-overrides @index :animate?] not)))
+           (label :for id "Fade in/out?")))
+        (table
+         :toggle (cell= (:animate? override))
+         (tr (td "")
+             (td "Day")
+             (td "Hour")
+             (td "Minute"))
+         (tr (td "Begin")
+             (td (edit-field weather-params [:weather-overrides @index :begin :day]))
+             (td (edit-field weather-params [:weather-overrides @index :begin :hour]))
+             (td (edit-field weather-params [:weather-overrides @index :begin :minute])))
+         (tr (td "Peak")
+             (td (edit-field weather-params [:weather-overrides @index :peak :day]))
+             (td (edit-field weather-params [:weather-overrides @index :peak :hour]))
+             (td (edit-field weather-params [:weather-overrides @index :peak :minute])))
+         (tr (td "Taper")
+             (td (edit-field weather-params [:weather-overrides @index :taper :day]))
+             (td (edit-field weather-params [:weather-overrides @index :taper :hour]))
+             (td (edit-field weather-params [:weather-overrides @index :taper :minute])))
+         (tr (td "End")
+             (td (edit-field weather-params [:weather-overrides @index :end :day]))
+             (td (edit-field weather-params [:weather-overrides @index :end :hour]))
+             (td (edit-field weather-params [:weather-overrides @index :end :minute]))))
+        (button
+         :click #(swap! weather-params
+                        update
+                        :weather-overrides
+                        (fn [overrides]
+                          (remove-nth overrides @index)))
+         "Remove")
+        (hr)))
+     (button
+      :click #(swap! weather-params
+                     (fn [wp]
+                       (update wp
+                               :weather-overrides
+                               (fn [overrides]
+                                 (conj overrides
+                                       {:location {:x 5
+                                                   :y 30}
+                                        :radius 4
+                                        :falloff 2
+                                        :begin (-> wp :time :current)
+                                        :peak (-> wp :time :current (model/add-time 60))
+                                        :taper (-> wp :time :current (model/add-time 180))
+                                        :end (-> wp :time :current (model/add-time 240))
+                                        :pressure 28.5
+                                        :strength 1})))))
       "Add New"))))
 
 (defn weather-type-configuration
@@ -1256,6 +1361,7 @@
                    :weather-data weather-data
                    :selected-cell selected-cell
                    :wind-stability-areas wind-stability-areas
+                   :weather-overrides weather-overrides
                    ;; TODO: Make these reactive, although they never
                    ;; change, so maybe not
                    :nx (first (:cell-count @weather-params))
@@ -1268,5 +1374,5 @@
              (forecast-display)
              (weather-type-configuration)
              (wind-stability-parameters)
-             #_(weather-override-parameters)))
+             (weather-override-parameters)))
    (debug-info))))
