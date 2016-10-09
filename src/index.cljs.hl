@@ -597,6 +597,7 @@
            weather-data
            wind-stability-areas
            weather-overrides
+           computing
            nx
            ny]
     :as attrs}]
@@ -657,7 +658,22 @@
                                        :attr {:class "weather-override-area"}
                                        :cx (+ x 0.5)
                                        :cy (+ y 0.5)
-                                       :r (- radius 0.5)))))]
+                                       :r (- radius 0.5)))))
+        spinner-overlay (svg/g
+                         :id "spinner-overlay"
+                         :toggle computing
+                         (svg/rect
+                          :attr {:class "spinner-background"}
+                          :x 0
+                          :y 0
+                          :width nx
+                          :height nx)
+                         (svg/image
+                          :x 0
+                          :y 0
+                          :width nx
+                          :height nx
+                          :xlink-href "images/spinner.svg"))]
     (with-let [elem (svg/svg
                      (-> attrs
                          (dissoc :display-params
@@ -688,7 +704,8 @@
                      text-overlay
                      wind-stability-overlay
                      weather-overrides-overlay
-                     selected-cell-overlay)]
+                     selected-cell-overlay
+                     spinner-overlay)]
       ;; TODO: We're capturing the value of the number of cells, but it
       ;; never changes. One of these days I should probably factor this
       ;; out. Either that or just react to changes in the number of
@@ -822,18 +839,6 @@
 (defn button-bar
   []
   (div :class "button-bar"
-       (img
-        :id "computing-indicator"
-        :src (formula-of
-              [computing]
-              (if computing
-                "images/spinner.gif"
-                "images/checkmark.png"))
-        :title (formula-of
-                [computing]
-                (if computing
-                  "Weather is being updated"
-                  "Weather computations complete")))
        (button :id "enlarge-grid"
                :click #(swap! display-params
                               update
@@ -1367,6 +1372,7 @@
                    :selected-cell selected-cell
                    :wind-stability-areas wind-stability-areas
                    :weather-overrides weather-overrides
+                   :computing computing
                    ;; TODO: Make these reactive, although they never
                    ;; change, so maybe not
                    :nx (first (:cell-count @weather-params))

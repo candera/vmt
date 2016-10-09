@@ -443,4 +443,8 @@ rect.inclement {
     stroke-dasharray: 0.2 0.1;
 }
 
+/* Spinner *********************************/
 
+.spinner-background {
+    opacity: 0.25;
+}
