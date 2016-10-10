@@ -448,3 +448,68 @@ rect.inclement {
 .spinner-background {
     opacity: 0.25;
 }
+
+.spinner {
+    animation-duration: 0.5s;
+    animation-iteration-count: infinite;
+    animation-name: spin-fade;
+    fill: lightblue;
+}
+
+.spinner0 {
+    animation-delay: 0s;
+}
+
+.spinner1 {
+    animation-delay: 0.042s;
+}
+
+.spinner2 {
+    animation-delay: 0.083s;
+}
+
+.spinner3 {
+    animation-delay: 0.125s;
+}
+
+.spinner4 {
+    animation-delay: 0.166s;
+}
+
+.spinner5 {
+    animation-delay: 0.208s;
+}
+
+.spinner6 {
+    animation-delay: 0.25s;
+}
+
+.spinner7 {
+    animation-delay: 0.292s;
+}
+
+.spinner8 {
+    animation-delay: 0.333s;
+}
+
+.spinner9 {
+    animation-delay: 0.375s;
+}
+
+.spinner10 {
+    animation-delay: 0.417s;
+}
+
+.spinner11 {
+    animation-delay: 0.458s;
+}
+
+
+@keyframes spin-fade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}

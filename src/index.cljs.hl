@@ -668,12 +668,28 @@
                           :y 0
                           :width nx
                           :height nx)
-                         (svg/image
-                          :x 0
-                          :y 0
-                          :width nx
-                          :height nx
-                          :xlink-href "images/spinner.svg"))]
+                         ;; Because it puts a huge load on the CPU to
+                         ;; do all the animation, we have to remove
+                         ;; the spinner completely when it's not being
+                         ;; used.
+                         (formula-of
+                          [computing]
+                          (if-not computing
+                            []
+                            (let [n 12]
+                              (for [i (range 0 n)]
+                                (svg/rect
+                                 :x (/ nx 2)
+                                 :y (/ ny 25)
+                                 :width (/ nx 20)
+                                 :height (/ nx 5)
+                                 :rx (/ nx 30)
+                                 :ry (/ ny 40)
+                                 :transform (gstring/format "rotate(%f %f %f)"
+                                                            (-> i (* (/ 360 n)))
+                                                            (/ nx 2)
+                                                            (/ ny 2))
+                                 :attr {:class (str "spinner spinner" i)}))))))]
     (with-let [elem (svg/svg
                      (-> attrs
                          (dissoc :display-params
