@@ -22,7 +22,7 @@
 
 ;;; Constants
 
-(def revision 6)
+(def revision 7)
 
 ;;; Browser detection
 
@@ -98,7 +98,7 @@
                                            :strength 1}]})
 
 (defc movement-params {:step 60
-                       :direction {:heading 135 :speed 30}})
+                       :direction {:heading 135 :speed 20}})
 
 (def initial-size (max 250 (- (.width (js/$ js/window)) 600)))
 
@@ -107,7 +107,8 @@
                       :display    :type
                       :map        :korea
                       :mouse-mode :select
-                      :overlay    :wind})
+                      :overlay    :wind
+                      :pressure-unit :inhg})
 
 (defc selected-cell nil)
 
@@ -152,6 +153,8 @@
     (-> selected-cell :location not-empty) :named
     (:coordinates selected-cell) :coordinates
     :else :none))
+
+(defc= pressure-unit (:pressure-unit display-params))
 
 ;;; Worker
 
@@ -232,6 +235,23 @@
 
 (def type-key->name
   (invert-map type-name->key))
+
+(def pressure-unit-name->key
+  {"InHg"     :inhg
+   "Millibar" :mbar})
+
+(def pressure-unit-key->name
+  (invert-map pressure-unit-name->key))
+
+(def mbar-per-inhg 33.8637526)
+
+(defn mbar->inhg
+  [mbar]
+  (/ mbar mbar-per-inhg))
+
+(defn inhg->mbar
+  [inhg]
+  (* inhg mbar-per-inhg))
 
 ;;; Mutations
 
@@ -457,6 +477,19 @@
                      :temperature
                      temperature-color)))
 
+(defn format-pressure
+  "Format a pressure in inches Mercury as appropriate for the unit."
+  [inhg unit]
+  (if (= :inhg unit)
+    (.toFixed inhg 2)
+    (-> inhg inhg->mbar (.toFixed 0))))
+
+(defn convert-pressure
+  "Return a pressure in inches Mercury given a value and a unit"
+  [val unit]
+  (if (= :inhg unit)
+    val
+    (mbar->inhg val)))
 
 (def max-wind-vector-speed 50)
 
@@ -479,22 +512,22 @@
                        (str "#" (wind-vector-id speed))))))
 
 (defmulti overlay-text
-  (fn [weather overlay] overlay))
+  (fn [weather display-params] (:overlay display-params)))
 
 (defmethod overlay-text :default
   [_ _]
   "")
 
 (defmethod overlay-text :pressure
-  [weather _]
-  (-> weather :pressure (.toFixed 2)))
+  [weather display-params]
+  (-> weather :pressure (format-pressure (:pressure-unit display-params))))
 
 (defmethod overlay-text :temperature
-  [weather overlay]
+  [weather _]
   (-> weather :temperature (.toFixed 1)))
 
 (defmethod overlay-text :type
-  [weather overlay]
+  [weather _]
   (-> weather :type {:sunny "S"
                      :fair "F"
                      :poor "P"
@@ -508,7 +541,7 @@
   [weather-data display-params]
   (with-time "update-text-layer"
     (doseq [[[x y] weather] weather-data
-            :let [text (overlay-text weather (:overlay display-params))
+            :let [text (overlay-text weather display-params)
                   cell (gdom/getElement (str "grid-text-cell-" x "-" y))]]
       (-> cell .-innerHTML (set! text)))))
 
@@ -842,6 +875,18 @@
                      #(change-fn (js/Number @%))
                      #(swap! c assoc-in path (js/Number @%)))))))
 
+(defn pressure-edit-field
+  "Renders an input that will edit a pressure value, in whatever units
+  the cell `unit-c` indicates"
+  [c path unit-c]
+  (input :type "text"
+         :value (formula-of
+                 [c unit-c]
+                 (format-pressure (get-in c path) unit-c))
+         :change #(swap! c assoc-in path (-> @%
+                                             js/Number
+                                             (convert-pressure @unit-c)))))
+
 (defn time-entry
   [c path]
   ;; TODO: Make fancier
@@ -926,6 +971,22 @@
                      :key->name overlay-key->name
                      :name->key overlay-name->key}
                     [:display-controls :overlay])
+        (tr (td "Pressure")
+            (td (select
+                 :change #(do
+                            (log "Changing pressure unit to " @%)
+                            (swap! display-params
+                                   assoc
+                                   :pressure-unit
+                                   (pressure-unit-name->key @%)))
+                 (for [name (keys pressure-unit-name->key)]
+                   (option
+                    :value name
+                    :selected (cell= (-> display-params
+                                         :pressure-unit
+                                         pressure-unit-key->name
+                                         (= name)))
+                    name)))))
         (tr (td "Opacity:")
             (td (input {:type "range"
                         :min 0
@@ -947,23 +1008,27 @@
    (table
     :id "general-params"
     (tbody
-     (for [[label selector extra]
-           [["Seed"             [:seed] (button
-                                         :click #(swap! weather-params
-                                                        assoc
-                                                        :seed
-                                                        (+ (rand-int 5000) 100))
-                                         "Random")]
+     (for [[label selector {:keys [extra type] :as opts}]
+           [["Seed"             [:seed] {:extra (button
+                                                 :click #(swap! weather-params
+                                                                assoc
+                                                                :seed
+                                                                (+ (rand-int 5000) 100))
+                                                 "Random")}]
             ["Crossfade"        [:crossfade]]
             ["Zoom"             [:feature-size]]
-            ["Max pressure"     [:pressure :max]]
-            ["Min pressure"     [:pressure :min]]
+            ["Max pressure"     [:pressure :max] {:type :pressure}]
+            ["Min pressure"     [:pressure :min] {:type :pressure}]
             ["Prevailing wind"  [:prevailing-wind :heading]]
             ["Wind uniformity"  [:wind-uniformity]]
             ["Temp uniformity"  [:temp-uniformity]]
             ["Warp strength"    [:turbulence :power]]]]
        (tr (td label)
-           (td (edit-field weather-params selector)
+           (td (if (= :pressure type)
+                 (pressure-edit-field weather-params
+                                      selector
+                                      pressure-unit)
+                 (edit-field weather-params selector))
                (or extra []))
            (td (help-for (into [:weather-params] selector)))))))))
 
@@ -1034,7 +1099,10 @@
           (tr (td :class "override-label" "Falloff")
               (td (edit-field weather-params [:weather-overrides @index :falloff])))
           (tr (td :class "override-label" "Pressure")
-              (td (edit-field weather-params [:weather-overrides @index :pressure])))
+              (td (pressure-edit-field
+                   weather-params
+                   [:weather-overrides @index :pressure]
+                   pressure-unit)))
           (tr (td :class "override-label" "Strength")
               (td (edit-field weather-params [:weather-overrides @index :strength])))))
         (let [id (gensym)]
@@ -1073,8 +1141,7 @@
                         :weather-overrides
                         (fn [overrides]
                           (remove-nth overrides @index)))
-         "Remove")
-        (hr)))
+         "Remove")))
      (button
       :click #(swap! weather-params
                      (fn [wp]
@@ -1122,44 +1189,50 @@
              [(td
                :class "derived"
                (formula-of
-                [weather-params]
+                [weather-params pressure-unit]
                 (-> weather-params
                     (get-in [:categories :fair :pressure])
-                    (.toFixed 2))))
+                    (format-pressure pressure-unit))))
               (td
                :class "derived"
                (formula-of
-                [weather-params]
+                [weather-params pressure-unit]
                 (-> weather-params
                     (get-in [:pressure :max])
-                    (.toFixed 2))))]
+                    (format-pressure pressure-unit))))]
 
              #{:fair :poor}
              [(td
                :class "derived"
                (formula-of
-                [weather-params]
+                [weather-params pressure-unit]
                 (->  weather-params
                      (get-in [:categories
                               (if (= :fair category)
                                 :poor :inclement)
                               :pressure])
-                     (.toFixed 2))))
+                     (format-pressure pressure-unit))))
               (td (div
                    :class "edit-field"
-                   (edit-field weather-params [:categories category :pressure])))]
+                   (pressure-edit-field
+                    weather-params
+                    [:categories category :pressure]
+                    pressure-unit)))]
 
              #{:inclement}
              [(td
                :class "derived"
                (formula-of
-                [weather-params]
+                [weather-params pressure-unit]
                 (-> weather-params
                     (get-in [:pressure :min])
-                    (.toFixed 2))))
+                    (format-pressure pressure-unit))))
               (td (div
                    :class "edit-field"
-                   (edit-field weather-params [:categories category :pressure])))])
+                   (pressure-edit-field
+                    weather-params
+                    [:categories category :pressure]
+                    pressure-unit)))])
            (for [param [:wind :temp]
                  metric [:min :mean :max]]
              (td :class (str (name param) " " (name metric))
@@ -1255,7 +1328,11 @@
    :title "Forecast"
    :help-for [:forecast]
    (div :id "forecast"
-        (cell=
+        (formula-of [selected-cell
+                     pressure-unit
+                     location-type
+                     airbases
+                     forecast]
          (let [[x y] (:coordinates selected-cell)]
            (div
             (label :for "locations"
@@ -1289,7 +1366,7 @@
                   (tr (td (gstring/format "%02d/%02d%02d"
                                           (:day time) (:hour time) (:minute time)))
                       (td (-> weather :type type-key->name))
-                      (td (-> weather :pressure (.toFixed 2)))
+                      (td (-> weather :pressure (format-pressure pressure-unit)))
                       (td (-> weather :temperature (.toFixed 1)))
                       (td (-> weather :wind :speed (.toFixed 0)))
                       (td (-> weather :wind :heading (.toFixed 0))))))))))))))

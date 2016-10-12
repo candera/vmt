@@ -237,10 +237,11 @@
                                       :else 0)
                     tw (time-weight override (:current time))
                     w (* position-weight tw strength)
-                    v* (-> override
-                           :pressure
-                           (- min-pressure)
-                           (/ pressure-span))]
+                    v* (as-> override ?
+                         (:pressure ?)
+                         (math/clamp min-pressure max-pressure ?)
+                         (- ? min-pressure)
+                         (/ ? pressure-span))]
                 (+ (* v* w) (* v (- 1 w)))))
             v
             weather-overrides)))

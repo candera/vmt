@@ -443,6 +443,12 @@ rect.inclement {
     stroke-dasharray: 0.2 0.1;
 }
 
+.weather-overrides {
+    border: dashed 2px fuchsia;
+    padding: 4px;
+    margin-bottom: 3px;
+}
+
 /* Spinner *********************************/
 
 .spinner-background {
