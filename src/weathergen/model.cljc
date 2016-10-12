@@ -213,38 +213,38 @@
         min-pressure (-> params :pressure :min)
         max-pressure (-> params :pressure :max)
         pressure-span (- max-pressure min-pressure)]
-    (reduce (fn [v override]
-              (let [{:keys [location
-                            radius
-                            falloff
-                            strength
-                            animate?]} override
-                    locx (:x location)
-                    locy (:y location)
-                    dx (- locx x)
-                    dy (- locy y)
-                    d2 (+ (* dx dx) (* dy dy))
-                    r2 (* radius radius)
-                    fr (- radius falloff)
-                    f2 (* fr fr)
-                    position-weight (cond
-                                      (< d2 f2) 1
-                                      (< d2 r2) (- 1
-                                                   (-> d2
-                                                       Math/sqrt
-                                                       (- fr)
-                                                       (/ falloff)))
-                                      :else 0)
-                    tw (time-weight override (:current time))
-                    w (* position-weight tw strength)
-                    v* (as-> override ?
-                         (:pressure ?)
-                         (math/clamp min-pressure max-pressure ?)
-                         (- ? min-pressure)
-                         (/ ? pressure-span))]
-                (+ (* v* w) (* v (- 1 w)))))
-            v
-            weather-overrides)))
+    (->> weather-overrides
+         (reduce (fn [v override]
+                   (let [{:keys [location
+                                 radius
+                                 falloff
+                                 strength
+                                 animate?]} override
+                         locx (:x location)
+                         locy (:y location)
+                         dx (- locx x)
+                         dy (- locy y)
+                         d2 (+ (* dx dx) (* dy dy))
+                         r2 (* radius radius)
+                         fr (- radius falloff)
+                         f2 (* fr fr)
+                         position-weight (cond
+                                           (< d2 f2) 1
+                                           (< d2 r2) (- 1
+                                                        (-> d2
+                                                            Math/sqrt
+                                                            (- fr)
+                                                            (/ falloff)))
+                                           :else 0)
+                         tw (time-weight override (:current time))
+                         w (* position-weight tw strength)
+                         v* (-> override
+                                :pressure
+                                (- min-pressure)
+                                (/ pressure-span))]
+                     (+ (* v* w) (* v (- 1 w)))))
+                 v)
+         (math/clamp 0.0 1.0))))
 
 (defn weather
   "x and y are in cells, t is in minutes."
