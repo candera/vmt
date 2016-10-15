@@ -48,6 +48,9 @@
      Use the Make Bigger button above the map to enlarge. Or click a
      cell to read the same data from the forecast section.")]
 
+    :pressure
+    [(p "Units for pressure measurements - inches Mercury (InHg) or millibars.")]
+
     :opacity
     [(p "Controls how opaque or transparent the display layer will be.
     Slide the slider to the left to more easily see the map.")]}
@@ -163,4 +166,34 @@ forward and backward in time. ")}
 
    :forecast
    (p "Displays the weather forecast for the selected location in the
-   weather grid.")})
+   weather grid.")
+
+   :weather-overrides
+   {:overview
+    [(p "Weather type is determined from air pressure - lower pressure
+   yields inclement or poor weather, and higher pressure fair and
+   sunny weather. By default, pressure is generated randomly, but it
+   can be overridden for certain locations and times using the
+   controls in this section.")]
+    :center
+    (p "The X and Y coordinates of the center of the override region.")
+    :radius
+    (p "The radius of the override region, measured in cells.")
+    :falloff
+    (p "The distance from the center of the region at which the
+    override pressure begins to be blended into the surrounding
+    pressure. Set this to zero to have a very gradual transition. Set
+    it to the radius to have an abrupt edge to the region. Note that
+    abrupt changes may result in odd weather effects in the sim. A
+    falloff of five or higher is recommended.")
+    :pressure
+    (p "The override pressure for the region. Use the values from the
+    Weather Type Configuration section to select an appropriate value
+    for the type of weather you are trying to enforce.")
+    :strength
+    (p "Controls to what degree the underlying pressure pattern will
+    be overridden. This value should be between zero and one. A value
+    of one completely replaces the underlying pressure with the value
+    from the 'pressure' field above. A value of 0.5 would produce a
+    value halfway between the value from the 'pressure' field and the
+    underlying pattern.")}} )

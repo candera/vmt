@@ -241,6 +241,8 @@ rect.inclement {
     border-color: grey;
 }
 
+/* Help ************************************/
+
 .help {
     display: inline-block;
     position: relative;
@@ -254,7 +256,8 @@ rect.inclement {
     border-radius: 9px;
     text-align: center;
     display: inline-block;
-    margin-left: 5px;
+    margin-right: 3px;
+    margin-left: 3px;
     font-size: 80%;
 }
 
@@ -280,6 +283,8 @@ rect.inclement {
     margin-top: 0;
     margin-bottom: 0;
 }
+
+/**/
 
 .weather-type {
     padding: 0 3px;
@@ -331,6 +336,16 @@ rect.inclement {
 
 #locations {
     margin-left: 7px;
+}
+
+/* Control sections *******************/
+
+.control-container {
+    margin-left: -8px;
+}
+
+#forecast-section .control-container {
+    margin-left: initial;
 }
 
 .controls .toggle {

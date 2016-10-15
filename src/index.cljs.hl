@@ -87,8 +87,8 @@
                                               :index 0}]
                       :weather-overrides [{:location {:x 22
                                                       :y 45}
-                                           :radius 6
-                                           :falloff 3
+                                           :radius 10
+                                           :falloff 5
                                            :animate? false
                                            :begin {:day 1 :hour 5 :minute 0}
                                            :peak {:day 1 :hour 6 :minute 0}
@@ -834,11 +834,11 @@
 
 (defelem control-section
   [attributes children]
-  (let [visible (cell true)
+  (let [visible (cell (not (:collapsed? attributes)))
         change-visibility #(swap! visible not)]
     (fieldset
      :class "controls"
-     (dissoc attributes :title)
+     (dissoc attributes :title :collapsed? :help-for)
      (legend
       (div
        :click change-visibility
@@ -846,12 +846,12 @@
                           {:toggle true
                            :visible visible})
        "")
-      (span
-       :click change-visibility
-       (:title attributes))
       (if-let [h (:help-for attributes)]
         (help-for h)
-        []))
+        [])
+      (span
+       :click change-visibility
+       (:title attributes)))
      (div
       :class "control-container"
       :toggle visible
@@ -915,27 +915,31 @@
                               (fn [[x y]]
                                 [(- x 50) (- y 50)]))
                :title "Shrink grid"
-               (img :src "images/smaller.png"))
-       ;; TODO: Not quite there yet.
-       #_(for [tool [:select :wind-stability]
-               :let [id (str "tool-" (name tool))]]
-           [(input
-             :class (str "exclusive-button tool " (name tool))
-             :type "radio"
-             :name "tool"
-             :id id
-             :checked (cell= (= tool current-tool))
-             :change #(do (println "Changed tool to " tool)
-                          (reset! current-tool tool)))
-            (label :for id
-                   :css {:background-image (str "url('images/tool-" (name tool) ".png')")})
-            ])))
+               (img :src "images/smaller.png"))))
+
+(defn control-layout
+  "Lays out controls for a control section"
+  [controls]
+  (table
+   (tbody
+    (for [[label selector {:keys [extra type help-base help-path] :as opts}]
+          controls]
+      (tr (td (help-for (into [(or help-base :weather-params)]
+                              (or help-path selector))))
+          (td label)
+          (td (if (= :pressure type)
+                (pressure-edit-field weather-params
+                                     selector
+                                     pressure-unit)
+                (edit-field weather-params selector))
+              (or extra [])))))))
 
 
 (defn display-controls
   []
   (let [select-row (fn [{:keys [label k key->name name->key change]} help-path]
-                     (tr (td label)
+                     (tr (td (help-for help-path))
+                         (td label)
                          (td (select
                               :change (if change
                                         #(change (name->key @%))
@@ -947,10 +951,10 @@
                                                       k
                                                       key->name
                                                       (= name)))
-                                 name))))
-                         (td (help-for help-path))))]
+                                 name))))))]
     (control-section
      :title "Display controls"
+     :id "display-controls-section"
      (div
       :class "display-controls"
       (table
@@ -971,7 +975,8 @@
                      :key->name overlay-key->name
                      :name->key overlay-name->key}
                     [:display-controls :overlay])
-        (tr (td "Pressure")
+        (tr (td (help-for [:display-controls :pressure]))
+            (td "Pressure")
             (td (select
                  :change #(do
                             (log "Changing pressure unit to " @%)
@@ -987,7 +992,8 @@
                                          pressure-unit-key->name
                                          (= name)))
                     name)))))
-        (tr (td "Opacity:")
+        (tr (td (help-for [:display-controls :opacity]))
+            (td "Opacity:")
             (td (input {:type "range"
                         :min 0
                         :max 100
@@ -998,39 +1004,23 @@
                         :change #(swap! display-params
                                         assoc
                                         :opacity
-                                        (/ @% 100.0))}))
-            (td (help-for [:display-controls :opacity])))))))))
+                                        (/ @% 100.0))})))))))))
 
 (defn weather-parameters
   []
   (control-section
    :title "Weather parameters"
-   (table
-    :id "general-params"
-    (tbody
-     (for [[label selector {:keys [extra type] :as opts}]
-           [["Seed"             [:seed] {:extra (button
-                                                 :click #(swap! weather-params
-                                                                assoc
-                                                                :seed
-                                                                (+ (rand-int 5000) 100))
-                                                 "Random")}]
-            ["Crossfade"        [:crossfade]]
-            ["Zoom"             [:feature-size]]
-            ["Max pressure"     [:pressure :max] {:type :pressure}]
-            ["Min pressure"     [:pressure :min] {:type :pressure}]
-            ["Prevailing wind"  [:prevailing-wind :heading]]
-            ["Wind uniformity"  [:wind-uniformity]]
-            ["Temp uniformity"  [:temp-uniformity]]
-            ["Warp strength"    [:turbulence :power]]]]
-       (tr (td label)
-           (td (if (= :pressure type)
-                 (pressure-edit-field weather-params
-                                      selector
-                                      pressure-unit)
-                 (edit-field weather-params selector))
-               (or extra []))
-           (td (help-for (into [:weather-params] selector)))))))))
+   :id "weather-params-section"
+   (control-layout
+    [["Seed"             [:seed] {:extra (button
+                                          :click #(swap! weather-params
+                                                         assoc
+                                                         :seed
+                                                         (+ (rand-int 5000) 100))
+                                          "Random")}]
+     ["Max pressure"     [:pressure :max] {:type :pressure}]
+     ["Min pressure"     [:pressure :min] {:type :pressure}]
+     ["Prevailing wind"  [:prevailing-wind :heading]]])))
 
 (let [indexed-wind-stability-areas (->> weather-params
                                         :wind-stability-areas
@@ -1040,6 +1030,7 @@
     []
     (control-section
      :title "Wind stability regions"
+     :id "wind-stability-params-section"
      :help-for [:wind-stability-areas]
      (loop-tpl :bindings [[index area] indexed-wind-stability-areas]
        (div
@@ -1084,30 +1075,37 @@
     []
     (control-section
      :title "Weather override regions"
-     :help-for [:weather-overrides]
+     :id "weather-override-params-section"
+     :help-for [:weather-overrides :overview]
      (loop-tpl :bindings [[index override] indexed-weather-overrides]
        (div
         :class "weather-overrides"
         (table
          :id "weather-override-params"
          (tbody
-          (tr (td :class "override-label" "Center X/Y")
+          (tr (td (help-for [:weather-overrides :center]))
+              (td :class "override-label" "Center X/Y")
               (td (edit-field weather-params [:weather-overrides @index :location :x]))
               (td (edit-field weather-params [:weather-overrides @index :location :y])))
-          (tr (td :class "override-label" "Radius")
+          (tr (td (help-for [:weather-overrides :radius]))
+              (td :class "override-label" "Radius")
               (td (edit-field weather-params [:weather-overrides @index :radius])))
-          (tr (td :class "override-label" "Falloff")
+          (tr (td (help-for [:weather-overrides :falloff]))
+              (td :class "override-label" "Falloff")
               (td (edit-field weather-params [:weather-overrides @index :falloff])))
-          (tr (td :class "override-label" "Pressure")
+          (tr (td (help-for [:weather-overrides :pressure]))
+              (td :class "override-label" "Pressure")
               (td (pressure-edit-field
                    weather-params
                    [:weather-overrides @index :pressure]
                    pressure-unit)))
-          (tr (td :class "override-label" "Strength")
+          (tr (td (help-for [:weather-overrides :strength]))
+              (td :class "override-label" "Strength")
               (td (edit-field weather-params [:weather-overrides @index :strength])))))
         (let [id (gensym)]
           (div
            :class "weather-override-animate-checkbox"
+           (help-for [:weather-overrides :animate?])
            (input :id id
                   :type "checkbox"
                   :checked (:animate? override)
@@ -1119,19 +1117,19 @@
              (td "Day")
              (td "Hour")
              (td "Minute"))
-         (tr (td "Begin")
+         (tr (td (help-for [:weather-overrides :begin]) "Begin")
              (td (edit-field weather-params [:weather-overrides @index :begin :day]))
              (td (edit-field weather-params [:weather-overrides @index :begin :hour]))
              (td (edit-field weather-params [:weather-overrides @index :begin :minute])))
-         (tr (td "Peak")
+         (tr (td (help-for [:weather-overrides :peak]) "Peak")
              (td (edit-field weather-params [:weather-overrides @index :peak :day]))
              (td (edit-field weather-params [:weather-overrides @index :peak :hour]))
              (td (edit-field weather-params [:weather-overrides @index :peak :minute])))
-         (tr (td "Taper")
+         (tr (td (help-for [:weather-overrides :taper]) "Taper")
              (td (edit-field weather-params [:weather-overrides @index :taper :day]))
              (td (edit-field weather-params [:weather-overrides @index :taper :hour]))
              (td (edit-field weather-params [:weather-overrides @index :taper :minute])))
-         (tr (td "End")
+         (tr (td (help-for [:weather-overrides :end]) "End")
              (td (edit-field weather-params [:weather-overrides @index :end :day]))
              (td (edit-field weather-params [:weather-overrides @index :end :hour]))
              (td (edit-field weather-params [:weather-overrides @index :end :minute]))))
@@ -1165,6 +1163,7 @@
   []
   (control-section
    :title "Weather type configuration"
+   :id "weather-type-configuration-section"
    (table
     :id "category-params"
     (thead
@@ -1239,31 +1238,34 @@
                  (div :class "edit-field"
                       (edit-field weather-params [:categories category param metric]))))))))))
 
+(defn advanced-controls
+  ([] (advanced-controls {}))
+  ([attributes]
+   (control-section
+    :id "advanced-params"
+    :title "Advanced Controls"
+    attributes
+    (control-layout
+     [["X Offset"         [:origin 0] {:help-path [:origin :x]}]
+      ["Y Offset"         [:origin 1] {:help-path {:origin :y}}]
+      ["T Offset"         [:time :offset]]
+      ["Wind uniformity"  [:wind-uniformity]]
+      ["Temp uniformity"  [:temp-uniformity]]
+      ["Warp strength"    [:turbulence :power]]
+      ["Crossfade"        [:crossfade]]
+      ["Zoom"             [:feature-size]]]))))
+
 (defn step-controls
   []
   (control-section
    :id "time-location-params"
-   :title "Time/location controls"
+   :title "Time controls"
    (table
     (tbody
-     (tr (map td ["X Offset"
-                  (edit-field weather-params [:origin 0])
-                  (help-for [:weather-params :origin :x])]))
-     (tr (map td ["Y Offset"
-                  (edit-field weather-params [:origin 1])
-                  (help-for [:weather-params :origin :y])]))
-     (tr (map td ["T Offset"
-                  (edit-field weather-params [:time :offset])
-                  (help-for [:weather-params :time :offset])]))
      ;; (tr (map td ["Start Time" (time-entry weather-params [:time :start])]))
-     (for [[c label path help]
-           [[movement-params "Weather heading" [:direction :heading] :movement-params]
-            [movement-params "Weather speed"   [:direction :speed]   :movement-params]
-            [weather-params  "Evolution (min)" [:evolution]          :weather-params]]]
-       (tr (map td [label
-                    (edit-field c path)
-                    (help-for (into [help] path))])))
-     (tr (map td [["Time" (help-for [:displayed-time])]
+
+     (tr (map td [(help-for [:displayed-time])
+                  "Time"
                   (time-entry time-params [:displayed])
                   (button
                    :click jump-to-time
@@ -1271,9 +1273,9 @@
                   (button
                    :click set-time
                    "Set to")]))
-     (tr (map td ["Step interval"
-                  (edit-field movement-params [:step])
-                  (help-for [:step])]))))
+     (tr (map td [(help-for [:step])
+                  "Step interval"
+                  (edit-field movement-params [:step])]))))
    (button :title "Step back in time"
            :click #(move -1)
            "<< Step Back")
@@ -1327,6 +1329,7 @@
   (control-section
    :title "Forecast"
    :help-for [:forecast]
+   :id "forecast-section"
    (div :id "forecast"
         (formula-of [selected-cell
                      pressure-unit
@@ -1478,5 +1481,6 @@
              (forecast-display)
              (weather-type-configuration)
              (wind-stability-parameters)
-             (weather-override-parameters)))
+             (weather-override-parameters)
+             (advanced-controls {:collapsed? true})))
    (debug-info))))
