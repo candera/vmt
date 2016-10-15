@@ -837,3 +837,17 @@
   :pressure 28.5
   :strength 0.5}
  (model/falcon-time->minutes {:day 1 :hour 8 :minute 59}))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(require :reload
+         '[clojure.edn :as edn]
+         '[clojure.java.io :as io]
+         '[weathergen.model :as model])
+
+(-> "/tmp/smpu-weathergen-settings.edn"
+    io/reader
+    java.io.PushbackReader.
+    edn/read
+    (model/upgrade 7)
+    clojure.pprint/pprint)

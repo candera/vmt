@@ -444,7 +444,7 @@
 (defn upgrade
   [{:keys [revision] :as params} new-revision]
   (cond-> params
-    (< revision 6) upgrade-pressure-threshold
+    (< revision 7) upgrade-pressure-threshold
     :always (assoc :revision new-revision)))
 
 (comment

@@ -368,9 +368,9 @@
                                       reader/read-string
                                       (model/upgrade revision))]
                          (dosync
-                          (let [{:keys [time]} (swap! weather-params merge (:weather-params data))]
-                            (swap! display-params merge (:display-params data))
-                            (swap! movement-params merge (:movement-params data))
+                          (let [{:keys [time]} (reset! weather-params (:weather-params data))]
+                            (reset! display-params (:display-params data))
+                            (reset! movement-params (:movement-params data))
                             (swap! time-params assoc :displayed (:current time)))))))
             (.readAsText reader file)))))))
 
@@ -922,16 +922,17 @@
   [controls]
   (table
    (tbody
-    (for [[label selector {:keys [extra type help-base help-path] :as opts}]
-          controls]
+    (for [[label selector {:keys [extra type help-base help-path cell] :as opts}]
+          controls
+          :let [cell (or cell weather-params)]]
       (tr (td (help-for (into [(or help-base :weather-params)]
                               (or help-path selector))))
           (td label)
           (td (if (= :pressure type)
-                (pressure-edit-field weather-params
+                (pressure-edit-field cell
                                      selector
                                      pressure-unit)
-                (edit-field weather-params selector))
+                (edit-field cell selector))
               (or extra [])))))))
 
 
@@ -1020,7 +1021,11 @@
                                           "Random")}]
      ["Max pressure"     [:pressure :max] {:type :pressure}]
      ["Min pressure"     [:pressure :min] {:type :pressure}]
-     ["Prevailing wind"  [:prevailing-wind :heading]]])))
+     ["Prevailing wind"  [:prevailing-wind :heading]]
+     ["Weather heading"  [:direction :heading] {:cell movement-params
+                                                :help-base :movement-params}]
+     ["Weather speed"    [:direction :speed]   {:cell movement-params
+                                                :help-base :movement-params}]])))
 
 (let [indexed-wind-stability-areas (->> weather-params
                                         :wind-stability-areas
@@ -1147,15 +1152,15 @@
                                :weather-overrides
                                (fn [overrides]
                                  (conj overrides
-                                       {:location {:x 5
+                                       {:location {:x 30
                                                    :y 30}
-                                        :radius 4
-                                        :falloff 2
+                                        :radius 8
+                                        :falloff 6
                                         :begin (-> wp :time :current)
                                         :peak (-> wp :time :current (model/add-time 60))
                                         :taper (-> wp :time :current (model/add-time 180))
                                         :end (-> wp :time :current (model/add-time 240))
-                                        :pressure 28.5
+                                        :pressure (-> wp :pressure :min)
                                         :strength 1})))))
       "Add New"))))
 
