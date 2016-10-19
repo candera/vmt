@@ -534,3 +534,13 @@ rect.inclement {
         opacity: 1;
     }
 }
+
+/* Input Fields *************************/
+
+.field {
+    display: flex;
+    flex-wrap: nowrap;
+    background: lavender;
+    margin-right: 5px;
+    padding: 0 4px 3px 2px;
+}

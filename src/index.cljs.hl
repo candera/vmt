@@ -938,7 +938,20 @@
 
 (defn display-controls
   []
-  (let [select-row (fn [{:keys [label k key->name name->key change]} help-path]
+  (let [dropdown (fn [{:keys [k key->name name->key change]}]
+                   (select
+                    :change (if change
+                              #(change (name->key @%))
+                              #(swap! display-params assoc k (name->key @%)))
+                    (for [name (conj (keys name->key) "None")]
+                      (option
+                       :value name
+                       :selected (cell= (-> display-params
+                                            k
+                                            key->name
+                                            (= name)))
+                       name))))
+        select-row (fn [{:keys [label k key->name name->key change]} help-path]
                      (tr (td (help-for help-path))
                          (td label)
                          (td (select
@@ -952,60 +965,84 @@
                                                       k
                                                       key->name
                                                       (= name)))
-                                 name))))))]
+                                 name))))))
+        field      (fn [& kids] (apply div :class "field" kids))
+        field-help (fn [& kids] (apply div :class "field-elem field-help" kids))
+        field-input (fn [& kids] (apply div :class "field-elem field-input" kids))
+        field-label (fn [& kids] (apply div :class "field-elem field-label" kids))]
     (control-section
      :title "Display controls"
      :id "display-controls-section"
-     (div
-      :class "display-controls"
-      (table
-       (tbody
-        (select-row {:label "Map"
-                     :k :map
-                     :key->name map-key->name
-                     :name->key map-name->key
-                     :change change-theater}
-                    [:display-controls :map])
-        (select-row {:label "Display"
-                     :k :display
-                     :key->name display-key->name
-                     :name->key display-name->key}
-                    [:display-controls :display])
-        (select-row {:label "Overlay"
-                     :k :overlay
-                     :key->name overlay-key->name
-                     :name->key overlay-name->key}
-                    [:display-controls :overlay])
-        (tr (td (help-for [:display-controls :pressure]))
-            (td "Pressure")
-            (td (select
-                 :change #(do
-                            (log "Changing pressure unit to " @%)
-                            (swap! display-params
-                                   assoc
-                                   :pressure-unit
-                                   (pressure-unit-name->key @%)))
-                 (for [name (keys pressure-unit-name->key)]
-                   (option
-                    :value name
-                    :selected (cell= (-> display-params
-                                         :pressure-unit
-                                         pressure-unit-key->name
-                                         (= name)))
-                    name)))))
-        (tr (td (help-for [:display-controls :opacity]))
-            (td "Opacity:")
-            (td (input {:type "range"
-                        :min 0
-                        :max 100
-                        :value (cell= (-> display-params
+     (field
+      (field-help (help-for [:display-controls :map]))
+      (field-label "Map")
+      (field-input (dropdown {:k :map
+                              :key->name map-key->name
+                              :name->key map-name->key
+                              :change change-theater})))
+     (field
+      (field-help (help-for [:display-controls :display]))
+      (field-label "Display")
+      (field-input (dropdown {:k :display
+                              :key->name display-key->name
+                              :name->key display-name->key})))
+     (field
+      (field-help (help-for [:display-controls :overlay]))
+      (field-label "Overlay")
+      (field-input (dropdown {:label "Overlay"
+                              :k :overlay
+                              :key->name overlay-key->name
+                              :name->key overlay-name->key})))
+     #_(div
+        :class "display-controls"
+        (table
+         (tbody
+          (select-row {:label "Map"
+                       :k :map
+                       :key->name map-key->name
+                       :name->key map-name->key
+                       :change change-theater}
+                      [:display-controls :map])
+          (select-row {:label "Display"
+                       :k :display
+                       :key->name display-key->name
+                       :name->key display-name->key}
+                      [:display-controls :display])
+          (select-row {:label "Overlay"
+                       :k :overlay
+                       :key->name overlay-key->name
+                       :name->key overlay-name->key}
+                      [:display-controls :overlay])
+          (tr (td (help-for [:display-controls :pressure]))
+              (td "Pressure")
+              (td (select
+                   :change #(do
+                              (log "Changing pressure unit to " @%)
+                              (swap! display-params
+                                     assoc
+                                     :pressure-unit
+                                     (pressure-unit-name->key @%)))
+                   (for [name (keys pressure-unit-name->key)]
+                     (option
+                      :value name
+                      :selected (cell= (-> display-params
+                                           :pressure-unit
+                                           pressure-unit-key->name
+                                           (= name)))
+                      name)))))
+          (tr (td (help-for [:display-controls :opacity]))
+              (td "Opacity:")
+              (td (input {:type "range"
+                          :min 0
+                          :max 100
+                          :value (cell= (-> display-params
+                                            :opacity
+                                            (* 100)
+                                            long))
+                          :change #(swap! display-params
+                                          assoc
                                           :opacity
-                                          (* 100)
-                                          long))
-                        :change #(swap! display-params
-                                        assoc
-                                        :opacity
-                                        (/ @% 100.0))})))))))))
+                                          (/ @% 100.0))})))))))))
 
 (defn weather-parameters
   []
