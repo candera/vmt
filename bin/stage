@@ -4,5 +4,5 @@ cd $(dirname $0)/..
 
 bin/build --allow-dirty
 aws s3 sync target/ s3://weathergen
-open https://weathergen.s3-website-us-east-1.amazonaws.com
+open http://weathergen.s3-website-us-east-1.amazonaws.com
 
