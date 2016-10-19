@@ -993,6 +993,38 @@
                               :k :overlay
                               :key->name overlay-key->name
                               :name->key overlay-name->key})))
+     (field
+      (field-help (help-for [:display-controls :pressure]))
+      (field-label "Pressure")
+      (field-input (select
+                   :change #(do
+                              (log "Changing pressure unit to " @%)
+                              (swap! display-params
+                                     assoc
+                                     :pressure-unit
+                                     (pressure-unit-name->key @%)))
+                   (for [name (keys pressure-unit-name->key)]
+                     (option
+                      :value name
+                      :selected (cell= (-> display-params
+                                           :pressure-unit
+                                           pressure-unit-key->name
+                                           (= name)))
+                      name)))))
+     (field
+      (field-help (help-for [:display-controls :opacity]))
+      (field-label "Opacity:")
+      (field-input (input {:type "range"
+                          :min 0
+                          :max 100
+                          :value (cell= (-> display-params
+                                            :opacity
+                                            (* 100)
+                                            long))
+                          :change #(swap! display-params
+                                          assoc
+                                          :opacity
+                                          (/ @% 100.0))})))
      #_(div
         :class "display-controls"
         (table
