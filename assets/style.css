@@ -90,20 +90,6 @@ body {
     margin-right: 10px;
 }
 
-.wind-stability-params input {
-    width: 30px;
-}
-
-.wind-stability-params  {
-    border: 2px dashed black;
-    padding: 4px;
-    margin-bottom: 3px;
-}
-
-.wind-stability-params hr {
-    display: none;
-}
-
 svg {
     display: inline-block;
 }
@@ -123,6 +109,9 @@ svg {
 .right-column {
     flex-grow: 1;
     min-width: 550px;
+    /* This one weird trick keeps the column from expanding past where it
+   should. Yay CSS. */
+    width: 0;
 }
 
 rect.sunny {
@@ -428,6 +417,21 @@ rect.inclement {
 
 /* Wind stability areas ********************/
 
+.wind-stability-params input {
+    width: 30px;
+}
+
+.wind-stability-params  {
+    border: 2px dashed black;
+    padding: 4px;
+    margin-bottom: 3px;
+    margin-right: 3px;
+}
+
+.wind-stability-params hr {
+    display: none;
+}
+
 .wind-stability-area {
     fill: none;
     stroke: black;
@@ -438,6 +442,11 @@ rect.inclement {
 .wind-stability-area.alternate {
     stroke: white;
     stroke-dashoffset: 0.6;
+}
+
+.wind-stability-boxes {
+    display: flex;
+    flex-wrap: wrap;
 }
 
 /* Weather overrides ************************/
@@ -462,6 +471,12 @@ rect.inclement {
     border: dashed 2px fuchsia;
     padding: 4px;
     margin-bottom: 3px;
+    margin-right: 3px;
+}
+
+.weather-override-boxes {
+    display: flex;
+    flex-wrap: wrap;
 }
 
 /* Spinner *********************************/
@@ -537,10 +552,42 @@ rect.inclement {
 
 /* Input Fields *************************/
 
+.control-container {
+    flex-direction: column;
+    flex-wrap: wrap;
+}
+
+#display-controls-section .control-container,
+#weather-params-section .control-container {
+    display: flex;
+    max-height: 96px;
+}
+
 .field {
     display: flex;
     flex-wrap: nowrap;
-    background: lavender;
-    margin-right: 5px;
+    background: linear-gradient(45deg, #fbfbfb, lavender);
+    margin: 0 2px 3px 2px;
     padding: 0 4px 3px 2px;
+}
+
+.field-label {
+    width: 50px;
+}
+
+#weather-params-section .field-label {
+    width: 95px;
+}
+
+.field-input {
+    width: 100px;
+}
+
+.field-input select,
+.field-input input {
+    width: 100%
+}
+
+#weather-params-section .field-input input {
+    width: 35px;
 }
