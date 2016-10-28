@@ -38,7 +38,7 @@
     (hoplon)
     ;;(reload)
     (cljs)
-    (serve :port 8000)))
+    (serve :port 8006)))
 
 #_(deftask dev-repl
   []
