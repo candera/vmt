@@ -100,7 +100,10 @@
 (defc movement-params {:step 60
                        :direction {:heading 135 :speed 20}})
 
-(def initial-size (max 250 (- (.width (js/$ js/window)) 600)))
+(def initial-size (let [window-width (.width (js/$ js/window))
+                        window-height (.height (js/$ js/window))]
+                    (max 250 (min (- window-width 600)
+                                  (- window-height 140)))))
 
 (defc display-params {:dimensions [initial-size initial-size]
                       :opacity    0.75
@@ -1513,5 +1516,5 @@
              (weather-type-configuration)
              (wind-stability-parameters)
              (weather-override-parameters)
-             (advanced-controls {:collapsed? true})))
+             (advanced-controls)))
    (debug-info))))

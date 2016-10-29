@@ -107,8 +107,11 @@ svg {
 }
 
 .right-column {
+    display: flex;
+    align-content: flex-start;
+    flex-wrap: wrap;
     flex-grow: 1;
-    min-width: 550px;
+    min-width: 500px;
     /* This one weird trick keeps the column from expanding past where it
    should. Yay CSS. */
     width: 0;
@@ -328,6 +331,10 @@ rect.inclement {
 }
 
 /* Control sections *******************/
+
+.controls {
+    align-items: stretch;
+}
 
 .control-container {
     margin-left: -8px;
@@ -560,13 +567,13 @@ rect.inclement {
 #display-controls-section .control-container,
 #weather-params-section .control-container {
     display: flex;
-    max-height: 96px;
+    /* max-height: 96px; */
 }
 
 .field {
     display: flex;
     flex-wrap: nowrap;
-    background: linear-gradient(45deg, #fbfbfb, lavender);
+    /* background: linear-gradient(45deg, #fbfbfb, lavender); */
     margin: 0 2px 3px 2px;
     padding: 0 4px 3px 2px;
 }
