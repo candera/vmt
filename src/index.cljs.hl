@@ -199,7 +199,8 @@
 (def map-name->key
   {"Israel" :israel
    "Balkans" :balkans
-   "Korea" :korea})
+   "Korea" :korea
+   "Kuriles" :kuriles})
 
 (def map-key->name
   (invert-map map-name->key))
@@ -207,7 +208,8 @@
 (def map-image
   {:korea "images/kto.jpg"
    :balkans "images/balkans.png"
-   :israel "images/ito.jpg"})
+   :israel "images/ito.jpg"
+   :kuriles "images/kuriles.png"})
 
 (defn map-image-id
   [map]

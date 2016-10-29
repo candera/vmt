@@ -703,7 +703,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(doseq [theater [:balkans :korea :israel]]
+(doseq [theater [:kuriles] #_[:balkans :korea :israel]]
   (->> (format "/tmp/%s.csv" (name theater))
        clojure.java.io/reader
        (db/import-objectives-csv theater)
