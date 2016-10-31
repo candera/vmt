@@ -1278,7 +1278,7 @@
   ([] (advanced-controls {}))
   ([attributes]
    (control-section
-    :id "advanced-params"
+    :id "advanced-params-section"
     :title "Advanced Controls"
     attributes
     (control-layout

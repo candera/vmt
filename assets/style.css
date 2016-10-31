@@ -425,7 +425,7 @@ rect.inclement {
 /* Wind stability areas ********************/
 
 .wind-stability-params input {
-    width: 30px;
+    width: 16px;
 }
 
 .wind-stability-params  {
@@ -464,7 +464,7 @@ rect.inclement {
 }
 
 .weather-overrides input {
-    width: 50px;
+    width: 35px;
 }
 
 .weather-override-area {
@@ -598,3 +598,18 @@ rect.inclement {
 #weather-params-section .field-input input {
     width: 35px;
 }
+
+#advanced-params-section .field-label {
+    width: 90px;
+}
+
+#advanced-params-section .field-input {
+    width: 40px;
+}
+
+#advanced-params-section .field-input input {
+    width: 35px;
+}
+
+
+
