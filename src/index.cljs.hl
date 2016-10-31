@@ -1285,6 +1285,7 @@
      [["X Offset"         [:origin 0] {:help-path [:origin :x]}]
       ["Y Offset"         [:origin 1] {:help-path {:origin :y}}]
       ["T Offset"         [:time :offset]]
+      ["Evolution"        [:evolution]]
       ["Wind uniformity"  [:wind-uniformity]]
       ["Temp uniformity"  [:temp-uniformity]]
       ["Warp strength"    [:turbulence :power]]
