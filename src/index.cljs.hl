@@ -55,18 +55,18 @@
 ;;; State
 
 (defc weather-params {:temp-uniformity 0.7
-                      :pressure        {:min 28.5 :max 31}
+                      :pressure        {:min 29 :max 31}
                       :cell-count      [59 59]
                       :feature-size    10
-                      :categories      {:sunny     {:wind   {:min 0 :mean 7 :max 20}
+                      :categories      {:sunny     {:wind   {:min 5 :mean 10 :max 30}
                                                     :temp   {:min 20 :mean 22 :max 24}}
-                                        :fair      {:pressure 29.95
-                                                    :wind   {:min 5 :mean 10 :max 30}
+                                        :fair      {:pressure 30
+                                                    :wind   {:min 0 :mean 7 :max 20}
                                                     :temp   {:min 18 :mean 21 :max 23}}
-                                        :poor      {:pressure 29.1
-                                                    :wind   {:min 10 :mean 18 :max 30}
+                                        :poor      {:pressure 29.85
+                                                    :wind   {:min 10 :mean 15 :max 30}
                                                     :temp   {:min 15 :mean 18 :max 21}}
-                                        :inclement {:pressure 28.7
+                                        :inclement {:pressure 29.40
                                                     :wind   {:min 15 :mean 25 :max 60}
                                                     :temp   {:min 12 :mean 14 :max 16}}}
                       :turbulence      {:size 1 :power 250}
@@ -78,14 +78,14 @@
                       :crossfade       0.1
                       :prevailing-wind {:heading 325}
                       :seed            1234
-                      :wind-stability-areas [{:bounds {:x 16
+                      :wind-stability-areas [#_{:bounds {:x 16
                                                        :y 39
                                                        :width 6
                                                        :height 4}
                                               :wind {:speed 5
                                                      :heading 0}
                                               :index 0}]
-                      :weather-overrides [{:location {:x 22
+                      :weather-overrides [#_{:location {:x 22
                                                       :y 45}
                                            :radius 10
                                            :falloff 5
@@ -114,10 +114,6 @@
                       :pressure-unit :inhg})
 
 (defc selected-cell nil)
-
-(defc pending-wind-stability-area nil)
-
-(defc current-tool :select)
 
 (defc time-params
   {:displayed {:day 1 :hour 5 :minute 0}})
