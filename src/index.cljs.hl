@@ -13,9 +13,13 @@
             [weathergen.math :as math]
             [weathergen.model :as model]
             [cljs.core.async :as async
-             :refer [<! >! timeout]]
+             :refer [<! >! alts! timeout]]
             [cljs.reader :as reader]
-            [cljsjs.jquery-ui])
+            [cljsjs.jquery-ui]
+            [taoensso.timbre :as log
+             :refer-macros (log trace debug info warn error fatal report
+                                logf tracef debugf infof warnf errorf fatalf reportf
+                                spy get-env log-env)])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
    [weathergen.cljs.macros :refer [with-time formula-of]]))
@@ -120,6 +124,8 @@
 
 (defc weather-data nil)
 
+(defc weather-data-params nil)
+
 (defc computing true)
 
 ;;; Formulas
@@ -157,21 +163,45 @@
 
 ;;; Worker
 
+(def worker-count 4)
 
-(def worker (js/Worker. "worker.js"))
+(def workers (let [all-cells (for [x (range 59)
+                                   y (range 59)]
+                               [x y])]
+               (map (fn [n cells]
+                      {:worker (js/Worker. "worker.js")
+                       :n      n
+                       :ch     (async/chan)
+                       :cells  cells})
+                    (range worker-count)
+                    (partition-all (/ (* 59 59) worker-count) all-cells))))
 
 (def command-ch (async/chan (async/dropping-buffer 1)))
-(def worker-ch (async/chan))
 
-(-> worker
-    .-onmessage
-    (set! #(go (async/>! worker-ch (->> % .-data decode)))))
+(doseq [{:keys [worker ch]} workers]
+  (-> worker
+      .-onmessage
+      (set! #(go (async/>! ch (->> % .-data decode))))))
 
+;; TODO: Handle commands other than "compute weather"
 (go-loop []
-  (let [[command data] (async/<! command-ch)]
-    (.postMessage worker (encode data))
+  (let [[command params] (async/<! command-ch)]
+    (doseq [{:keys [cells worker]} workers]
+      (.postMessage worker (encode (assoc params
+                                          :cells cells))))
     (reset! computing true)
-    (reset! weather-data (<! worker-ch))
+    (.time js/console "compute-weather")
+    (with-time "Receive weather results"
+      (loop [chs (set (map :ch workers))
+             data {}]
+        (if (empty? chs)
+          (dosync
+           (.timeEnd js/console "compute-weather")
+           (reset! weather-data data)
+           (reset! weather-data-params params))
+          (let [[val port] (async/alts! (vec chs))]
+            (recur (disj chs port)
+                   (merge data val))))))
     (reset! computing false)
     (recur)))
 
@@ -329,7 +359,16 @@
   [weather-params weather-data]
   (let [t (get-in weather-params [:time :current])
         [x-cells y-cells] (:cell-count weather-params)
-        blob (fmap/get-blob weather-data
+        ;; Since processing is async, it's possible the weather data
+        ;; can be out of sync with respect to the weather parameters.
+        ;; In that case, we compute synchronously.
+        data (if (log/spy (= weather-params weather-data-params))
+               weather-data
+               (model/weather-grid (assoc weather-params
+                                          :cells (for [x (range x-cells)
+                                                       y (range y-cells)]
+                                                   [x y]))))
+        blob (fmap/get-blob data
                             x-cells
                             y-cells)]
     (save-data blob (gstring/format "%d%02d%02d.fmap"
@@ -1002,7 +1041,7 @@
       (field-label "Pressure")
       (field-input (select
                    :change #(do
-                              (log "Changing pressure unit to " @%)
+                              (log/debug "Changing pressure unit to " @%)
                               (swap! display-params
                                      assoc
                                      :pressure-unit
@@ -1422,7 +1461,7 @@
   (if (= false value)
     (.removeAttributeNS elem "http://www.w3.org/1999/xlink" "href")
     (do
-      (log "Setting xlink attr")
+      (log/debug "Setting xlink attr")
       (.setAttributeNS elem "http://www.w3.org/1999/xlink" "href" value))))
 
 (defmethod do! :preserveAspectRatio

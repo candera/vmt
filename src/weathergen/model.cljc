@@ -310,18 +310,16 @@
      :p           p}))
 
 (defn weather-grid
-  [{:keys [map-fn cell-count origin time] :as params}]
-  (let [[width height] cell-count
-        [origin-x origin-y] origin
-        {:keys [offset current]} time
+  [{:keys [map-fn cells origin time] :as params}]
+  (let [{:keys [offset current]} time
         ;; This is so we can pass in pmap when we're in a non-CLJS context
         map-fn (or map-fn map)]
-    (->>  (for [x (range width)
-                y (range height)]
+    (->>  (for [[x y] cells
+                :let [t (+ offset (falcon-time->minutes current))]]
             [[x y] (assoc params
                           :x x
                           :y y
-                          :t (+ offset (falcon-time->minutes current)))])
+                          :t t)])
           (map-fn (fn [[[x y] params]]
                     [[x y] (weather params)]))
           (into (sorted-map)))))
