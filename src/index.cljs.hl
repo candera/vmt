@@ -1362,22 +1362,11 @@
    :title "Load/save"
    (div
     :class "button-container"
-    (cell=
-     (let [t (get-in weather-params [:time :current])
-           [x-cells y-cells] (:cell-count weather-params)
-           blob (fmap/get-blob weather-data
-                               x-cells
-                               y-cells)
-           url (-> js/window .-URL (.createObjectURL blob))
-           download (gstring/format "%d%02d%02d.fmap"
-                                    (:day t)
-                                    (:hour t)
-                                    (:minute t))]
-       (a :href url
-          :download download
-          :click #(move 1)
-          :class "button"
-          "Save Current as FMAP")))
+    (a :click (fn []
+                (save-fmap @weather-params @weather-data)
+                (move 1))
+       :class "button"
+       "Save Current as FMAP")
     "(Steps forward in time)")
    (div
     :class "button-container"
