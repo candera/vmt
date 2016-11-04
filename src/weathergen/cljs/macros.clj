@@ -5,7 +5,7 @@
   [timer & body]
   `(let [timer-name# ~timer
          ignore#     (.time js/console timer-name#)
-         result#     ~@body]
+         result#     (do ~@body)]
      (.timeEnd js/console timer-name#)
      result#))
 

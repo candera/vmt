@@ -44,7 +44,12 @@
   (apply mapv + vs))
 
 (defn scramble
-  (^double [^long x] (scramble x 1))
+  (^double [^long x] (scramble x 1)
+   ;; This is faster and seems to give just as good a result. But it
+   ;; would be a breaking change, in the sense that it would produce
+   ;; different weather for the same inputs across versions. And,
+   ;; frankly, it's not that much faster.
+   #_(-> x (* 1234.4576891234235) frac))
   (^double [^long x ^double seed]
    (let [a (-> x (* seed) Math/sin Math/abs)
          b (* a 1E5)]
