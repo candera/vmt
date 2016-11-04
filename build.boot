@@ -1,13 +1,13 @@
 (def project 'lsobot)
 
 (set-env!
- :dependencies '[[org.clojure/clojurescript "1.9.76"]
-                 [adzerk/boot-cljs          "1.7.228-1"]
-                 [adzerk/boot-reload        "0.4.8"]
-                 [hoplon/boot-hoplon        "0.1.13"]
+ :dependencies '[[org.clojure/clojurescript "1.9.293"]
+                 [adzerk/boot-cljs          "1.7.228-2"]
+                 [adzerk/boot-reload        "0.4.13"]
+                 [hoplon/boot-hoplon        "0.3.0"]
                  [hoplon/hoplon             "6.0.0-alpha16"]
-                 [org.clojure/clojure       "1.9.0-alpha6"]
-                 [org.clojure/core.async    "0.2.374"
+                 [org.clojure/clojure       "1.9.0-alpha14"]
+                 [org.clojure/core.async    "0.2.395"
                   :exclusions [org.clojure/tools.reader]]
                  [tailrecursion/boot-jetty  "0.1.3"]
                  #_[adzerk/boot-cljs-repl     "0.3.0"]
@@ -18,6 +18,7 @@
                  [org.clojure/data.csv "0.1.3"]
                  ;; TODO: Update to later version
                  [com.cognitect/transit-cljs "0.8.239"]
+                 [com.taoensso/timbre "4.7.4"]
                  [clojure-complete "0.2.4" :scope "test"]]
  :source-paths #{"src"}
  :asset-paths  #{"assets"})
