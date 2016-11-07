@@ -1,0 +1,32 @@
+(page "forecast.html"
+  (:require [clojure.string :as str]
+            [goog.crypt.base64 :as base64]
+            [longshi.core :as fress]
+            [weathergen.coordinates :as coords]
+            [weathergen.database :as db]
+            [weathergen.math :as math]
+            [weathergen.model :as model]
+            [weathergen.ui :as ui])
+  (:require-macros
+   [cljs.core.async.macros :refer [go go-loop]]
+   [weathergen.cljs.macros :refer [with-time formula-of]]))
+
+(let [{:keys [weather-params
+              display-params
+              movement-params]}
+      (-> js/window
+          .-location
+          .-search
+          (subs (count "?data="))
+          base64/decodeStringToUint8Array
+          fress/read)]
+  (dosync
+   (reset! ui/weather-params weather-params)
+   (reset! ui/display-params display-params)
+   (reset! ui/movement-params movement-params)
+   (reset! ui/time-params {:displayed (-> weather-params :time :current)})))
+
+(ui/weather-page
+ :display-controls {}
+ :step-controls {}
+ :forecast-section {:forecast-link? false})

@@ -10,15 +10,19 @@
                  [org.clojure/core.async    "0.2.395"
                   :exclusions [org.clojure/tools.reader]]
                  [tailrecursion/boot-jetty  "0.1.3"]
-                 #_[adzerk/boot-cljs-repl     "0.3.0"]
-                 #_[com.cemerick/piggieback "0.2.1" :scope "test"]
-                 #_[weasel "0.7.0" :scope "test"]
-                 [org.clojure/tools.nrepl "0.2.12" :scope "test"]
+                 ;; [org.clojure/tools.nrepl "0.2.12" :scope "test"]
                  [cljsjs/jquery-ui "1.11.4-0"]
                  [org.clojure/data.csv "0.1.3"]
                  ;; TODO: Update to later version
                  [com.cognitect/transit-cljs "0.8.239"]
                  [com.taoensso/timbre "4.7.4"]
+                 ;;[secretary "1.2.3"]
+                 ;;[funcool/cuerdas "2.0.0"]
+                 ;;[com.cemerick/url "0.1.1"]
+
+                 ;; [net.unit8/fressian-cljs "0.1.0"]
+                 [longshi "0.1.4"]
+
                  [clojure-complete "0.2.4" :scope "test"]]
  :source-paths #{"src"}
  :asset-paths  #{"assets"})
