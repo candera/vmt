@@ -24,9 +24,11 @@
    (reset! ui/weather-params weather-params)
    (reset! ui/display-params display-params)
    (reset! ui/movement-params movement-params)
-   (reset! ui/time-params {:displayed (-> weather-params :time :current)})))
+   (reset! ui/time-params {:displayed (-> weather-params :time :current)})
+   (reset! ui/max-time (-> weather-params :time :current))))
 
 (ui/weather-page
  :display-controls {}
- :step-controls {}
+ :step-controls {:limit-time? true
+                 :prevent-set-time? true}
  :forecast-section {:forecast-link? false})

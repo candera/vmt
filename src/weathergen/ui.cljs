@@ -132,6 +132,8 @@
 
 (defc selected-cell nil)
 
+(defc max-time nil)
+
 ;; TODO: This can go away if we introduce a single-input way to input
 ;; time.
 (defc time-params
@@ -180,6 +182,11 @@
     :else :none))
 
 (defc= pressure-unit (:pressure-unit display-params))
+
+(defc= time-from-max
+  (when max-time
+    (- (model/falcon-time->minutes (:displayed time-params))
+       (model/falcon-time->minutes max-time))))
 
 ;;; Routes
 
@@ -243,13 +250,23 @@
 ;; TODO: Put more of these here
 
 (defn move
-  "Advances the weather by `steps` steps"
+  "Advances the weather by `steps` steps, unless that would move past
+  the max time."
   [steps]
   (dosync
-   (let [{:keys [time]} (swap! weather-params
+   (let [minutes        (* steps (:step @movement-params))
+         current-time   (-> @weather-params :time :current model/falcon-time->minutes)
+         desired-time   (+ current-time minutes)
+         new-time       (if @max-time
+                          (min (model/falcon-time->minutes @max-time)
+                               desired-time)
+                          desired-time)
+         actual-steps   (/ (- new-time current-time)
+                           (:step @movement-params))
+         {:keys [time]} (swap! weather-params
                                model/step
                                @movement-params
-                               steps)]
+                               actual-steps)]
      (swap! time-params
             assoc
             :displayed
@@ -482,6 +499,13 @@
     (.toFixed inhg 2)
     (-> inhg inhg->mbar (.toFixed 0))))
 
+(defn format-time
+  [{:keys [day hour minute]}]
+  (gstring/format "%02d/%02d%02d"
+                  day
+                  hour
+                  minute))
+
 ;;; Page sections
 
 (defelem control-section
@@ -511,7 +535,7 @@
       (div :class "control-container" children)))))
 
 (defn forecast-section
-  [{:keys [forecast-link?]
+  [{:keys [forecast-link? limit-time?]
     :as opts}]
   (control-section
    :title "Forecast"
@@ -574,8 +598,7 @@
             (tr (td :colspan 6
                     "No location is selected. Choose a location from the list, or click on the weather map to select one."))
             (for [[time weather] forecast]
-              (tr (td (gstring/format "%02d/%02d%02d"
-                                      (:day time) (:hour time) (:minute time)))
+              (tr (td (format-time time))
                   (td (-> weather :type type-key->name))
                   (td (-> weather :pressure (format-pressure pressure-unit)))
                   (td (-> weather :temperature (.toFixed 1)))
@@ -1428,32 +1451,48 @@
      ["Zoom"             [:feature-size]]])))
 
 (defn step-controls
-  [_]
+  [{:keys [limit-time?
+           prevent-set-time?]}]
   (control-section
    :id "time-location-params"
    :title "Time controls"
+   (if limit-time?
+     [(div "Falcon time: " (cell= (format-time max-time)))
+      (div "Displayed time: " (-> weather-params :time :current format-time cell=))]
+     [])
    (table
     (tbody
-     ;; (tr (map td ["Start Time" (time-entry weather-params [:time :start])]))
-
      (tr (map td [(help-for [:displayed-time])
                   "Time"
                   (time-entry time-params [:displayed])
-                  (button
-                   :click jump-to-time
-                   "Jump to")
-                  (button
-                   :click set-time
-                   "Set to")]))
+                  (formula-of
+                   [time-from-max]
+                   (if (and time-from-max (pos? time-from-max))
+                     (div :class "warning"
+                          "Can't look into the future.")
+                     [(button
+                       :click jump-to-time
+                       "Jump to")
+                      (if prevent-set-time?
+                        []
+                        (button
+                         :click set-time
+                         "Set to"))]))]))
      (tr (map td [(help-for [:step])
                   "Step interval"
                   (edit-field movement-params [:step])]))))
    (button :title "Step back in time"
            :click #(move -1)
            "<< Step Back")
-   (button :title "Step forward in time"
-           :click #(move 1)
-           "Step Forward >>")))
+   (formula-of
+    [weather-params max-time]
+    (if (and max-time
+             (<= (-> max-time model/falcon-time->minutes)
+                 (-> weather-params :time :current model/falcon-time->minutes)))
+      []
+      (button :title "Step forward in time"
+              :click #(move 1)
+              "Step Forward >>")))))
 
 (defn serialization-controls
   [_]
