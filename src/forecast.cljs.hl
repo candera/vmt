@@ -1,5 +1,6 @@
 (page "forecast.html"
   (:require [clojure.string :as str]
+            [cljsjs.pako]
             [goog.crypt.base64 :as base64]
             [longshi.core :as fress]
             [weathergen.coordinates :as coords]
@@ -11,7 +12,8 @@
    [cljs.core.async.macros :refer [go go-loop]]
    [weathergen.cljs.macros :refer [with-time formula-of]]))
 
-(let [{:keys [weather-params
+(let [inflate #(.inflate js/pako %)
+      {:keys [weather-params
               display-params
               movement-params]}
       (-> js/window
@@ -19,6 +21,7 @@
           .-search
           (subs (count "?data="))
           base64/decodeStringToUint8Array
+          inflate
           fress/read)]
   (dosync
    (reset! ui/weather-params weather-params)

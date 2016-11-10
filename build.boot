@@ -22,6 +22,7 @@
 
                  ;; [net.unit8/fressian-cljs "0.1.0"]
                  [longshi "0.1.4"]
+                 [cljsjs/pako "0.2.7-0"]
 
                  [clojure-complete "0.2.4" :scope "test"]]
  :source-paths #{"src"}

@@ -6,7 +6,7 @@
              :as h
              :refer [a button defelem div do! fieldset hr html img input
                      label legend link loop-tpl
-                     option p select span table tbody td thead title tr
+                     option p script select span table tbody td thead title tr
                      with-init!]]
             [hoplon.svg :as svg]
             [goog.dom :as gdom]
@@ -27,7 +27,7 @@
             [cljs.core.async :as async
              :refer [<! >! alts! timeout]]
             [cljs.reader :as reader]
-            [cljsjs.jquery-ui]
+            [cljsjs.pako]
             ;;[secretary.core :refer-macros [defroute]]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
@@ -573,7 +573,8 @@
                      display-params
                      movement-params
                      time-params]
-                    (let [write-buf (-> {:weather-params weather-params
+                    (let [deflate #(.deflate js/pako %)
+                          write-buf (-> {:weather-params weather-params
                                          :display-params display-params
                                          :movement-params movement-params}
                                         ;; encode
@@ -582,6 +583,7 @@
                            (-> write-buf
                                longshi.fressian.byte-stream-protocols/get-bytes
                                (.subarray 0 (longshi.fressian.byte-stream-protocols/bytes-written write-buf))
+                               deflate
                                (base64/encodeByteArray true)))))
              :target "_blank"
              "Shareable Forecast"))
