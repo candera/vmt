@@ -1025,7 +1025,6 @@
 (def ENTER_KEY 13)
 
 
-
 (defn two-column
   [left right]
   (div :class "two-column"
@@ -1107,7 +1106,7 @@
                     (or extra []))))))
 
 (defn display-controls
-  [_]
+  [{:keys [prevent-map-change?]}]
   (let [dropdown (fn [{:keys [k key->name name->key change]}]
                    (select
                     :change (if change
@@ -1143,13 +1142,15 @@
     (control-section
      :title "Display controls"
      :id "display-controls-section"
-     (field
-      (field-help (help-for [:display-controls :map]))
-      (field-label "Map")
-      (field-input (dropdown {:k :map
-                              :key->name map-key->name
-                              :name->key map-name->key
-                              :change change-theater})))
+     (if prevent-map-change?
+       []
+       (field
+        (field-help (help-for [:display-controls :map]))
+        (field-label "Map")
+        (field-input (dropdown {:k :map
+                                :key->name map-key->name
+                                :name->key map-name->key
+                                :change change-theater}))))
      (field
       (field-help (help-for [:display-controls :display]))
       (field-label "Display")

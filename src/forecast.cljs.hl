@@ -31,7 +31,7 @@
    (reset! ui/max-time (-> weather-params :time :current))))
 
 (ui/weather-page
- :display-controls {}
+ :display-controls {:prevent-map-change? true}
  :step-controls {:limit-time? true
                  :prevent-set-time? true}
  :forecast-section {:forecast-link? false})
