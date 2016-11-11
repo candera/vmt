@@ -828,6 +828,7 @@
     :as attrs}]
   (let [primary-layer (svg/g
                        :id "primary-layer"
+                       :toggle (cell= (-> display-params :display some?))
                        :css (cell= {:opacity (-> display-params :opacity)}))
         wind-overlay (svg/g
                       :id "wind-overlay"
