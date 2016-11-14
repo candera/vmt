@@ -67,12 +67,12 @@
     weather type boundaries. A good value to use is 0.1. Values above
     about 0.3 will give strange results.")
 
-   :origin
-   {:x (p "The x location in 'weather space' that is displayed
+    :origin
+    {:x (p "The x location in 'weather space' that is displayed
    on the grid. You will not normally edit this field, but you can
    change it to see different parts of the weather pattern.")
 
-    :y (p "The y location in 'weather space' that is displayed
+     :y (p "The y location in 'weather space' that is displayed
 on the grid. You will not normally edit this field, but you can change
 it to see different parts of the weather pattern.")}
 
@@ -80,7 +80,21 @@ it to see different parts of the weather pattern.")}
     {:offset
      (p "The time in 'weather space' that is displayed on the grid.
 You will not normally edit this field, but you can change it to move
-forward and backward in time. ")}
+forward and backward in time. ")
+     :falcon-time
+     [(p "The current time in the Falcon world. Time cannot be advanced
+     past this point, as that would be peeking into the future.")
+      (p "Click the 'Jump to' button to set the displayed weather to
+     this time.")]
+     :browse-time
+     [(p "Enter a time here to view the weather at that time. Use the
+     format 'dd/hhmm', where 'dd', 'hh', and 'mm' are the numeric day,
+     hour, and minute. For example, '01/1200' will show the weather at
+     noon of day 1.")
+      (p "Note that you will be unable to move the time past 'Falcon
+      time' above, as that would be peeking into the future. Use the
+      Forecast section below to get a (potentially slightly
+      inaccurate) forecast instead.")]}
 
     :feature-size
     (p "How 'zoomed in' the weather will be on the underlying weather

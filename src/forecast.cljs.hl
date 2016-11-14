@@ -32,6 +32,5 @@
 
 (ui/weather-page
  :display-controls {:prevent-map-change? true}
- :step-controls {:limit-time? true
-                 :prevent-set-time? true}
+ :step-controls {:mode :browse}
  :forecast-section {:forecast-link? false})

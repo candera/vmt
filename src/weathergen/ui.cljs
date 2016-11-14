@@ -884,38 +884,7 @@
                                        :attr {:class "weather-override-area"}
                                        :cx (+ x 0.5)
                                        :cy (+ y 0.5)
-                                       :r (- radius 0.5)))))
-        spinner-overlay (svg/g
-                         :id "spinner-overlay"
-                         :toggle computing
-                         (svg/rect
-                          :attr {:class "spinner-background"}
-                          :x 0
-                          :y 0
-                          :width nx
-                          :height nx)
-                         ;; Because it puts a huge load on the CPU to
-                         ;; do all the animation, we have to remove
-                         ;; the spinner completely when it's not being
-                         ;; used.
-                         (formula-of
-                          [computing]
-                          (if-not computing
-                            []
-                            (let [n 12]
-                              (for [i (range 0 n)]
-                                (svg/rect
-                                 :x (/ nx 2)
-                                 :y (/ ny 25)
-                                 :width (/ nx 20)
-                                 :height (/ nx 5)
-                                 :rx (/ nx 30)
-                                 :ry (/ ny 40)
-                                 :transform (gstring/format "rotate(%f %f %f)"
-                                                            (-> i (* (/ 360 n)))
-                                                            (/ nx 2)
-                                                            (/ ny 2))
-                                 :attr {:class (str "spinner spinner" i)}))))))]
+                                       :r (- radius 0.5)))))]
     (with-let [elem (svg/svg
                      (-> attrs
                          (dissoc :display-params
@@ -946,8 +915,7 @@
                      text-overlay
                      wind-stability-overlay
                      weather-overrides-overlay
-                     selected-cell-overlay
-                     spinner-overlay)]
+                     selected-cell-overlay)]
       ;; TODO: We're capturing the value of the number of cells, but it
       ;; never changes. One of these days I should probably factor this
       ;; out. Either that or just react to changes in the number of
@@ -1025,12 +993,135 @@
 (def ESCAPE_KEY 27)
 (def ENTER_KEY 13)
 
+(def colors
+  {:invalid       "#c70505"
+   :error-message "#c70505"})
 
 (defn two-column
   [left right]
   (div :class "two-column"
        (div :class "left-column" left)
        (div :class "right-column" right)))
+
+(defn conform-nonnegative-integer
+  [s]
+  (let [n (js/Number. s)
+        l (long n)
+        valid? (and (int? l)
+                    (not (neg? l)))]
+    {:valid? valid?
+     :message (when-not valid?
+                "Must be whole number, greather than or equal to zero.")
+     :value l}))
+
+(defn conform-positive-integer
+  [s]
+  (let [n (js/Number. s)
+        l (long n)
+        valid? (and (int? l)
+                    (pos? l))]
+    {:valid? valid?
+     :message (when-not valid?
+                "Must be an integer greater than zero.")
+     :value l}))
+
+(defelem validating-edit
+  [{:keys [conform fmt source update width placeholder] :as attrs}
+   _]
+  (let [attrs (dissoc attrs :source :conform :update :width :fmt :placeholder)
+        interim (cell nil)
+        parsed (formula-of
+                [interim]
+                (if interim
+                  (conform interim)
+                  {:valid? true
+                   :value @source}))
+        state (cell :set)]
+    (div
+     attrs
+     :css {:position "relative"}
+     (input :type "text"
+            :placeholder placeholder
+            :input #(do
+                      (reset! interim @%)
+                      (if (and (:valid? @parsed)
+                               (= (:value @parsed) @source))
+                        (dosync
+                         (reset! state :set)
+                         (reset! interim nil))
+                        (reset! state :editing)))
+            :change #(do
+                       (let [p @parsed]
+                         (log/debug "it changed to " @%)
+                         (log/debug "@parsed" @parsed)
+                         (when (:valid? p)
+                           (update (:value p))
+                           (dosync
+                            (reset! interim nil)
+                            (reset! state :set)))))
+            :keyup (fn [e]
+                     (log/debug "keyup" (.-keyCode e))
+                     (when (= ESCAPE_KEY (.-keyCode e))
+                       (dosync
+                        (reset! interim nil)
+                        (reset! state :set))))
+            :css (cell= {"font-style" (if (= state :editing)
+                                        "italic"
+                                        "")
+                         "color" (if (:valid? parsed)
+                                   ""
+                                   (colors :invalid))
+                         "width" (or width "initial")})
+            :value (formula-of
+                    [interim source]
+                    (if interim
+                      interim
+                      (fmt source))))
+     (img :src "images/error.png"
+          :title (cell= (:message parsed))
+          :css (formula-of
+                [parsed]
+                {"width" "14px"
+                 "vertical-align" "middle"
+                 "margin-left" "3px"
+                 "opacity" (if (:valid? parsed)
+                             "0"
+                             "1")})))))
+
+;; TODO: We could consider using a lens here instead of separate
+;; source and update
+(defelem time-edit
+  [{:keys [source update] :as attrs} _]
+  (validating-edit
+   attrs
+   :width "50px"
+   :fmt format-time
+   :placeholder "dd/hhmm"
+   :conform #(let [[all dd hh mm] (re-matches #"(\d+)/(\d\d)(\d\d)" %)
+                   day            (->> dd js/Number. long)
+                   hour           (->> hh js/Number. long)
+                   min            (->> mm js/Number. long)
+                   valid?         (and dd hh mm
+                                       (int? day)
+                                       (int? hour)
+                                       (int? min)
+                                       (<= 0 hour 23)
+                                       (<= 0 min 59))
+                   val            {:day    day
+                                   :hour   hour
+                                   :minute min}
+                   over-max?      (and valid?
+                                       @max-time
+                                       (log/spy
+                                        (< (model/falcon-time->minutes @max-time)
+                                           (model/falcon-time->minutes val))))]
+               {:valid? (and valid? (not over-max?))
+                :message (cond
+                           (not valid?) "Time must be in the format 'dd/hhmm'"
+                           over-max? (str "Time cannot be set later than " (format-time @max-time)))
+                :value {:day    day
+                        :hour   hour
+                        :minute min}})))
 
 (defn edit-field
   ([c path] (edit-field c path {}))
@@ -1058,7 +1149,10 @@
 (defn time-entry
   [c path]
   ;; TODO: Make fancier
-  (table
+  (time-edit
+   :source (formula-of [c] (get-in c path))
+   :update #(swap! c assoc-in path %))
+  #_(table
    :class "time-params"
    (thead
     (tr (map #(td :class "time-entry-label" %) ["Day" "Hour" "Minute"])))
@@ -1068,6 +1162,7 @@
 (defn button-bar
   []
   (div :class "button-bar"
+       :css {"position" "relative"}
        (button :id "enlarge-grid"
                :click #(swap! display-params
                               update
@@ -1083,7 +1178,28 @@
                               (fn [[x y]]
                                 [(- x 50) (- y 50)]))
                :title "Shrink grid"
-               (img :src "images/smaller.png"))))
+               (img :src "images/smaller.png"))
+       (span
+        :css {"position" "absolute"
+              "right" "27px"
+              "bottom" "0"}
+        "Day/Time: " (formula-of
+                      [weather-data-params]
+                      (let [t (-> weather-data-params :time :current)]
+                        (if t
+                          (format-time t)
+                          "--/----"))))
+       (formula-of
+        [computing]
+        (if-not computing
+          []
+          (img :src "images/spinner.gif"
+               :width "24"
+               :height "24"
+               :css {"vertical-align" "bottom"
+                     "position" "absolute"
+                     "right" "3px"
+                     "bottom" "0"})))))
 
 (defn control-layout
   "Lays out controls for a control section"
@@ -1455,36 +1571,42 @@
      ["Zoom"             [:feature-size]]])))
 
 (defn step-controls
-  [{:keys [limit-time?
-           prevent-set-time?]}]
+  [{:keys [mode]}]
   (control-section
    :id "time-location-params"
    :title "Time controls"
-   (if limit-time?
-     [(div "Falcon time: " (cell= (format-time max-time)))
-      (div "Displayed time: " (-> weather-params :time :current format-time cell=))]
-     [])
    (table
     (tbody
-     (tr (map td [(help-for [:displayed-time])
-                  "Time"
-                  (time-entry time-params [:displayed])
-                  (formula-of
-                   [time-from-max]
-                   (if (and time-from-max (pos? time-from-max))
-                     (div :class "warning"
-                          "Can't look into the future.")
-                     [(button
-                       :click jump-to-time
-                       "Jump to")
-                      (if prevent-set-time?
-                        []
-                        (button
-                         :click set-time
-                         "Set to"))]))]))
+     (if (= mode :browse)
+       (tr (td (help-for [:weather-params :time :falcon-time]))
+           (td "Falcon time: ")
+           (td (cell= (format-time max-time)))
+           (td (button
+                :click #(swap! weather-params assoc-in [:time :current] @max-time)
+                "Jump to")))
+       [])
+     (if (= mode :browse)
+       (tr (td (help-for [:weather-params :time :browse-time]))
+           (td "Time")
+           (td (time-entry weather-params [:time :current])))
+       (tr (td (help-for [:displayed-time]))
+           (td "Time")
+           (td (time-entry time-params [:displayed]))
+           (td (button
+                :click jump-to-time
+                "Jump to")
+               (button
+                :click set-time
+                "Set to"))))
      (tr (map td [(help-for [:step])
                   "Step interval"
-                  (edit-field movement-params [:step])]))))
+                  (validating-edit
+                   :width "50px"
+                   :source (cell= (:step movement-params))
+                   :conform conform-positive-integer
+                   :update #(swap! movement-params assoc :step %)
+                   :placeholder "e.g. 60"
+                   :fmt str)]))))
    (button :title "Step back in time"
            :click #(move -1)
            "<< Step Back")
@@ -1552,38 +1674,13 @@
     (.removeAttribute elem "preserveAspectRatio")
     (.setAttribute elem "preserveAspectRatio" value)))
 
-(defn test-region
-  []
-  (let [n 59
-        m (into {}
-                (for [x (range n)
-                      y (range n)]
-                  [[x y] (cell (rand-int 4))]))]
-    (with-time "test initial render"
-      [(svg/svg
-        :id "test"
-        :viewBox (gstring/format "0 0 %d %d" n n)
-        :width 600
-        :height 600
-        ;; :css {"display" "none"}
-        #_(for [[[x y] c] m]
-            (svg/rect
-             :attr (formula-of [c] {:class (str "test" c)})
-             :x x
-             :y y
-             :width 1
-             :height 1)))
-       (button
-        :click (fn []
-                 (.requestAnimationFrame
-                  js/window
-                  #(with-time "randomize"
-                     (doseq [x (range n)
-                             y (range n)]
-                       (-> (str "cell-" x "-" y)
-                           gdom/getElement
-                           (.setAttribute "class" (str "test" (rand-int 4))))))))
-        "Randomize")])))
+
+(defn test-section
+  [{:keys []}]
+  (time-edit
+   :id "test"
+   :source (cell= (-> weather-params :time :current))
+   :update #(swap! weather-params assoc-in [:time :current] %)))
 
 
 ;;; General layout
@@ -1633,7 +1730,8 @@
    :weather-type-configuration weather-type-configuration
    :wind-stability-parameters wind-stability-parameters
    :weather-override-parameters weather-override-parameters
-   :advanced-controls advanced-controls})
+   :advanced-controls advanced-controls
+   :test-section test-section})
 
 (defn weather-page
   [& section-infos]

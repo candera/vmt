@@ -1,0 +1,18 @@
+(page "test.html"
+  (:require [clojure.string :as str]
+            [cljsjs.pako]
+            [goog.crypt.base64 :as base64]
+            [longshi.core :as fress]
+            [weathergen.coordinates :as coords]
+            [weathergen.database :as db]
+            [weathergen.math :as math]
+            [weathergen.model :as model]
+            [weathergen.ui :as ui])
+  (:require-macros
+   [cljs.core.async.macros :refer [go go-loop]]
+   [weathergen.cljs.macros :refer [with-time formula-of]]))
+
+(reset! ui/max-time {:day 2 :hour 2 :minute 2})
+
+(ui/weather-page
+ :test-section {})
