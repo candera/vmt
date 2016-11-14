@@ -1151,13 +1151,7 @@
   ;; TODO: Make fancier
   (time-edit
    :source (formula-of [c] (get-in c path))
-   :update #(swap! c assoc-in path %))
-  #_(table
-   :class "time-params"
-   (thead
-    (tr (map #(td :class "time-entry-label" %) ["Day" "Hour" "Minute"])))
-   (tbody
-    (tr (map #(td (edit-field c (conj path %))) [:day :hour :minute])))))
+   :update #(swap! c assoc-in path %)))
 
 (defn button-bar
   []
@@ -1429,26 +1423,12 @@
             (label :for id "Fade in/out?")))
          (table
           :toggle (cell= (:animate? override))
-          (tr (td "")
-              (td "Day")
-              (td "Hour")
-              (td "Minute"))
-          (tr (td (help-for [:weather-overrides :begin]) "Begin")
-              (td (edit-field weather-params [:weather-overrides @index :begin :day]))
-              (td (edit-field weather-params [:weather-overrides @index :begin :hour]))
-              (td (edit-field weather-params [:weather-overrides @index :begin :minute])))
-          (tr (td (help-for [:weather-overrides :peak]) "Peak")
-              (td (edit-field weather-params [:weather-overrides @index :peak :day]))
-              (td (edit-field weather-params [:weather-overrides @index :peak :hour]))
-              (td (edit-field weather-params [:weather-overrides @index :peak :minute])))
-          (tr (td (help-for [:weather-overrides :taper]) "Taper")
-              (td (edit-field weather-params [:weather-overrides @index :taper :day]))
-              (td (edit-field weather-params [:weather-overrides @index :taper :hour]))
-              (td (edit-field weather-params [:weather-overrides @index :taper :minute])))
-          (tr (td (help-for [:weather-overrides :end]) "End")
-              (td (edit-field weather-params [:weather-overrides @index :end :day]))
-              (td (edit-field weather-params [:weather-overrides @index :end :hour]))
-              (td (edit-field weather-params [:weather-overrides @index :end :minute]))))
+          (for [[label k] [["Begin" :begin]
+                           ["Peak" :peak]
+                           ["Taper" :taper]
+                           ["End" :end]]]
+            (tr (td (help-for [:weather-overrides k]) label)
+                (td (time-entry weather-params [:weather-overrides @index k])))))
          (button
           :click #(swap! weather-params
                          update
