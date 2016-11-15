@@ -878,8 +878,9 @@
                                    (svg/g
                                     :id "weather-overrides-overlay"
                                     (for [override weather-overrides
-                                          :let [{:keys [location radius]} override
-                                                {:keys [x y]} location]]
+                                          :let [{:keys [location radius show-outline?]} override
+                                                {:keys [x y]} location]
+                                          :when show-outline?]
                                       (svg/circle
                                        :attr {:class "weather-override-area"}
                                        :cx (+ x 0.5)
@@ -1412,15 +1413,22 @@
            (tr (td (help-for [:weather-overrides :strength]))
                (td :class "override-label" "Strength")
                (td (edit-field weather-params [:weather-overrides @index :strength])))))
-         (let [id (gensym)]
-           (div
-            :class "weather-override-animate-checkbox"
-            (help-for [:weather-overrides :animate?])
-            (input :id id
-                   :type "checkbox"
-                   :checked (:animate? override)
-                   :change (fn [_] (swap! weather-params update-in [:weather-overrides @index :animate?] not)))
-            (label :for id "Fade in/out?")))
+         (let [checkbox (fn [l k]
+                          (let [id (gensym)]
+                            (div
+                             (help-for [:weather-overrides k])
+                             (input :id id
+                                    :type "checkbox"
+                                    :value (cell= (k override))
+                                    :change (fn [_]
+                                              (swap! weather-params
+                                                     update-in
+                                                     [:weather-overrides @index k]
+                                                     not)))
+                             (label :for id l))))]
+           [(checkbox "Show outline?" :show-outline?)
+            ;; (checkbox "Include in forecast?" :include-in-forecast?)
+            (checkbox "Fade in/out?" :animate?)])
          (table
           :toggle (cell= (:animate? override))
           (for [[label k] [["Begin" :begin]
@@ -1452,7 +1460,9 @@
                                         :taper (-> wp :time :current (model/add-time 180))
                                         :end (-> wp :time :current (model/add-time 240))
                                         :pressure (-> wp :pressure :min)
-                                        :strength 1})))))
+                                        :strength 1
+                                        :show-outline? true
+                                        :include-in-forecast? true})))))
       "Add New"))))
 
 (defn weather-type-configuration
