@@ -25,10 +25,18 @@
           fress/read)]
   (dosync
    (reset! ui/weather-params weather-params)
-   (reset! ui/display-params display-params)
+   (reset! ui/display-params
+           (assoc
+            display-params
+            :dimensions
+            [ui/initial-size ui/initial-size]))
    (reset! ui/movement-params movement-params)
    (reset! ui/time-params {:displayed (-> weather-params :time :current)})
-   (reset! ui/max-time (-> weather-params :time :current))))
+   (swap! ui/weather-params
+          (fn [wp]
+            (assoc-in wp
+                      [:time :max]
+                      (-> wp :time :current))))))
 
 (ui/weather-page
  :display-controls {:prevent-map-change? true}

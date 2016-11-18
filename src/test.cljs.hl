@@ -12,7 +12,7 @@
    [cljs.core.async.macros :refer [go go-loop]]
    [weathergen.cljs.macros :refer [with-time formula-of]]))
 
-(reset! ui/max-time {:day 2 :hour 2 :minute 2})
+;; (reset! ui/max-time {:day 2 :hour 2 :minute 2})
 
 (ui/weather-page
  :test-section {})

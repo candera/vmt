@@ -247,8 +247,9 @@
          (math/clamp 0.0 1.0))))
 
 (defn weather
-  "x and y are in cells, t is in minutes."
-  [{:keys [x y t seed
+  "x and y are in cells"
+  [{:keys [x y seed
+           time
            origin
            evolution
            categories
@@ -262,6 +263,13 @@
   (let [[origin-x origin-y] origin
         x* (/ (+ origin-x x) feature-size)
         y* (/ (+ origin-y y) feature-size)
+        ;; These next two values get computed over and over again. I
+        ;; used to precompute them and pass them in, but that made for
+        ;; a confusing API. Might need to find a way to have an
+        ;; efficient precomputation mechanism during an optimization
+        ;; pass.
+        {:keys [offset current]} time
+        t (+ offset (falcon-time->minutes current))
         ;; TODO: Why do we need this 10 here?
         t* (/ t evolution 10)
         max-pressure (:max pressure)
@@ -311,15 +319,12 @@
 
 (defn weather-grid
   [{:keys [map-fn cells origin time] :as params}]
-  (let [{:keys [offset current]} time
-        ;; This is so we can pass in pmap when we're in a non-CLJS context
+  (let [;; This is so we can pass in pmap when we're in a non-CLJS context
         map-fn (or map-fn map)]
-    (->>  (for [[x y] cells
-                :let [t (+ offset (falcon-time->minutes current))]]
+    (->>  (for [[x y] cells]
             [[x y] (assoc params
                           :x x
-                          :y y
-                          :t t)])
+                          :y y)])
           (map-fn (fn [[[x y] params]]
                     [[x y] (weather params)]))
           (into (sorted-map)))))
@@ -348,22 +353,53 @@
   given location. First forecast is for start time from weather
   params, with `steps` forecasts in total. Step size is as specified
   by movement params."
-  [[x y] weather-params movement-params steps]
+  [[x y] weather-params movement-params interval steps]
   (let [{:keys [time]} weather-params
-        {:keys [offset current]} time
+        {:keys [offset current max]} time
         {:keys [direction step]} movement-params
         {:keys [heading speed]} direction
-        now (+ offset (falcon-time->minutes current))]
-    (->> (for [n (range steps)
-               :let [dt (* -1 step n)
+        ;;now (+ offset (falcon-time->minutes current))
+        now (falcon-time->minutes current)
+        max-t (when max (falcon-time->minutes max))
+        weather-params* (update weather-params
+                                :weather-overrides
+                                #(remove :exclude-from-forecast? %))]
+    ;; TODO: Add position/time inaccuracy
+    (->> (for [t (into [now]
+                       (map #(-> %
+                                 inc
+                                 (* interval)
+                                 (+ now)
+                                 (/ interval)
+                                 long
+                                 (* interval))
+                            (range steps)))
+               :let [dt (- t now)
                      [dx dy :as dpos] (->> [0 1]
                                            (math/rotate (- heading))
-                                           (math/scale (* -1 dt (/ speed 60 9))))]]
+                                           (math/scale (* dt (/ speed 60 9))))]]
            (do
-             (println :current current :offset offset :now now)
-             [(add-time current (* step n))
-              (-> weather-params
-                  (assoc :x x :y y :t now)
+             (println "forecast"
+                      :current current
+                      :overrides (->> weather-params
+                                      :weather-overrides
+                                      count)
+                      :included-overrides (->> weather-params*
+                                               :weather-overrides
+                                               count)
+                      :offset offset
+                      :now now
+                      :x x
+                      :y y
+                      :dt dt
+                      :dpos dpos)
+             [(minutes->falcon-time t)
+              (-> (if (or (nil? max-t)
+                          (<= t max-t))
+                    weather-params
+                    weather-params*)
+                  (assoc :x x :y y)
+                  (assoc-in [:time :current] (minutes->falcon-time t))
                   (update :origin math/vector-add dpos)
                   weather)]))
          (into (sorted-map-by (fn [a b]

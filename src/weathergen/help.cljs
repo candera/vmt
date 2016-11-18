@@ -189,10 +189,13 @@ forward and backward in time. ")
    sunny weather. By default, pressure is generated randomly, but it
    can be overridden for certain locations and times using the
    controls in this section.")]
+
     :center
     (p "The X and Y coordinates of the center of the override region.")
+
     :radius
     (p "The radius of the override region, measured in cells.")
+
     :falloff
     (p "The distance from the center of the region at which the
     override pressure begins to be blended into the surrounding
@@ -200,14 +203,55 @@ forward and backward in time. ")
     gradual transition. Set it to zero to have an abrupt edge to the
     region. Note that abrupt changes may result in odd weather effects
     in the sim. A falloff of six or higher is recommended.")
+
     :pressure
     (p "The override pressure for the region. Use the values from the
     Weather Type Configuration section to select an appropriate value
     for the type of weather you are trying to enforce.")
+
     :strength
     (p "Controls to what degree the underlying pressure pattern will
     be overridden. This value should be between zero and one. A value
     of one completely replaces the underlying pressure with the value
     from the 'pressure' field above. A value of 0.5 would produce a
     value halfway between the value from the 'pressure' field and the
-    underlying pattern.")}} )
+    underlying pattern.")
+
+    :show-outline?
+    (p "Controls whether the outline of the override region will be
+    shown. Note that this setting also affects the shareable
+    forecast.")
+
+    :animate?
+    (p "If checked, the weather override will appear and disappear at
+    the times specified below. If unchecked, the weather override will
+    always be in effect.")
+
+    :begin
+    (p "The time at which the weather override will begin to take
+    effect. The pressure (and therefore the weather type) will
+    gradually change from the unmodified value to the overridden value
+    between this time and the peak time.")
+
+    :peak
+    (p "The time at which the weather override will reach full
+    strength. It will continue at full strength from this time until
+    the taper time.")
+
+    :taper
+    (p "The time at which the weather override will begin to fade out.
+    The pressure (and therefore the weather time) will gradually
+    change from the overriden value to the unmodified value between
+    this time and the end time.")
+
+    :end
+    (p "The time at which this override will no longer be in effect.")
+
+    :exclude-from-forecast?
+    [(p "If checked, the effects of the override will not be included
+    in the shareable forecast. This allows weather planners to include
+    'surprises'.")
+     (p "Note that the effects of the override " (em "will") " be
+     visible in the shared forecast for times before 'now'. This is
+     because it doesn't make any sense to hide events that occurred in
+     the past - the user can simply navigate to them.")]}} )

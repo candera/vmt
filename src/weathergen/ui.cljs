@@ -90,29 +90,32 @@
                       :origin          [1000 1000]
                       :evolution       3600
                       :time            {:offset 1234
-                                        :current {:day 1 :hour 5 :minute 0}}
+                                        :current {:day 1 :hour 5 :minute 0}
+                                        :max nil}
                       :wind-uniformity 0.7
                       :crossfade       0.1
                       :prevailing-wind {:heading 325}
                       :seed            1234
                       :wind-stability-areas [#_{:bounds {:x 16
-                                                       :y 39
-                                                       :width 6
-                                                       :height 4}
-                                              :wind {:speed 5
-                                                     :heading 0}
-                                              :index 0}]
+                                                         :y 39
+                                                         :width 6
+                                                         :height 4}
+                                                :wind {:speed 5
+                                                       :heading 0}
+                                                :index 0}]
                       :weather-overrides [#_{:location {:x 22
-                                                      :y 45}
-                                           :radius 10
-                                           :falloff 5
-                                           :animate? false
-                                           :begin {:day 1 :hour 5 :minute 0}
-                                           :peak {:day 1 :hour 6 :minute 0}
-                                           :taper {:day 1 :hour 8 :minute 0}
-                                           :end {:day 1 :hour 9 :minute 0}
-                                           :pressure 28.5
-                                           :strength 1}]})
+                                                        :y 45}
+                                             :radius 10
+                                             :falloff 5
+                                             :animate? false
+                                             :begin {:day 1 :hour 5 :minute 0}
+                                             :peak {:day 1 :hour 6 :minute 0}
+                                             :taper {:day 1 :hour 8 :minute 0}
+                                             :end {:day 1 :hour 9 :minute 0}
+                                             :pressure 28.5
+                                             :strength 1
+                                             :show-outline?
+                                             :exclude-from-forecast?}]})
 
 (defc movement-params {:step 60
                        :direction {:heading 135 :speed 20}})
@@ -131,8 +134,6 @@
                       :pressure-unit :inhg})
 
 (defc selected-cell nil)
-
-(defc max-time nil)
 
 ;; TODO: This can go away if we introduce a single-input way to input
 ;; time.
@@ -168,7 +169,8 @@
                                 (:coordinates selected-cell)
                                 weather-params
                                 movement-params
-                                (math/clamp 5 (/ 360 (:step movement-params)) 15))]
+                                60
+                                6)]
                     result)))
 
 (defc= airbases (->> (db/airbases (:map display-params))
@@ -182,11 +184,6 @@
     :else :none))
 
 (defc= pressure-unit (:pressure-unit display-params))
-
-(defc= time-from-max
-  (when max-time
-    (- (model/falcon-time->minutes (:displayed time-params))
-       (model/falcon-time->minutes max-time))))
 
 ;;; Routes
 
@@ -257,8 +254,8 @@
    (let [minutes        (* steps (:step @movement-params))
          current-time   (-> @weather-params :time :current model/falcon-time->minutes)
          desired-time   (+ current-time minutes)
-         new-time       (if @max-time
-                          (min (model/falcon-time->minutes @max-time)
+         new-time       (if-let [max-time (-> @weather-params :time :max)]
+                          (min (model/falcon-time->minutes max-time)
                                desired-time)
                           desired-time)
          actual-steps   (/ (- new-time current-time)
@@ -1112,14 +1109,18 @@
                                    :hour   hour
                                    :minute min}
                    over-max?      (and valid?
-                                       @max-time
+                                       (-> @weather-params :time :max)
                                        (log/spy
-                                        (< (model/falcon-time->minutes @max-time)
+                                        (< (-> @weather-params
+                                               :time
+                                               :max
+                                               model/falcon-time->minutes)
                                            (model/falcon-time->minutes val))))]
                {:valid? (and valid? (not over-max?))
                 :message (cond
                            (not valid?) "Time must be in the format 'dd/hhmm'"
-                           over-max? (str "Time cannot be set later than " (format-time @max-time)))
+                           over-max? (str "Time cannot be set later than "
+                                          (-> @weather-params :time :max format-time)))
                 :value {:day    day
                         :hour   hour
                         :minute min}})))
@@ -1128,12 +1129,15 @@
   ([c path] (edit-field c path {}))
   ([c path opts]
    ;; TODO: Add conversion to/from string and validation
-   (let [{:keys [change-fn]} opts]
-    (input :type "text"
-           :value (cell= (get-in c path))
-           :change (if change-fn
-                     #(change-fn (js/Number @%))
-                     #(swap! c assoc-in path (js/Number @%)))))))
+   (let [{:keys [change-fn input-attrs]
+          :or {input-attrs {}}} opts]
+     (input
+      input-attrs
+      :type "text"
+      :value (cell= (get-in c path))
+      :change (if change-fn
+                #(change-fn (js/Number @%))
+                #(swap! c assoc-in path (js/Number @%)))))))
 
 (defn pressure-edit-field
   "Renders an input that will edit a pressure value, in whatever units
@@ -1393,50 +1397,73 @@
          :class "weather-overrides"
          (table
           :id "weather-override-params"
-          (tbody
-           (tr (td (help-for [:weather-overrides :center]))
-               (td :class "override-label" "Center X/Y")
-               (td (edit-field weather-params [:weather-overrides @index :location :x]))
-               (td (edit-field weather-params [:weather-overrides @index :location :y])))
-           (tr (td (help-for [:weather-overrides :radius]))
-               (td :class "override-label" "Radius")
-               (td (edit-field weather-params [:weather-overrides @index :radius])))
-           (tr (td (help-for [:weather-overrides :falloff]))
-               (td :class "override-label" "Falloff")
-               (td (edit-field weather-params [:weather-overrides @index :falloff])))
-           (tr (td (help-for [:weather-overrides :pressure]))
-               (td :class "override-label" "Pressure")
-               (td (pressure-edit-field
-                    weather-params
-                    [:weather-overrides @index :pressure]
-                    pressure-unit)))
-           (tr (td (help-for [:weather-overrides :strength]))
-               (td :class "override-label" "Strength")
-               (td (edit-field weather-params [:weather-overrides @index :strength])))))
-         (let [checkbox (fn [l k]
-                          (let [id (gensym)]
-                            (div
-                             (help-for [:weather-overrides k])
-                             (input :id id
-                                    :type "checkbox"
-                                    :value (cell= (k override))
-                                    :change (fn [_]
-                                              (swap! weather-params
-                                                     update-in
-                                                     [:weather-overrides @index k]
-                                                     not)))
-                             (label :for id l))))]
-           [(checkbox "Show outline?" :show-outline?)
-            ;; (checkbox "Include in forecast?" :include-in-forecast?)
-            (checkbox "Fade in/out?" :animate?)])
-         (table
-          :toggle (cell= (:animate? override))
-          (for [[label k] [["Begin" :begin]
-                           ["Peak" :peak]
-                           ["Taper" :taper]
-                           ["End" :end]]]
-            (tr (td (help-for [:weather-overrides k]) label)
-                (td (time-entry weather-params [:weather-overrides @index k])))))
+          (let [checkbox (fn checkbox
+                           ([l k {:keys [change row-attrs]}]
+                            (let [id (gensym)]
+                              (tr
+                               (or row-attrs [])
+                               (td (help-for [:weather-overrides k]))
+                               (td
+                                :colspan 2
+                                (input :id id
+                                       :css {:width "25px"}
+                                       :type "checkbox"
+                                       :value (cell= (k override))
+                                       :change (or change
+                                                   (fn [_]
+                                                     (swap! weather-params
+                                                            update-in
+                                                            [:weather-overrides @index k]
+                                                            not))))
+                                (label :for id l))))))]
+            (tbody
+             (tr (td (help-for [:weather-overrides :center]))
+                 (td :class "override-label" "Center X/Y")
+                 (td (edit-field weather-params
+                                 [:weather-overrides @index :location :x]
+                                 {:input-attrs {:css {:margin-right "3px"}}})
+                     (edit-field weather-params [:weather-overrides @index :location :y])))
+             (tr (td (help-for [:weather-overrides :radius]))
+                 (td :class "override-label" "Radius")
+                 (td (edit-field weather-params [:weather-overrides @index :radius])))
+             (tr (td (help-for [:weather-overrides :falloff]))
+                 (td :class "override-label" "Falloff")
+                 (td (edit-field weather-params [:weather-overrides @index :falloff])))
+             (tr (td (help-for [:weather-overrides :pressure]))
+                 (td :class "override-label" "Pressure")
+                 (td (pressure-edit-field
+                      weather-params
+                      [:weather-overrides @index :pressure]
+                      pressure-unit)))
+             (tr (td (help-for [:weather-overrides :strength]))
+                 (td :class "override-label" "Strength")
+                 (td (edit-field weather-params [:weather-overrides @index :strength])))
+             (checkbox "Show outline?" :show-outline? {})
+             (checkbox "Fade in/out?" :animate?
+                       {:change (fn [_]
+                                  (dosync
+                                   (swap! weather-params
+                                          update-in
+                                          [:weather-overrides @index :animate?]
+                                          not)
+                                   (swap! weather-params
+                                          (fn [weather-params]
+                                            (if (get-in weather-params
+                                                        [:weather-overrides @index :animate?])
+                                              weather-params
+                                              (assoc-in weather-params
+                                                        [:weather-overrides @index :exclude-from-forecast?]
+                                                        false))))))})
+             (for [[label k] [["Begin" :begin]
+                              ["Peak" :peak]
+                              ["Taper" :taper]
+                              ["End" :end]]]
+               (tr :toggle (cell= (:animate? override))
+                   (td (help-for [:weather-overrides k]))
+                   (td label)
+                   (td (time-entry weather-params [:weather-overrides @index k]))))
+             (checkbox "Exclude from forecast?" :exclude-from-forecast?
+                       {:row-attrs {:toggle (cell= (:animate? override))}}))))
          (button
           :click #(swap! weather-params
                          update
@@ -1462,7 +1489,7 @@
                                         :pressure (-> wp :pressure :min)
                                         :strength 1
                                         :show-outline? true
-                                        :include-in-forecast? true})))))
+                                        :exclude-from-forecast? false})))))
       "Add New"))))
 
 (defn weather-type-configuration
@@ -1570,9 +1597,13 @@
      (if (= mode :browse)
        (tr (td (help-for [:weather-params :time :falcon-time]))
            (td "Falcon time: ")
-           (td (cell= (format-time max-time)))
+           (td (cell= (-> weather-params :time :max format-time)))
            (td (button
-                :click #(swap! weather-params assoc-in [:time :current] @max-time)
+                :click #(swap! weather-params
+                               (fn [wp]
+                                 (assoc-in wp
+                                           [:time :current]
+                                           (-> wp :time :max))))
                 "Jump to")))
        [])
      (if (= mode :browse)
@@ -1601,9 +1632,9 @@
            :click #(move -1)
            "<< Step Back")
    (formula-of
-    [weather-params max-time]
-    (if (and max-time
-             (<= (-> max-time model/falcon-time->minutes)
+    [weather-params]
+    (if (and (-> weather-params :time :max)
+             (<= (-> weather-params :time :max model/falcon-time->minutes)
                  (-> weather-params :time :current model/falcon-time->minutes)))
       []
       (button :title "Step forward in time"
