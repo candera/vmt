@@ -851,3 +851,20 @@
     edn/read
     (model/upgrade 7)
     clojure.pprint/pprint)
+
+(-> 3
+    (+ 2 3)
+    (* 4))
+
+(-> 3
+    (+ 2 3)
+    (/ 4))
+
+(let [seed 1234
+      t 1234
+      dt 60]
+   (-> (weathergen.math/fractal-field (/ t 16) 42 16 seed 1)
+       (- 0.5)
+       (* 2)
+       ;; Peak variation at six hours
+       (* (min (/ dt (* 6 60)) 1.0))))
