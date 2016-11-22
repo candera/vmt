@@ -135,6 +135,8 @@
 
 (defc selected-cell nil)
 
+(defc hover-cell nil)
+
 ;; TODO: This can go away if we introduce a single-input way to input
 ;; time.
 (defc time-params
@@ -813,12 +815,68 @@
             :y2 (+ -0.50 (+ (* tail-step full-tails)
                             (* 0.5 tail-step))))))))))
 
+(defn info-overlay
+  [hover-cell weather-data pressure-unit nx ny]
+  (if-not hover-cell
+    []
+    (let [width 8
+          height 5
+          {:keys [x y]} hover-cell
+          {:keys [pressure temperature wind type]} (get weather-data [x y])
+          {:keys [speed heading]} wind]
+      [(svg/rect
+        :attr {:fill "black"
+               :opacity "0.5"
+               :pointer-events "none"}
+        :x x
+        :y y
+        :width 1
+        :height 1)
+       (svg/g
+        :id "info-overlay"
+        :toggle (cell= (some? hover-cell))
+        :attr {:transform (gstring/format
+                           "translate(%d, %d)"
+                           (if (< x (- nx width))
+                             (+ x 1)
+                             (- x width))
+                           (if (< y (- nx height))
+                             (inc y)
+                             (- y height)))}
+        (svg/rect
+         :attr {:fill         "white"
+                :opacity      "0.85"
+                :stroke       "black"
+                :stroke-width "0.1px"}
+         :x 0
+         :y 0
+         :width width
+         :height height)
+        (svg/g
+         :css {:font-size "6%"}
+         (for [[line label value] [[0 "Pressure" (format-pressure pressure
+                                                                  pressure-unit)]
+                                   [1 "Temp" (.toFixed temperature 1)]
+                                   [2 "Wind" (str (.toFixed speed 0)
+                                                "kts@"
+                                                (gstring/format "%03d" heading))]
+                                   [3 "Weather" (type-key->name type)]]]
+           [(svg/text
+              :x 0.2
+              :y (+ line 1.2)
+              (str label ":"))
+            (svg/text
+             :x 4
+             :y (+ line 1.2)
+             value)])))])))
+
 (defelem grid
   [{:keys [display-params
            selected-cell
            weather-data
            wind-stability-areas
            weather-overrides
+           pressure-unit
            computing
            nx
            ny]
@@ -882,8 +940,15 @@
                                        :attr {:class "weather-override-area"}
                                        :cx (+ x 0.5)
                                        :cy (+ y 0.5)
-                                       :r (- radius 0.5)))))]
+                                       :r (- radius 0.5)))))
+        info-overlay             (formula-of
+                                  [hover-cell weather-data pressure-unit]
+                                  (info-overlay hover-cell
+                                                weather-data
+                                                pressure-unit
+                                                nx ny))]
     (with-let [elem (svg/svg
+                     :id "grid"
                      (-> attrs
                          (dissoc :display-params
                                  :selected-cell
@@ -895,6 +960,19 @@
                                 :height (cell= (-> display-params :dimensions second))
                                 :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
                                        "xmlns" "http://www.w3.org/2000/svg"}))
+                     :mouseleave (fn [e] (reset! hover-cell nil))
+                     :mousemove (fn [e]
+                                  (let [px (.-pageX e)
+                                        py (.-pageY e)
+                                        offset (-> "#grid" js/$ .offset)
+                                        top  (.-top offset)
+                                        left  (.-left offset)
+                                        x (- px left)
+                                        y (- py top)
+                                        [width height] (:dimensions @display-params)
+                                        cx (-> x (/ width) (* nx) long)
+                                        cy (-> y (/ height) (* ny) long)]
+                                    (reset! hover-cell {:x cx :y cy})))
                      wind-vector-defs
                      ;; TODO: Not working in Firefox/Safari because
                      ;; the image tag doesn't render as
@@ -913,7 +991,8 @@
                      text-overlay
                      wind-stability-overlay
                      weather-overrides-overlay
-                     selected-cell-overlay)]
+                     selected-cell-overlay
+                     info-overlay)]
       ;; TODO: We're capturing the value of the number of cells, but it
       ;; never changes. One of these days I should probably factor this
       ;; out. Either that or just react to changes in the number of
@@ -1768,6 +1847,7 @@
                     :wind-stability-areas wind-stability-areas
                     :weather-overrides weather-overrides
                     :computing computing
+                    :pressure-unit pressure-unit
                     ;; TODO: Make these reactive, although they never
                     ;; change, so maybe not
                     :nx (first (:cell-count @weather-params))
