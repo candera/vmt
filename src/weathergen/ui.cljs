@@ -118,7 +118,8 @@
                                              :exclude-from-forecast?}]})
 
 (defc movement-params {:step 60
-                       :direction {:heading 135 :speed 20}})
+                       :direction {:heading 135 :speed 20}
+                       :looping? false})
 
 (def initial-size (let [window-width (.width (js/$ js/window))
                         window-height (.height (js/$ js/window))]
@@ -169,7 +170,11 @@
 (defc= forecast (when selected-cell
                   (let [result (model/forecast
                                 (:coordinates selected-cell)
-                                weather-params
+                                (if-let [max-time (-> weather-params :time :max)]
+                                  (model/jump-to-time weather-params
+                                                      movement-params
+                                                      max-time)
+                                  weather-params)
                                 movement-params
                                 60
                                 6)]
@@ -186,14 +191,6 @@
     :else :none))
 
 (defc= pressure-unit (:pressure-unit display-params))
-
-;;; Routes
-
-;; (defroute "/forecast"
-;;   []
-;;   (do
-;;     (log/debug "forecast route")
-;;     (reset! route :forecast)))
 
 ;;; Worker
 
@@ -217,6 +214,8 @@
       .-onmessage
       (set! #(go (async/>! ch (->> % .-data decode))))))
 
+(declare move)
+
 ;; TODO: Handle commands other than "compute weather"
 (go-loop []
   (let [[command params] (async/<! command-ch)]
@@ -229,20 +228,31 @@
       (loop [chs (set (map :ch workers))
              data {}]
         (if (empty? chs)
-          (dosync
-           (.timeEnd js/console "compute-weather")
-           (reset! weather-data data)
-           (reset! weather-data-params params))
+          (do
+            (dosync
+               (.timeEnd js/console "compute-weather")
+               (reset! weather-data data)
+               (reset! weather-data-params params))
+            (when (:looping? @movement-params)
+              (async/<! (timeout 500))
+              (if (= (-> @weather-data-params :time :current)
+                     (-> @weather-data-params :time :max))
+                (move (->> @movement-params :step (/ (* -60 6)) Math/floor))
+                (move 1))))
           (let [[val port] (async/alts! (vec chs))]
             (recur (disj chs port)
                    (merge data val))))))
     (reset! computing false)
     (recur)))
 
+(defn recompute
+  [params]
+  (go
+   (async/>! command-ch [:compute-weather params])))
+
 (formula-of
  [weather-params]
- (go
-   (async/>! command-ch [:compute-weather weather-params])))
+ (recompute weather-params))
 
 ;;; Mutations
 
@@ -271,18 +281,22 @@
             :displayed
             (:current time)))))
 
-(defn jump-to-time
-  "Adjust the time coordinate to match the displayed time."
-  []
+(defn jump-to-time*
+  [t]
   (dosync
    (let [{:keys [time]} (swap! weather-params
                                model/jump-to-time
                                @movement-params
-                               (:displayed @time-params))]
+                               t)]
      (swap! time-params
             assoc
             :displayed
             (:current time)))))
+
+(defn jump-to-time
+  "Adjust the time coordinate to match the displayed time."
+  []
+  (jump-to-time* (:displayed @time-params)))
 
 (defn set-time
   "Adjust the time coordinate so that the current time is adjusted to
@@ -542,69 +556,70 @@
    :id "forecast-section"
    (div
     :id "forecast"
-    (formula-of
-     [selected-cell
-      pressure-unit
-      location-type
-      airbases
-      forecast]
-     (let [[x y] (:coordinates selected-cell)]
-       (div
-        (label :for "locations"
-               "Forecast for:")
-        (select
-         :id "locations"
-         :change #(change-location @%)
-         (option :selected (not= :named location-type)
-                 :value ""
-                 (case location-type
-                   :coordinates (str "Cell " x "," y)
-                   :named ""
-                   :none "None selected"))
-         (for [ab airbases]
-           (option :value ab
-                   :selected (= ab (:location selected-cell))
-                   ab)))
-        (if-not forecast-link?
-          []
-          (a :href (formula-of
-                    [weather-params
-                     display-params
-                     movement-params
-                     time-params]
-                    (let [deflate #(.deflate js/pako %)
-                          write-buf (-> {:weather-params weather-params
-                                         :display-params display-params
-                                         :movement-params movement-params}
-                                        ;; encode
-                                        (fress/write {:handlers fress/clojure-write-handlers}))]
-                      (str "forecast.html?data="
-                           (-> write-buf
-                               longshi.fressian.byte-stream-protocols/get-bytes
-                               (.subarray 0 (longshi.fressian.byte-stream-protocols/bytes-written write-buf))
-                               deflate
-                               (base64/encodeByteArray true)))))
-             :target "_blank"
-             "Shareable Forecast"))
-        (table
-         (thead
-          (tr (td "Day/Time")
-              (td "Weather Type")
-              (td "Pressure")
-              (td "Temperature")
-              (td "Wind Speed")
-              (td "Wind Heading")))
-         (tbody
-          (if-not forecast
-            (tr (td :colspan 6
-                    "No location is selected. Choose a location from the list, or click on the weather map to select one."))
-            (for [[time weather] forecast]
-              (tr (td (format-time time))
-                  (td (-> weather :type type-key->name))
-                  (td (-> weather :pressure (format-pressure pressure-unit)))
-                  (td (-> weather :temperature (.toFixed 1)))
-                  (td (-> weather :wind :speed (.toFixed 0)))
-                  (td (-> weather :wind :heading (.toFixed 0))))))))))))))
+    (div
+     (label :for "locations"
+            "Forecast for:")
+     (formula-of
+      [location-type
+       airbases
+       selected-cell]
+      (let [[x y] (:coordinates selected-cell)]
+       (select
+        :id "locations"
+        :change #(change-location @%)
+        (option :selected (not= :named location-type)
+                :value ""
+                (case location-type
+                  :coordinates (str "Cell " x "," y)
+                  :named ""
+                  :none "None selected"))
+        (for [ab airbases]
+          (option :value ab
+                  :selected (= ab (:location selected-cell))
+                  ab)))))
+     (if-not forecast-link?
+       []
+       (a :href (formula-of
+                 [weather-params
+                  display-params
+                  movement-params
+                  time-params]
+                 (let [deflate #(.deflate js/pako %)
+                       write-buf (-> {:weather-params weather-params
+                                      :display-params display-params
+                                      :movement-params movement-params}
+                                     ;; encode
+                                     (fress/write {:handlers fress/clojure-write-handlers}))]
+                   (str "forecast.html?data="
+                        (-> write-buf
+                            longshi.fressian.byte-stream-protocols/get-bytes
+                            (.subarray 0 (longshi.fressian.byte-stream-protocols/bytes-written write-buf))
+                            deflate
+                            (base64/encodeByteArray true)))))
+          :target "_blank"
+          "Shareable Forecast"))
+     (formula-of
+      [pressure-unit
+       forecast]
+      (table
+       (thead
+        (tr (td "Day/Time")
+            (td "Weather Type")
+            (td "Pressure")
+            (td "Temperature")
+            (td "Wind Speed")
+            (td "Wind Heading")))
+       (tbody
+        (if-not forecast
+          (tr (td :colspan 6
+                  "No location is selected. Choose a location from the list, or click on the weather map to select one."))
+          (for [[time weather] forecast]
+            (tr (td (format-time time))
+                (td (-> weather :type type-key->name))
+                (td (-> weather :pressure (format-pressure pressure-unit)))
+                (td (-> weather :temperature (.toFixed 1)))
+                (td (-> weather :wind :speed (.toFixed 0)))
+                (td (-> weather :wind :heading (.toFixed 0)))))))))))))
 
 ;;; Grid interaction
 
@@ -1678,11 +1693,7 @@
            (td "Falcon time: ")
            (td (cell= (-> weather-params :time :max format-time)))
            (td (button
-                :click #(swap! weather-params
-                               (fn [wp]
-                                 (assoc-in wp
-                                           [:time :current]
-                                           (-> wp :time :max))))
+                :click #(jump-to-time* (-> @weather-params :time :max))
                 "Jump to")))
        [])
      (if (= mode :browse)
@@ -1710,6 +1721,27 @@
    (button :title "Step back in time"
            :click #(move -1)
            "<< Step Back")
+   (button
+    :title (cell= (if (:looping? movement-params)
+                    "Stop weather animation"
+                    "Animate weather"))
+    :click #(when (:looping? (swap! movement-params update :looping? not))
+              (recompute @weather-params))
+    (span
+     :css (formula-of
+           [movement-params]
+           (if (:looping? movement-params)
+             {:border "5px solid black"
+              :transform ""
+              :display "inline-block"
+              :margin-top "2px"}
+             {:border-left "5px solid transparent"
+              :border-right "5px solid transparent"
+              :border-top "7px solid black"
+              :border-bottom ""
+              :display "inline-block"
+              :transform "rotate(-90deg)"}))
+     ""))
    (formula-of
     [weather-params]
     (if (and (-> weather-params :time :max)
