@@ -678,6 +678,9 @@
   (let [[r g b a] (gradient-color temp-map temp)]
     [(long r) (long g) (long b) a]))
 
+(def transparent
+  [0 0 0 1])
+
 (defn fill-color
   [display w]
   ;;(println "fill-color" :w w :display display :alpha alpha)
@@ -688,7 +691,8 @@
                   pressure-color)
     :temperature (-> w
                      :temperature
-                     temperature-color)))
+                     temperature-color)
+    transparent))
 
 (defn convert-pressure
   "Return a pressure in inches Mercury given a value and a unit"
@@ -908,9 +912,9 @@
         text-overlay (svg/g
                       :id "text-overlay"
                       :attr (cell= {:class (str "text-overlay "
-                                                (-> display-params
-                                                    :overlay
-                                                    name))})
+                                                (some-> display-params
+                                                        :overlay
+                                                        name))})
                       :toggle (cell= (-> display-params
                                          :overlay
                                          #{:pressure :temperature :type})))
