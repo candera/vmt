@@ -302,7 +302,7 @@
         ;; Since processing is async, it's possible the weather data
         ;; can be out of sync with respect to the weather parameters.
         ;; In that case, we compute synchronously.
-        data (if (log/spy (= weather-params weather-data-params))
+        data (if (= weather-params weather-data-params)
                weather-data
                (model/weather-grid (assoc weather-params
                                           :cells (for [x (range x-cells)
@@ -491,6 +491,12 @@
         [width height] (:dimensions @display-params)]
     [(-> x (* nx) (/ width))
      (-> y (* ny) (/ height))]))
+
+;;; Styles
+(def colors
+  {:invalid       "#c70505"
+   :error-message "#c70505"
+   :edit "rgba(128,128,255,0.5)"})
 
 ;;; Page sections
 
@@ -932,7 +938,7 @@
           [(svg/rect
             :attr {:class "wind-stability-area"}
             :css {:fill (if editing?
-                          "rgba(128,128,255,0.5)"
+                          (colors :edit)
                           "none")
                   :cursor (when editing?
                             "move")}
@@ -1009,8 +1015,59 @@
                                      (when final?
                                        (reset! prevent-recomputation? false)))))))))))]))))))
 
-(defn within?
-  "Return true if the specified coordinates fall within the weather
+(defn weather-overrides-overlay
+  [weather-params register-drag-handler]
+  (let [indexed (->> weather-params
+                     :weather-overrides
+                     (map-indexed vector)
+                     cell=)
+        [nx ny] (:cell-count @weather-params)]
+    (formula-of
+     [indexed]
+     (svg/g
+      :id "weather-overrides-overlay"
+      (for [[index override] indexed
+            :let [{:keys [location radius show-outline? editing?]} override
+                  {:keys [x y]} location]
+            :when show-outline?]
+        (svg/circle
+         :attr {:class "weather-override-area"}
+         :css {:fill (if editing?
+                       (colors :edit)
+                       "none")
+               :cursor (when editing?
+                         "move")}
+         :cx (+ x 0.5)
+         :cy (+ y 0.5)
+         :r (- radius 0.5)
+         :mousedown (fn [e]
+                      (reset! prevent-recomputation? true)
+                      (register-drag-handler
+                       (let [starting location]
+                         (fn [[dx dy] final?]
+                           (let [dx (long dx)
+                                 dy (long dy)]
+                             (dosync
+                              (swap! weather-params
+                                     update-in
+                                     [:weather-overrides index :location]
+                                     (fn [location]
+                                       (assoc location
+                                              :x (math/clamp
+                                                  0
+                                                  (dec nx)
+                                                  (+ (:x starting)
+                                                     dx))
+                                              :y (math/clamp
+                                                  0
+                                                  (dec ny)
+                                                  (+ (:y starting)
+                                                     dy)))))
+                              (when final?
+                                (reset! prevent-recomputation? false))))))))))))))
+
+(defn within-area?
+  "Return true if the specified coordinates fall within the wind
   stability area."
   [area cell]
   (let [{:keys [bounds]}           area
@@ -1022,6 +1079,20 @@
         {:keys [x y]}              cell]
     (and (<= left x right)
          (<= top y bottom))))
+
+(defn within-override?
+  "Returns true if the specified coordinates fall within the weather
+  override."
+  [override cell]
+  (let [{:keys [location radius]} override
+        {:keys [x y]} location
+        cx x
+        cy y
+        {:keys [x y]} cell
+        dx (- cx x)
+        dy (- cy y)]
+    (< (+ (* dx dx) (* dy dy))
+       (* radius radius))))
 
 (defelem grid
   [{:keys [display-params
@@ -1044,8 +1115,6 @@
         register-drag-handler (fn [h]
                                 (swap! drag-handler #(or % h)))
         doc-move (fn [e]
-                   (log/debug "document movement"
-                              :handler? (if @drag-handler :yes :no))
                    (if-let [h @drag-handler]
                      (let [[x y] (grid-coords e)
                            [sx sy] @drag-start]
@@ -1096,31 +1165,25 @@
                                     :width 1
                                     :height 1)
                                    [])))
-        weather-overrides-overlay (formula-of
-                                   [weather-overrides]
-                                   (svg/g
-                                    :id "weather-overrides-overlay"
-                                    (for [override weather-overrides
-                                          :let [{:keys [location radius show-outline?]} override
-                                                {:keys [x y]} location]
-                                          :when show-outline?]
-                                      (svg/circle
-                                       :attr {:class "weather-override-area"}
-                                       :cx (+ x 0.5)
-                                       :cy (+ y 0.5)
-                                       :r (- radius 0.5)))))
         wind-stability-areas     (formula-of
                                   [weather-params]
                                   (:wind-stability-areas weather-params))
+        weather-overrides        (formula-of
+                                  [weather-params]
+                                  (:weather-overrides weather-params))
         effective-hover-cell     (formula-of
-                                  [hover-cell wind-stability-areas]
+                                  [hover-cell wind-stability-areas weather-overrides]
                                   ;; Don't show the hover info when
                                   ;; we're in an area where something
                                   ;; can be dragged.
-                                  (if (some (fn [area]
-                                              (and (within? area hover-cell)
-                                                   (:editing? area)))
-                                            wind-stability-areas)
+                                  (if (or (some (fn [area]
+                                                  (and (within-area? area hover-cell)
+                                                       (:editing? area)))
+                                                wind-stability-areas)
+                                          (some (fn [override]
+                                                  (and (within-override? override hover-cell)
+                                                       (:editing? override)))
+                                                weather-overrides))
                                     nil
                                     hover-cell))
         info-overlay             (formula-of
@@ -1165,7 +1228,7 @@
                      wind-overlay
                      text-overlay
                      (wind-stability-overlay weather-params register-drag-handler)
-                     weather-overrides-overlay
+                     (weather-overrides-overlay weather-params register-drag-handler)
                      selected-cell-overlay
                      info-overlay)]
       ;; TODO: We're capturing the value of the number of cells, but it
@@ -1246,10 +1309,6 @@
 (def ESCAPE_KEY 27)
 (def ENTER_KEY 13)
 
-(def colors
-  {:invalid       "#c70505"
-   :error-message "#c70505"})
-
 (defn two-column
   [left right]
   (div :class "two-column"
@@ -1305,15 +1364,12 @@
                         (reset! state :editing)))
             :change #(do
                        (let [p @parsed]
-                         (log/debug "it changed to " @%)
-                         (log/debug "@parsed" @parsed)
                          (when (:valid? p)
                            (update (:value p))
                            (dosync
                             (reset! interim nil)
                             (reset! state :set)))))
             :keyup (fn [e]
-                     (log/debug "keyup" (.-keyCode e))
                      (when (= ESCAPE_KEY (.-keyCode e))
                        (dosync
                         (reset! interim nil)
@@ -1365,12 +1421,11 @@
                                    :minute min}
                    over-max?      (and valid?
                                        (-> @weather-params :time :max)
-                                       (log/spy
-                                        (< (-> @weather-params
-                                               :time
-                                               :max
-                                               model/falcon-time->minutes)
-                                           (model/falcon-time->minutes val))))]
+                                       (< (-> @weather-params
+                                              :time
+                                              :max
+                                              model/falcon-time->minutes)
+                                          (model/falcon-time->minutes val)))]
                {:valid? (and valid? (not over-max?))
                 :message (cond
                            (not valid?) "Time must be in the format 'dd/hhmm'"
@@ -1540,7 +1595,6 @@
       (field-label "Pressure")
       (field-input (select
                     :change #(do
-                               (log/debug "Changing pressure unit to " @%)
                                (swap! display-params
                                       assoc
                                       :pressure-unit
@@ -1622,10 +1676,10 @@
                            (remove-nth areas @index)))
           "Remove")
          (button
-          :click #(log/spy (swap! weather-params
-                                  update-in
-                                  [:wind-stability-areas @index :editing?]
-                                  not))
+          :click #(swap! weather-params
+                         update-in
+                         [:wind-stability-areas @index :editing?]
+                         not)
           (formula-of
            {{:keys [editing?]} area}
            (if editing?
@@ -1735,7 +1789,17 @@
                          :weather-overrides
                          (fn [overrides]
                            (remove-nth overrides @index)))
-          "Remove"))))
+          "Remove")
+         (button
+          :click #(swap! weather-params
+                         update-in
+                         [:weather-overrides @index :editing?]
+                         not)
+          (formula-of
+           {{:keys [editing?]} override}
+           (if editing?
+             "Done"
+             "Edit"))))))
      (button
       :click #(swap! weather-params
                      (fn [wp]
@@ -1968,7 +2032,6 @@
   (if (= false value)
     (.removeAttributeNS elem "http://www.w3.org/1999/xlink" "href")
     (do
-      (log/debug "Setting xlink attr")
       (.setAttributeNS elem "http://www.w3.org/1999/xlink" "href" value))))
 
 (defmethod do! :preserveAspectRatio
