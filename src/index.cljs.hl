@@ -34,7 +34,7 @@
                                    :wind {:speed 5
                                           :heading 0}
                                    :index 0
-                                   :edit-state nil}]
+                                   :editing? false}]
          :weather-overrides [#_{:location {:x 22
                                            :y 45}
                                 :radius 10
@@ -48,7 +48,7 @@
                                 :strength 1
                                 :show-outline?
                                 :exclude-from-forecast?
-                                :edit-state nil}]})
+                                :editing? false}]})
 
 (ui/weather-page
  :serialization-controls {}

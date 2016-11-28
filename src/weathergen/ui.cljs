@@ -927,14 +927,14 @@
      (svg/g
       :id "wind-stability-overlay"
       (for [[index area] indexed]
-        (let [{:keys [bounds edit-state]} area
+        (let [{:keys [bounds editing?]} area
               {:keys [x y width height]} bounds]
           [(svg/rect
             :attr {:class "wind-stability-area"}
-            :css {:fill (if (:editing? edit-state)
+            :css {:fill (if editing?
                           "rgba(128,128,255,0.5)"
                           "none")
-                  :cursor (when (:editing? edit-state)
+                  :cursor (when editing?
                             "move")}
             :mousedown (fn [e]
                          (reset! prevent-recomputation? true)
@@ -971,7 +971,7 @@
             :y y
             :width width
             :height height)
-           (if-not (:editing? edit-state)
+           (if-not editing?
              []
              (let [size 0.75]
                (for [[dx dir-h] [[0 "w"] [(/ width 2) nil] [width "e"]]
@@ -1119,7 +1119,7 @@
                                   ;; can be dragged.
                                   (if (some (fn [area]
                                               (and (within? area hover-cell)
-                                                   (-> area :edit-state :editing?)))
+                                                   (:editing? area)))
                                             wind-stability-areas)
                                     nil
                                     hover-cell))
@@ -1624,11 +1624,11 @@
          (button
           :click #(log/spy (swap! weather-params
                                   update-in
-                                  [:wind-stability-areas @index :edit-state :editing?]
+                                  [:wind-stability-areas @index :editing?]
                                   not))
           (formula-of
-           {{:keys [edit-state]} area}
-           (if (:editing? edit-state)
+           {{:keys [editing?]} area}
+           (if editing?
              "Done"
              "Edit")))
          (hr))))
