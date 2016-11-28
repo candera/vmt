@@ -34,9 +34,16 @@
    (reset! ui/time-params {:displayed (-> weather-params :time :current)})
    (swap! ui/weather-params
           (fn [wp]
-            (assoc-in wp
-                      [:time :max]
-                      (-> wp :time :current))))))
+            (-> wp
+                (assoc-in
+                 [:time :max]
+                 (-> wp :time :current))
+                (update
+                 :wind-stability-areas
+                 (fn [areas]
+                   (map (fn [area]
+                          (dissoc area :edit-state))
+                        areas))))))))
 
 (ui/weather-page
  :display-controls {:prevent-map-change? true}

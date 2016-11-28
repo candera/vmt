@@ -33,7 +33,8 @@
                                             :height 4}
                                    :wind {:speed 5
                                           :heading 0}
-                                   :index 0}]
+                                   :index 0
+                                   :edit-state nil}]
          :weather-overrides [#_{:location {:x 22
                                            :y 45}
                                 :radius 10
@@ -46,7 +47,8 @@
                                 :pressure 28.5
                                 :strength 1
                                 :show-outline?
-                                :exclude-from-forecast?}]})
+                                :exclude-from-forecast?
+                                :edit-state nil}]})
 
 (ui/weather-page
  :serialization-controls {}
