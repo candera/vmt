@@ -467,13 +467,6 @@ rect.inclement {
     width: 35px;
 }
 
-.weather-override-area {
-    fill: none;
-    stroke-width: 0.2;
-    stroke: fuchsia;
-    stroke-dasharray: 0.2 0.1;
-}
-
 .weather-overrides {
     border: dashed 2px fuchsia;
     padding: 4px;

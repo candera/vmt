@@ -498,6 +498,8 @@
    :error-message "#c70505"
    :edit "rgba(128,128,255,0.5)"})
 
+(def resize-handle-size 0.75)
+
 ;;; Page sections
 
 (defelem control-section
@@ -979,41 +981,40 @@
             :height height)
            (if-not editing?
              []
-             (let [size 0.75]
-               (for [[dx dir-h] [[0 "w"] [(/ width 2) nil] [width "e"]]
-                     [dy dir-v] [[0 "n"] [(/ height 2) nil] [height "s"]]
-                     :when (not= [nil nil] [dir-h dir-v])]
-                 (svg/rect
-                  :attr {:stroke "black"
-                         :stroke-width "0.1"
-                         :fill "white"
-                         :cursor (str dir-v dir-h "-resize")}
-                  :x (+ dx (- x (/ size 2)))
-                  :y (+ dy (- y (/ size 2)))
-                  :width size
-                  :height size
-                  :mousedown (fn [e]
-                               (reset! prevent-recomputation? true)
-                               (register-drag-handler
-                                (let [starting-bounds bounds]
-                                  (fn [[dx dy] final?]
-                                    (dosync
-                                     (swap! weather-params
-                                            update-in
-                                            [:wind-stability-areas index :bounds]
-                                            (fn [bounds]
-                                              (let [dx (long dx)
-                                                    dy (long dy)]
-                                                (or (restrict
-                                                     nx ny
-                                                     (cond-> bounds
-                                                       (= dir-h "w") (adjust-west starting-bounds dx)
-                                                       (= dir-h "e") (adjust-east starting-bounds dx)
-                                                       (= dir-v "n") (adjust-north starting-bounds dy)
-                                                       (= dir-v "s") (adjust-south starting-bounds dy)))
-                                                    bounds))))
-                                     (when final?
-                                       (reset! prevent-recomputation? false)))))))))))]))))))
+             (for [[dx dir-h] [[0 "w"] [(/ width 2) nil] [width "e"]]
+                   [dy dir-v] [[0 "n"] [(/ height 2) nil] [height "s"]]
+                   :when (not= [nil nil] [dir-h dir-v])]
+               (svg/rect
+                :attr {:stroke "black"
+                       :stroke-width "0.1"
+                       :fill "white"
+                       :cursor (str dir-v dir-h "-resize")}
+                :x (+ dx (- x (/ resize-handle-size 2)))
+                :y (+ dy (- y (/ resize-handle-size 2)))
+                :width resize-handle-size
+                :height resize-handle-size
+                :mousedown (fn [e]
+                             (reset! prevent-recomputation? true)
+                             (register-drag-handler
+                              (let [starting-bounds bounds]
+                                (fn [[dx dy] final?]
+                                  (dosync
+                                   (swap! weather-params
+                                          update-in
+                                          [:wind-stability-areas index :bounds]
+                                          (fn [bounds]
+                                            (let [dx (long dx)
+                                                  dy (long dy)]
+                                              (or (restrict
+                                                   nx ny
+                                                   (cond-> bounds
+                                                     (= dir-h "w") (adjust-west starting-bounds dx)
+                                                     (= dir-h "e") (adjust-east starting-bounds dx)
+                                                     (= dir-v "n") (adjust-north starting-bounds dy)
+                                                     (= dir-v "s") (adjust-south starting-bounds dy)))
+                                                  bounds))))
+                                   (when final?
+                                     (reset! prevent-recomputation? false))))))))))]))))))
 
 (defn weather-overrides-overlay
   [weather-params register-drag-handler]
@@ -1027,44 +1028,114 @@
      (svg/g
       :id "weather-overrides-overlay"
       (for [[index override] indexed
-            :let [{:keys [location radius show-outline? editing?]} override
+            :let [{:keys [location radius falloff show-outline? editing?]} override
                   {:keys [x y]} location]
-            :when show-outline?]
-        (svg/circle
-         :attr {:class "weather-override-area"}
-         :css {:fill (if editing?
-                       (colors :edit)
-                       "none")
-               :cursor (when editing?
-                         "move")}
-         :cx (+ x 0.5)
-         :cy (+ y 0.5)
-         :r (- radius 0.5)
-         :mousedown (fn [e]
-                      (reset! prevent-recomputation? true)
-                      (register-drag-handler
-                       (let [starting location]
-                         (fn [[dx dy] final?]
-                           (let [dx (long dx)
-                                 dy (long dy)]
-                             (dosync
-                              (swap! weather-params
-                                     update-in
-                                     [:weather-overrides index :location]
-                                     (fn [location]
-                                       (assoc location
-                                              :x (math/clamp
-                                                  0
-                                                  (dec nx)
-                                                  (+ (:x starting)
-                                                     dx))
-                                              :y (math/clamp
-                                                  0
-                                                  (dec ny)
-                                                  (+ (:y starting)
-                                                     dy)))))
-                              (when final?
-                                (reset! prevent-recomputation? false))))))))))))))
+            :when (or show-outline? editing?)]
+        [(svg/circle
+          :css {:fill (if editing?
+                        (colors :edit)
+                        "none")
+                :cursor (when editing?
+                          "move")
+                :stroke-width "0.2"
+                :stroke "fuchsia"
+                :stroke-dasharray "0.2 0.1"}
+          :cx (+ x 0.5)
+          :cy (+ y 0.5)
+          :r (- radius 0.5)
+          :mousedown (fn [e]
+                       (reset! prevent-recomputation? true)
+                       (register-drag-handler
+                        (let [starting location]
+                          (fn [[dx dy] final?]
+                            (let [dx (long dx)
+                                  dy (long dy)]
+                              (dosync
+                               (swap! weather-params
+                                      update-in
+                                      [:weather-overrides index :location]
+                                      (fn [location]
+                                        (assoc location
+                                               :x (math/clamp
+                                                   0
+                                                   (dec nx)
+                                                   (+ (:x starting)
+                                                      dx))
+                                               :y (math/clamp
+                                                   0
+                                                   (dec ny)
+                                                   (+ (:y starting)
+                                                      dy)))))
+                               (when final?
+                                 (reset! prevent-recomputation? false)))))))))
+         (svg/circle
+          :css {:fill "none"
+                :stroke-width "0.2"
+                :stroke "fuchsia"
+                :stroke-dasharray "0.1 0.2"}
+          :cx (+ x 0.5)
+          :cy (+ y 0.5)
+          :r (- falloff 0.5))
+         (let [circle-edit (fn [rad mutate]
+                             (for [theta (range 0 360 45)]
+                               (let [alpha (math/deg->rad theta)
+                                     r (- rad 0.5)
+                                     sin-a (Math/sin alpha)
+                                     cos-a (Math/cos alpha)
+                                     x-offset (* r sin-a)
+                                     y-offset (* r cos-a)
+                                     lx (cond
+                                          (< 0.1 sin-a) "e"
+                                          (< sin-a -0.1) "w"
+                                          :else "")
+                                     ly (cond
+                                          (< 0.1 cos-a) "s"
+                                          (< cos-a -0.1) "n"
+                                          :else "")]
+                                 (svg/rect
+                                  :attr {:stroke "black"
+                                         :stroke-width "0.1"
+                                         :fill "white"
+                                         :cursor (str ly lx "-resize")}
+                                  :x (-> x (+ x-offset) (+ 0.5) (- (/ resize-handle-size 2)))
+                                  :y (-> y (+ y-offset) (+ 0.5) (- (/ resize-handle-size 2)))
+                                  :width resize-handle-size
+                                  :height resize-handle-size
+                                  :mousedown
+                                  (fn [e]
+                                    (reset! prevent-recomputation? true)
+                                    (register-drag-handler
+                                     (fn [[dx dy] final?]
+                                       (let [dx' (+ x-offset dx)
+                                             dy' (+ y-offset dy)
+                                             r' (+ 0.5
+                                                   (Math/sqrt (+ (* dx' dx')
+                                                                 (* dy' dy'))))]
+                                         (dosync
+                                          (mutate r')
+                                          (when final?
+                                            (reset! prevent-recomputation? false)))))))))))]
+           (if-not editing?
+             []
+             [(circle-edit falloff
+                           (fn [r]
+                             (swap! weather-params
+                                    update-in
+                                    [:weather-overrides index]
+                                    (fn [{:keys [falloff radius] :as override}]
+                                      (assoc override
+                                             :falloff
+                                             (math/clamp 0 radius (long r)))))))
+              (circle-edit radius
+                           (fn [r]
+                             (swap! weather-params
+                                    assoc-in
+                                    [:weather-overrides index :radius]
+                                    (max 1 (long r)))
+                             (swap! weather-params
+                                    update-in
+                                    [:weather-overrides index :falloff]
+                                    #(math/clamp 0 (long r) %))))]))])))))
 
 (defn within-area?
   "Return true if the specified coordinates fall within the wind
@@ -1810,7 +1881,7 @@
                                        {:location {:x 30
                                                    :y 30}
                                         :radius 8
-                                        :falloff 6
+                                        :falloff 2
                                         :begin (-> wp :time :current)
                                         :peak (-> wp :time :current (model/add-time 60))
                                         :taper (-> wp :time :current (model/add-time 180))

@@ -226,7 +226,7 @@
                          dy (- locy y)
                          d2 (+ (* dx dx) (* dy dy))
                          r2 (* radius radius)
-                         fr (- radius falloff)
+                         fr falloff
                          f2 (* fr fr)
                          position-weight (cond
                                            (< d2 f2) 1
@@ -234,7 +234,7 @@
                                                         (-> d2
                                                             Math/sqrt
                                                             (- fr)
-                                                            (/ falloff)))
+                                                            (/ (- radius falloff))))
                                            :else 0)
                          tw (time-weight override (:current time))
                          w (* position-weight tw strength)

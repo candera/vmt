@@ -199,10 +199,10 @@ forward and backward in time. ")
     :falloff
     (p "The distance from the center of the region at which the
     override pressure begins to be blended into the surrounding
-    pressure. Set this to the same as the radius to have a very
-    gradual transition. Set it to zero to have an abrupt edge to the
-    region. Note that abrupt changes may result in odd weather effects
-    in the sim. A falloff of six or higher is recommended.")
+    pressure. Set this to zero to have a very gradual transition. Set
+    it to the radius to have an abrupt edge to the region. Note that
+    abrupt changes may result in odd weather effects in the sim. A
+    falloff of at least four less than the radius is recommended.")
 
     :pressure
     (p "The override pressure for the region. Use the values from the
