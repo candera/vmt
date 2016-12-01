@@ -2,7 +2,10 @@
 
 cd $(dirname $0)/..
 
-bin/build --allow-dirty
-aws s3 sync target/ s3://weathergen
-open http://weathergen.s3-website-us-east-1.amazonaws.com
+GIT_VERSION=$(git describe --tags)
+
+bin/build # --allow-dirty
+aws s3 sync target/ s3://weathergen/${GIT_VERSION}
+# TODO: Add redirect from root to versioned resource
+open http://weathergen.s3-website-us-east-1.amazonaws.com/${GIT_VERSION}
 
