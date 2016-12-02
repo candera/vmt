@@ -46,8 +46,8 @@
                                 :end {:day 1 :hour 9 :minute 0}
                                 :pressure 28.5
                                 :strength 1
-                                :show-outline?
-                                :exclude-from-forecast?
+                                :show-outline? false
+                                :exclude-from-forecast? false
                                 :editing? false}]})
 
 (ui/weather-page

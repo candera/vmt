@@ -3,6 +3,10 @@
             [cljsjs.pako]
             [goog.crypt.base64 :as base64]
             [longshi.core :as fress]
+            [taoensso.timbre :as log
+             :refer-macros (log trace debug info warn error fatal report
+                                logf tracef debugf infof warnf errorf fatalf reportf
+                                spy get-env log-env)]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
             [weathergen.math :as math]
@@ -42,8 +46,16 @@
                  :wind-stability-areas
                  (fn [areas]
                    (map (fn [area]
-                          (dissoc area :edit-state))
-                        areas))))))))
+                          (dissoc area :editing?))
+                        areas)))
+                (update
+                 :weather-overrides
+                 (fn [overrides]
+                   (map (fn [override]
+                          (dissoc override :editing?))
+                        overrides))))))))
+
+(log/debug "Editing?" (-> @ui/weather-params :weather-overrides first :editing?))
 
 (ui/weather-page
  :display-controls {:prevent-map-change? true}
