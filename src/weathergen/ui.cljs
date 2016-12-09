@@ -1305,6 +1305,21 @@
                       (gstring/format "%f,%f" gx gy)))))
       s)))
 
+(defelem triangle
+  [attrs _]
+  (let [{:keys [r]} attrs
+        attrs (dissoc attrs :r)
+        alpha 0.8660254037844387 ; sin 60deg
+        beta 0.5 ; sin 30deg
+        x (* r alpha)
+        y (* r alpha)]
+    (svg/path
+     :d (gstring/format "M%f,%f L%f,%f L%f,%f Z"
+                        0 (- y)
+                        x y
+                        (- x) y)
+     attrs)))
+
 (defn flight-paths-overlay
   [size display-params]
   (svg/g
@@ -1315,19 +1330,26 @@
           :when show?
           :let [opacity 0.9]]
       [(svg/g
-        (for [{:keys [::dtc/coordinates ::dtc/ordinal ::dtc/alternate?]} path
+        (for [{:keys [::dtc/coordinates ::dtc/ordinal ::dtc/alternate? ::dtc/action]} path
               :let [{:keys [::dtc/x ::dtc/y]} coordinates
                     [gx gy] (coords/falcon->grid size x y)
-                    marker-size 0.5]]
-          [(svg/circle
-            :stroke color
-            :stroke-width "0.15"
-            :pointer-events "none"
-            :fill "none"
-            :opacity opacity
-            :cx gx
-            :cy gy
-            :r (/ marker-size 2))
+                    marker-size 0.5
+                    style {:stroke         color
+                           :stroke-width   "0.15"
+                           :pointer-events "none"
+                           :fill           "none"
+                           :opacity        opacity}]]
+          [(svg/g
+            :attr {:transform (gstring/format "translate(%f,%f)" gx gy)}
+            (if (#{:cap :strike :bomb :sead :elint} action)
+              (triangle
+               style
+               :r (/ marker-size 2))
+              (svg/circle
+               style
+               :cx 0
+               :cy 0
+               :r (/ marker-size 2))))
            (if-not show-labels?
              []
              (svg/text

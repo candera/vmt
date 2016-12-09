@@ -18,18 +18,36 @@
   #?(:clj (Long. s)
      :cljs (long s)))
 
-;; TODO: Add more mappings
+;; TODO: Add more mappings. See https://github.com/FreeFalcon/freefalcon-central/blob/c28d807183ab447ef6a801068aa3769527d55deb/src/campaign/include/campwp.h#L19
 (def stpt-action
-  {0 :nav
+  {-1 :none
+   0 :nav
    1 :takeoff
    2 :push
    3 :split
    4 :refuel
+   5 :rearm
+   6 :pickup
    7 :land
    8 :holding-point
+   9 :cas-contact
+   10 :escort
+   11 :sweep
    12 :cap
+   13 :intercept
+   14 :strike
+   15 :strike
+   16 :strike
    17 :strike
-   20 :elint})
+   18 :bomb
+   19 :sead
+   20 :elint
+   21 :recon
+   22 :rescue
+   23 :asw
+   24 :tanker
+   25 :airdrop
+   26 :jam})
 
 (s/def ::x number?
   ;; East-west position in Falcon feet.
@@ -146,10 +164,7 @@
   [dtc]
   (let [land?     (fn [navpoint] (= :land (::action navpoint)))
         targets   (-> dtc ::steerpoints ::targets)
-        navpoints (concat (take-while (complement land?) targets)
-                          (->> targets
-                               (drop-while (complement land?))
-                               (take-while land?)))]
+        navpoints (take-while #(not= (::action %) :none) targets)]
     (loop [[point & more] navpoints
            path []
            landed? false]
