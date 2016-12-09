@@ -1,11 +1,10 @@
-(def project 'lsobot)
+(def project 'weathergen)
 
 (set-env!
  :dependencies '[[org.clojure/clojurescript "1.9.293"]
                  [adzerk/boot-cljs          "1.7.228-2"]
                  [adzerk/boot-reload        "0.4.13"]
-                 [hoplon/boot-hoplon        "0.3.0"]
-                 [hoplon/hoplon             "6.0.0-alpha16"]
+                 [hoplon/hoplon             "6.0.0-alpha17"]
                  [org.clojure/clojure       "1.9.0-alpha14"]
                  [org.clojure/core.async    "0.2.395"
                   :exclusions [org.clojure/tools.reader]]
@@ -33,7 +32,8 @@
  #_'[adzerk.boot-cljs-repl   :refer [cljs-repl start-repl]]
  '[adzerk.boot-reload       :refer [reload]]
  '[hoplon.boot-hoplon       :refer [hoplon prerender]]
- '[tailrecursion.boot-jetty :refer [serve]])
+ '[tailrecursion.boot-jetty :refer [serve]]
+ 'complete.core)
 
 (deftask dev
   "Build weathertest for local development."
@@ -42,7 +42,7 @@
     (watch)
     (speak)
     (hoplon)
-    ;;(reload)
+    ;;(reload)  ; Doesn't work with web workers
     (cljs)
     (serve :port 8006)))
 
