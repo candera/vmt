@@ -2580,13 +2580,13 @@
   []
   (h/head
    (title "WeatherGen")
-   (link :href "js/jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
+   (link :href "./js/jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300"
          :rel "stylesheet"
          :type "text/css")
    ;; TODO: Figure out the whole deps.cljs
-   (script :src "js/jquery.minicolors.min.js")))
+   (script :src "./js/jquery.minicolors.min.js")))
 
 (defelem body
   [{:keys [] :as attrs}
