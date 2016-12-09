@@ -60,4 +60,5 @@
 (ui/weather-page
  :display-controls {:prevent-map-change? true}
  :step-controls {:mode :browse}
- :forecast-section {:forecast-link? false})
+ :forecast-section {:forecast-link? false}
+ :flightpath-controls {})

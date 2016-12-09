@@ -12,8 +12,7 @@
         (fn [msg]
           (let [val (->> msg .-data decode)]
             #_(.log js/console
-                    "Worker received message"
-                    (pr-str val))
+                  "Worker received message")
             (js/postMessage
              (with-time "Compute weather grid"
                (encode (model/weather-grid val))))))))

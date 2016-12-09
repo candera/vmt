@@ -2,53 +2,7 @@
   (:require [weathergen.ui :as ui]))
 
 (reset! ui/weather-params
-        {:temp-uniformity 0.7
-         :pressure        {:min 29 :max 31}
-         :cell-count      [59 59]
-         :feature-size    10
-         :categories      {:sunny     {:wind   {:min 5 :mean 10 :max 30}
-                                       :temp   {:min 20 :mean 22 :max 24}}
-                           :fair      {:pressure 30
-                                       :wind   {:min 0 :mean 7 :max 20}
-                                       :temp   {:min 18 :mean 21 :max 23}}
-                           :poor      {:pressure 29.85
-                                       :wind   {:min 10 :mean 15 :max 30}
-                                       :temp   {:min 15 :mean 18 :max 21}}
-                           :inclement {:pressure 29.40
-                                       :wind   {:min 15 :mean 25 :max 60}
-                                       :temp   {:min 12 :mean 14 :max 16}}}
-         :turbulence      {:size 1 :power 250}
-         :origin          [1000 1000]
-         :evolution       3600
-         :time            {:offset 1234
-                           :current {:day 1 :hour 5 :minute 0}
-                           :max nil}
-         :wind-uniformity 0.7
-         :crossfade       0.1
-         :prevailing-wind {:heading 325}
-         :seed            1234
-         :wind-stability-areas [#_{:bounds {:x 16
-                                            :y 39
-                                            :width 6
-                                            :height 4}
-                                   :wind {:speed 5
-                                          :heading 0}
-                                   :index 0
-                                   :editing? false}]
-         :weather-overrides [#_{:location {:x 22
-                                           :y 45}
-                                :radius 10
-                                :falloff 5
-                                :animate? false
-                                :begin {:day 1 :hour 5 :minute 0}
-                                :peak {:day 1 :hour 6 :minute 0}
-                                :taper {:day 1 :hour 8 :minute 0}
-                                :end {:day 1 :hour 9 :minute 0}
-                                :pressure 28.5
-                                :strength 1
-                                :show-outline? false
-                                :exclude-from-forecast? false
-                                :editing? false}]})
+        ui/default-weather-params)
 
 (ui/weather-page
  :serialization-controls {}
@@ -56,6 +10,7 @@
  :display-controls {}
  :weather-parameters {}
  :forecast-section {:forecast-link? true}
+ :flightpath-controls {}
  :weather-type-configuration {}
  :wind-stability-parameters {}
  :weather-override-parameters {}

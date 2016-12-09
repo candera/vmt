@@ -868,3 +868,14 @@
        (* 2)
        ;; Peak variation at six hours
        (* (min (/ dt (* 6 60)) 1.0))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(require :reload '[weathergen.dtc :as dtc])
+
+(-> "/Users/candera/GDrive/SMPU.ini"
+    slurp
+    dtc/parse
+    dtc/flight-path
+    pprint
+    )

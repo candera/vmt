@@ -1,23 +1,26 @@
 (ns weathergen.ui
-  (:require [javelin.core
+  (:require [clojure.string :as str]
+            [javelin.core
              :as j
-             :refer [defc defc= cell cell= dosync with-let ]]
+             :refer [defc defc= cell cell= dosync lens with-let]]
             [hoplon.core
              :as h
-             :refer [a button defelem div do! fieldset hr html img input
+             :refer [a br button defelem div do! fieldset hr html img input
                      label legend link loop-tpl
                      option p script select span table tbody td thead title tr
-                     with-init!]]
+                     timeout when-dom with-init! with-timeout]]
             [hoplon.svg :as svg]
             [goog.dom :as gdom]
             [goog.crypt.base64 :as base64]
             [goog.string :as gstring]
             [goog.string.format]
             [goog.style :as gstyle]
+            ;;[jquery.minicolors]
             [longshi.core :as fress]
             [weathergen.canvas :as canvas]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
+            [weathergen.dtc :as dtc]
             [weathergen.encoding :refer [encode decode]]
             [weathergen.fmap :as fmap]
             [weathergen.help :as help]
@@ -25,7 +28,7 @@
             [weathergen.model :as model]
             ;; [weathergen.route :as route]
             [cljs.core.async :as async
-             :refer [<! >! alts! timeout]]
+             :refer [<! >! alts!]]
             [cljs.reader :as reader]
             [cljsjs.pako]
             ;;[secretary.core :refer-macros [defroute]]
@@ -70,6 +73,55 @@
 
 ;;; State
 
+(def default-weather-params
+  {:temp-uniformity 0.7
+   :pressure        {:min 29 :max 31}
+   :cell-count      [59 59]
+   :feature-size    10
+   :categories      {:sunny     {:wind   {:min 5 :mean 10 :max 30}
+                                 :temp   {:min 20 :mean 22 :max 24}}
+                     :fair      {:pressure 30
+                                 :wind   {:min 0 :mean 7 :max 20}
+                                 :temp   {:min 18 :mean 21 :max 23}}
+                     :poor      {:pressure 29.85
+                                 :wind   {:min 10 :mean 15 :max 30}
+                                 :temp   {:min 15 :mean 18 :max 21}}
+                     :inclement {:pressure 29.40
+                                 :wind   {:min 15 :mean 25 :max 60}
+                                 :temp   {:min 12 :mean 14 :max 16}}}
+   :turbulence      {:size 1 :power 250}
+   :origin          [1000 1000]
+   :evolution       3600
+   :time            {:offset 1234
+                     :current {:day 1 :hour 5 :minute 0}
+                     :max nil}
+   :wind-uniformity 0.7
+   :crossfade       0.1
+   :prevailing-wind {:heading 325}
+   :seed            1234
+   :wind-stability-areas [#_{:bounds {:x 16
+                                      :y 39
+                                      :width 6
+                                      :height 4}
+                             :wind {:speed 5
+                                    :heading 0}
+                             :index 0
+                             :editing? false}]
+   :weather-overrides [#_{:location {:x 22
+                                     :y 45}
+                          :radius 10
+                          :falloff 5
+                          :animate? false
+                          :begin {:day 1 :hour 5 :minute 0}
+                          :peak {:day 1 :hour 6 :minute 0}
+                          :taper {:day 1 :hour 8 :minute 0}
+                          :end {:day 1 :hour 9 :minute 0}
+                          :pressure 28.5
+                          :strength 1
+                          :show-outline? false
+                          :exclude-from-forecast? false
+                          :editing? false}]})
+
 (defc weather-params nil)
 
 (defc movement-params {:step 60
@@ -87,7 +139,8 @@
                       :map        :korea
                       :mouse-mode :select
                       :overlay    :wind
-                      :pressure-unit :inhg})
+                      :pressure-unit :inhg
+                      :flight-paths nil})
 
 (defc selected-cell nil)
 
@@ -175,6 +228,7 @@
 (go-loop []
   (let [[command params] (async/<! command-ch)]
     (doseq [{:keys [cells worker]} workers]
+      #_(log/debug "Weather data sent to worker")
       (.postMessage worker (encode (assoc params
                                           :cells cells))))
     (reset! computing true)
@@ -182,6 +236,7 @@
     (with-time "Receive weather results"
       (loop [chs (set (map :ch workers))
              data {}]
+        #_(log/debug "Weather data received.")
         (if (empty? chs)
           (do
             (dosync
@@ -189,7 +244,7 @@
                (reset! weather-data data)
                (reset! weather-data-params params))
             (when (:looping? @movement-params)
-              (async/<! (timeout 500))
+              (async/<! (async/timeout 500))
               (if (= (-> @weather-data-params :time :current)
                      (-> @weather-data-params :time :max))
                 (move (->> @movement-params :step (/ (* -60 6)) Math/floor))
@@ -325,8 +380,8 @@
                        #js{:type "text/plain"})
              "weathergen-settings.edn"))
 
-(defn load-settings
-  [_]
+(defn load-text-file
+  [cb]
   (let [i (gdom/createElement "input")
         ch (async/chan)]
     (-> i .-type (set! "file"))
@@ -344,15 +399,43 @@
                 .-onload
                 (set! #(let [data (-> %
                                       .-target
-                                      .-result
-                                      reader/read-string
-                                      (model/upgrade revision))]
-                         (dosync
-                          (let [{:keys [time]} (reset! weather-params (:weather-params data))]
-                            (reset! display-params (:display-params data))
-                            (reset! movement-params (:movement-params data))
-                            (swap! time-params assoc :displayed (:current time)))))))
+                                      .-result)]
+                         (cb data (.-name file)))))
             (.readAsText reader file)))))))
+
+(defn load-settings
+  [_]
+  (load-text-file
+   (fn [contents name]
+     (let [data (-> contents
+                    reader/read-string
+                    (model/upgrade revision))]
+       (dosync
+        (let [{:keys [time]} (reset! weather-params (:weather-params data))]
+          (reset! display-params (:display-params data))
+          (reset! movement-params (:movement-params data))
+          (swap! time-params assoc :displayed (:current time))))))))
+
+(defn load-dtc
+  [_]
+  (load-text-file
+   (fn [contents name]
+     (log/debug "load-dtc" :name name)
+     (let [flight-path (-> contents dtc/parse dtc/flight-path)]
+       (swap! display-params
+              update
+              :flight-paths
+              (fn [flight-paths]
+                (conj (vec flight-paths)
+                      {:label {:editing? false
+                               :value (if (str/ends-with? name ".ini")
+                                        (subs name 0 (- (count name) 4))
+                                        name)}
+                       :show? true
+                       :show-labels? true
+                       :uniquifier (rand-int 1000000)
+                       :color "#FFFFFF"
+                       :path flight-path})))))))
 
 ;;; Help
 
@@ -382,6 +465,30 @@
         ;;             (go (<! (async/timeout 1000))
         ;;                 (swap! help-states assoc id false)))
         "?")))))
+
+(defn with-help
+  [help-path & contents]
+  (let [open? (cell false)
+	doc-click (fn click-fn [e]
+                    (.removeEventListener js/document "click" click-fn)
+                    (reset! open? false))]
+    (div
+     :class "help"
+     :css {:cursor "help"
+           :border-bottom "dashed 1px blue"}
+     :click (fn [e]
+              (swap! open? not)
+              (with-timeout 0
+                (.addEventListener js/document "click" doc-click)))
+     (div
+      :fade-toggle open?
+      :class "content"
+      :click (fn [e]
+               (reset! open? false)
+               (.removeEventListener js/document "click" doc-click)
+               false)
+      (get-in help/content help-path))
+     contents)))
 
 (defn help-for
   [help-path]
@@ -492,6 +599,22 @@
     [(-> x (* nx) (/ width))
      (-> y (* ny) (/ height))]))
 
+(defn retry
+  "Perform `f` asynchronously every `interval` milliseconds until it
+  returns a logical true value."
+  [interval f]
+  (go-loop []
+    (when-not (f)
+      (async/<! (async/timeout interval))
+      (recur))))
+
+(defn later
+  "Perform `f` asynchronously `interval` milliseconds from now."
+  [interval f]
+  (go
+    (async/<! (async/timeout interval))
+    (f)))
+
 ;;; Styles
 (def colors
   {:invalid       "#c70505"
@@ -499,6 +622,39 @@
    :edit "rgba(128,128,255,0.5)"})
 
 (def resize-handle-size 0.75)
+
+(defn image-button-style
+  [pressed?]
+  {:border-style (if pressed? "inset" "outset")
+   :border-radius "6px"
+   :padding "2px"
+   :width "16px"
+   :background (if pressed? "lightgrey" "white")
+   :border-width "2px"
+   :vertical-align "middle"})
+
+(defn triangle-style
+  []
+  {:width          0
+   :height         0
+   :border-left    "5px solid transparent"
+   :border-right   "5px solid transparent"
+   :border-top     "7px solid black"
+   :display        "inline-block"
+   :margin-right   "3px"
+   :vertical-align "middle"})
+
+;;; Controls
+
+(defelem color-picker
+  [attrs _]
+  (with-let [i (input attrs
+                      :class "minicolors"
+                      :type "hidden")]
+    (retry 20
+           #(when (-> i js/jQuery .-minicolors)
+              (-> i js/jQuery (.minicolors #js {"theme" "weathergen"}))
+              true))))
 
 ;;; Page sections
 
@@ -742,11 +898,12 @@
     (doseq [[[x y] weather] weather-data
             :let [[r g b a] (fill-color (:display display-params) weather)
                   cell (gdom/getElement (str "grid-primary-cell-" x "-" y))]]
-      (.setAttribute cell "fill" (str "rgba("
-                                      r ","
-                                      g ","
-                                      b ","
-                                      a ")")))))
+      (when cell
+        (.setAttribute cell "fill" (str "rgba("
+                                        r ","
+                                        g ","
+                                        b ","
+                                        a ")"))))))
 
 (defn update-grid-data
   [weather-data display-params]
@@ -1137,6 +1294,71 @@
                                     [:weather-overrides index :falloff]
                                     #(math/clamp 0 (long r) %))))]))])))))
 
+(defn flight-path->path
+  [size path]
+  (loop [[point & more] path
+         s nil]
+    (if-let [{:keys [::dtc/coordinates ::dtc/alternate?]} point]
+      (let [{:keys [::dtc/x ::dtc/y]} coordinates
+            [gx gy] (coords/falcon->grid size x y)]
+        (recur more
+               (if alternate?
+                 s
+                 (str s
+                      (when s " ")
+                      (if s "L" "M")
+                      (gstring/format "%f,%f" gx gy)))))
+      s)))
+
+(defn flight-paths-overlay
+  [size display-params]
+  (svg/g
+   :id "flight-paths-overlay"
+   (formula-of
+    [display-params]
+    (for [{:keys [show? show-labels? color path]} (:flight-paths display-params)
+          :when show?
+          :let [opacity 0.9]]
+      [(svg/g
+        (for [{:keys [::dtc/coordinates ::dtc/ordinal ::dtc/alternate?]} path
+              :let [{:keys [::dtc/x ::dtc/y]} coordinates
+                    [gx gy] (coords/falcon->grid size x y)
+                    marker-size 0.5]]
+          [(svg/circle
+            :stroke color
+            :stroke-width "0.15"
+            :pointer-events "none"
+            :fill "none"
+            :opacity opacity
+            :cx gx
+            :cy gy
+            :r (/ marker-size 2))
+           (if-not show-labels?
+             []
+             (svg/text
+              :stroke color
+              :stroke-width "0.01"
+              :fill color
+              :font-size "4%"
+              :text-anchor "middle"
+              :opacity opacity
+              :x gx
+              :y (- gy marker-size)
+              ;; TODO: Understand and display tanker steerpoint, plus
+              ;; triangles for targets and patrol points.
+              ;; Also need to alter flight path detection algorithm:
+              ;; type goes to -1 when it switches to target point.
+              (if alternate?
+                "Alternate Field"
+                (inc ordinal))))]))
+       (svg/path
+        :stroke color
+        :stroke-width "0.1"
+        :fill "none"
+        :pointer-events "none"
+        :opacity opacity
+        :d (flight-path->path size path))]))))
+
 (defn within-area?
   "Return true if the specified coordinates fall within the wind
   stability area."
@@ -1300,6 +1522,7 @@
                      text-overlay
                      (wind-stability-overlay weather-params register-drag-handler)
                      (weather-overrides-overlay weather-params register-drag-handler)
+                     (flight-paths-overlay [nx ny] display-params)
                      selected-cell-overlay
                      info-overlay)]
       ;; TODO: We're capturing the value of the number of cells, but it
@@ -1369,7 +1592,11 @@
               (gdom/appendChild text-overlay frag))))
         (let [display-params* (formula-of
                                [display-params]
-                               (dissoc display-params :dimensions :opacity :map))]
+                               (dissoc display-params
+                                       :dimensions
+                                       :opacity
+                                       :map
+                                       :flight-paths))]
           (formula-of
            [weather-data display-params*]
            (update-grid weather-data display-params*)))))))
@@ -1385,6 +1612,61 @@
   (div :class "two-column"
        (div :class "left-column" left)
        (div :class "right-column" right)))
+
+(defelem dropdown
+  [attrs _]
+  (let [{:keys [value select items]} attrs
+        attrs (dissoc attrs :value :select :items)
+        show? (cell false)
+        selected (formula-of
+                  [items value]
+                  (log/debug "selected changing" :value value :items items)
+                  (->> items
+                       (filter #(= value (:value %)))
+                       first))
+        _ (formula-of
+           [selected]
+           (log/debug "selected changed" :selected selected))]
+    (log/debug "dropdown"
+               :dropdown-value @value
+               :selected @selected
+               :items @items)
+    (div
+     :css {:border "solid 1px black"
+           :background "white"
+           :border-radius "4px"
+           :padding-left "4px"
+           :padding-top "2px"}
+     attrs
+     [(formula-of
+       [selected value]
+       (if (= (:value selected) value)
+         (:ui selected)
+         ""))
+      (span
+       :css (merge (triangle-style)
+                   {:margin-bottom "6px"
+                    :margin-left "4px"})
+       :click #(swap! show? not))
+      (div
+       :toggle show?
+       (formula-of
+        [items value]
+        (for [item items]
+          (a
+           :href "#"
+           :click #(dosync
+                    (reset! show? false)
+                    (select item))
+           :css {:margin-left "4px"
+                 :display "block"}
+           (div
+            :css {:width "8px"
+                  :display "inline-block"}
+            (if (= value (:value item))
+              "✓"
+              " "))
+           (:ui item)))))])))
 
 (defn conform-nonnegative-integer
   [s]
@@ -1538,6 +1820,27 @@
   (time-edit
    :source (formula-of [c] (get-in c path))
    :update #(swap! c assoc-in path %)))
+
+(defelem image-button
+  [attrs]
+  (let [down (cell false)
+        css (:css attrs)
+        attrs (dissoc attrs :css)]
+    (img
+     :css (formula-of
+           [down]
+           (merge (image-button-style down)
+                  css))
+     :mousedown (fn [e]
+                  (log/debug "down")
+                  (let [up (fn up-fn [e]
+                             (log/debug "up")
+                             (.removeEventListener js/document "mouseup" up-fn)
+                             (reset! down false))]
+                    (.addEventListener js/document "mouseup" up))
+                  (reset! down true))
+     attrs)))
+
 
 (defn button-bar
   []
@@ -1713,16 +2016,16 @@
      ["Weather speed"    [:direction :speed]   {:cell movement-params
                                                 :help-base :movement-params}]])))
 
-(let [indexed-wind-stability-areas (->> weather-params
-                                        :wind-stability-areas
-                                        (map-indexed vector)
-                                        cell=)]
-  (defn wind-stability-parameters
-    [_]
-    (control-section
-     :title "Wind stability regions"
-     :id "wind-stability-params-section"
-     :help-for [:wind-stability-areas]
+(defn wind-stability-parameters
+  [_]
+  (control-section
+   :title "Wind stability regions"
+   :id "wind-stability-params-section"
+   :help-for [:wind-stability-areas]
+   (let [indexed-wind-stability-areas (->> weather-params
+                                           :wind-stability-areas
+                                           (map-indexed vector)
+                                           cell=)]
      (div
       :class "wind-stability-boxes"
       (loop-tpl :bindings [[index area] indexed-wind-stability-areas]
@@ -1739,47 +2042,52 @@
            (tr (td "Wind spd/hdg")
                (td (edit-field weather-params [:wind-stability-areas @index :wind :speed]))
                (td (edit-field weather-params [:wind-stability-areas @index :wind :heading])))))
-         (button
+         (image-button
+          :src "images/trash.png"
+          :width "16px"
+          :title "Remove"
           :click #(swap! weather-params
                          update
                          :wind-stability-areas
                          (fn [areas]
-                           (remove-nth areas @index)))
-          "Remove")
-         (button
+                           (remove-nth areas @index))))
+         (img
           :click #(swap! weather-params
                          update-in
                          [:wind-stability-areas @index :editing?]
                          not)
-          (formula-of
-           {{:keys [editing?]} area}
-           (if editing?
-             "Done"
-             "Edit")))
-         (hr))))
-     (button
-      :click #(swap! weather-params
-                     update
-                     :wind-stability-areas
-                     (fn [areas]
-                       (conj areas
-                             {:bounds {:x 0 :y 0 :width 10 :height 10}
-                              :wind {:heading 45
-                                     :speed 5}
-                              :index (count areas)})))
-      "Add New"))))
+          :title "Edit"
+          :src "images/move.svg"
+          :width "16px"
+          :height "16px"
+          :css (formula-of
+                [area]
+                (log/debug "area" area)
+                (log/spy (image-button-style (:editing? area)))))
+         (hr)))))
+   (button
+    :click #(swap! weather-params
+                   update
+                   :wind-stability-areas
+                   (fn [areas]
+                     (conj areas
+                           {:bounds {:x 0 :y 0 :width 10 :height 10}
+                            :wind {:heading 45
+                                   :speed 5}
+                            :index (count areas)})))
+    "Add New")))
 
-(let [indexed-weather-overrides (formula-of
-                                 [weather-params]
-                                 (->> weather-params
-                                      :weather-overrides
-                                      (map-indexed vector)))]
-  (defn weather-override-parameters
-    [_]
-    (control-section
-     :title "Weather override regions"
-     :id "weather-override-params-section"
-     :help-for [:weather-overrides :overview]
+(defn weather-override-parameters
+  [_]
+  (control-section
+   :title "Weather override regions"
+   :id "weather-override-params-section"
+   :help-for [:weather-overrides :overview]
+   (let [indexed-weather-overrides (formula-of
+                                    [weather-params]
+                                    (->> weather-params
+                                         :weather-overrides
+                                         (map-indexed vector)))]
      (div
       :class "weather-override-boxes"
       (loop-tpl :bindings [[index override] indexed-weather-overrides]
@@ -1854,43 +2162,47 @@
                    (td (time-entry weather-params [:weather-overrides @index k]))))
              (checkbox "Exclude from forecast?" :exclude-from-forecast?
                        {:row-attrs {:toggle (cell= (:animate? override))}}))))
-         (button
+         (image-button
+          :src "images/trash.png"
+          :width "16px"
+          :title "Remove"
           :click #(swap! weather-params
                          update
                          :weather-overrides
                          (fn [overrides]
-                           (remove-nth overrides @index)))
-          "Remove")
-         (button
+                           (remove-nth overrides @index))))
+         (img
           :click #(swap! weather-params
                          update-in
                          [:weather-overrides @index :editing?]
                          not)
-          (formula-of
-           {{:keys [editing?]} override}
-           (if editing?
-             "Done"
-             "Edit"))))))
-     (button
-      :click #(swap! weather-params
-                     (fn [wp]
-                       (update wp
-                               :weather-overrides
-                               (fn [overrides]
-                                 (conj overrides
-                                       {:location {:x 30
-                                                   :y 30}
-                                        :radius 8
-                                        :falloff 2
-                                        :begin (-> wp :time :current)
-                                        :peak (-> wp :time :current (model/add-time 60))
-                                        :taper (-> wp :time :current (model/add-time 180))
-                                        :end (-> wp :time :current (model/add-time 240))
-                                        :pressure (-> wp :pressure :min)
-                                        :strength 1
-                                        :show-outline? true
-                                        :exclude-from-forecast? false})))))
-      "Add New"))))
+          :title "Edit"
+          :src "images/move.svg"
+          :width "16px"
+          :height "16px"
+          :css (formula-of
+                {{:keys [editing?]} override}
+                (image-button-style editing?)))))))
+   (button
+    :click #(swap! weather-params
+                   (fn [wp]
+                     (update wp
+                             :weather-overrides
+                             (fn [overrides]
+                               (conj overrides
+                                     {:location {:x 30
+                                                 :y 30}
+                                      :radius 8
+                                      :falloff 2
+                                      :begin (-> wp :time :current)
+                                      :peak (-> wp :time :current (model/add-time 60))
+                                      :taper (-> wp :time :current (model/add-time 180))
+                                      :end (-> wp :time :current (model/add-time 240))
+                                      :pressure (-> wp :pressure :min)
+                                      :strength 1
+                                      :show-outline? true
+                                      :exclude-from-forecast? false})))))
+    "Add New")))
 
 (defn weather-type-configuration
   [_]
@@ -2111,14 +2423,150 @@
     (.removeAttribute elem "preserveAspectRatio")
     (.setAttribute elem "preserveAspectRatio" value)))
 
-
 (defn test-section
   [{:keys []}]
-  (time-edit
-   :id "test"
-   :source (cell= (-> weather-params :time :current))
-   :update #(swap! weather-params assoc-in [:time :current] %)))
+  (control-section
+   :title "Test"
+   (let [path (cell {:color "FFFFFF"})
+         current-color (cell= (:color path))]
+     [(span (cell= (str current-color)))
+      (color-picker
+       :value current-color
+       :change (fn [val opacity]
+                 (log/debug "color changed" :val @val :opacity opacity)
+                 (swap! path assoc :color @val)))])))
 
+(defn flightpath-controls
+  [_]
+  (control-section
+   :id "flightpath-controls"
+   :title "Flight Paths"
+   :help-for [:flightpath :section]
+   (div
+    (let [indexes (formula-of
+                   [display-params]
+                   (->> display-params
+                        :flight-paths
+                        count
+                        range))]
+      (table
+       (thead
+        (formula-of
+         [indexes]
+         (when-not (empty? indexes)
+           (tr (td :colspan 2
+                   (help-for [:flightpath :name])
+                   "Name")
+               (td (help-for [:flightpath :show?])
+                   "Show?"
+                   ;; TODO: Switch to this everywhere
+                   #_(with-help [:flightpath :show?]
+                       "Show?"))
+               (td (help-for [:flightpath :labels?])
+                   "Labels?")
+               (td (help-for [:flightpath :color])
+                   "Color")
+               (td (help-for [:flightpath :remove])
+                   "Remove")))))
+       (tbody
+        (formula-of
+         [indexes]
+         (for [index indexes]
+           (let [path (lens
+                       (formula-of
+                        [display-params]
+                        (get-in display-params [:flight-paths index]))
+                       (fn [v]
+                         (swap! display-params assoc-in [:flight-paths index] v)))
+                 label (formula-of
+                        [path]
+                        (-> path :label :value))
+                 editor (input
+                         :type "text"
+                         :value label
+                         ;; :blur (fn [_]
+                         ;;         (log/debug "blur start")
+                         ;;         (swap! path
+                         ;;                assoc-in
+                         ;;                [:label :editing?]
+                         ;;                false)
+                         ;;         (log/debug "blur end"))
+                         :keypress (fn [e]
+                                     (when (= (.-keyCode e) ENTER_KEY)
+                                       (swap! path
+                                              assoc-in
+                                              [:label :editing?]
+                                              false)))
+                         :change #(dosync
+                                   (swap! path
+                                          update
+                                          :label
+                                          assoc
+                                          :value @%
+                                          :editing? false)))
+                 focus-later (fn [e] (with-timeout 0 (.focus e)))]
+             (tr
+              (td
+               (image-button
+                :css {:width "12px"}
+                :src (formula-of
+                      [path]
+                      (if (-> path :label :editing?)
+                        "images/checkmark.png"
+                        "images/edit.svg"))
+                :click (fn [_]
+                         (log/debug "click")
+                         (let [path* (swap! path update-in [:label :editing?] not)]
+                           (when (get-in path* [:label :editing?])
+                             (log/debug "editing")
+                             (focus-later editor))))))
+              (td
+               (formula-of
+                {p path}
+                (if (-> p :label :editing?)
+                  editor
+                  (div
+                   :css {:display "inline-block"
+                         :margin-right "3px"}
+                   :click #(do
+                             (focus-later editor)
+                             (swap! path
+                                    assoc-in
+                                    [:label :editing?]
+                                    true))
+                   label))))
+              (td
+               :css {:text-align "center"}
+               (input
+                :css {:margin-bottom "6px"}
+                :type "checkbox"
+                :value (cell= (:show? path))
+                :change #(swap! path update :show? not)))
+              (td
+               :css {:text-align "center"}
+               (input
+                :css {:margin-bottom "6px"}
+                :type "checkbox"
+                :value (cell= (:show-labels? path))
+                :change #(swap! path update :show-labels? not)))
+              (td
+               :css {:text-align "center"}
+               (div
+                :css {:padding-left "5px"
+                      :padding-top "2px"}
+                (color-picker
+                 :value (cell= (:color path))
+                 :change #(swap! path assoc :color @%))))
+              (td
+               :css {:text-align "center"}
+               (image-button
+                :src "images/trash.png"
+                :click #(swap! display-params
+                               update
+                               :flight-paths
+                               (fn [paths]
+                                 (remove-nth paths index)))))))))))))
+   (button :click load-dtc "Load DTC")))
 
 ;;; General layout
 
@@ -2126,10 +2574,13 @@
   []
   (h/head
    (title "WeatherGen")
+   (link :href "js/jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300"
          :rel "stylesheet"
-         :type "text/css")))
+         :type "text/css")
+   ;; TODO: Figure out the whole deps.cljs
+   (script :src "js/jquery.minicolors.min.js")))
 
 (defelem body
   [{:keys [] :as attrs}
@@ -2168,6 +2619,7 @@
    :wind-stability-parameters wind-stability-parameters
    :weather-override-parameters weather-override-parameters
    :advanced-controls advanced-controls
+   :flightpath-controls flightpath-controls
    :test-section test-section})
 
 (defn weather-page
@@ -2190,6 +2642,18 @@
                     :nx (first (:cell-count @weather-params))
                     :ny (second (:cell-count @weather-params))))
          (div :class "right-column"
-              (for [[section opts] (partition 2 section-infos)]
-                ((sections section) opts))))
+              (for [[section opts] (partition 2 section-infos)
+                    :let [ctor (sections section)]]
+                (ctor opts))))
     (debug-info))))
+
+#_(with-init!
+  (go-loop []
+    (if-let [mc (-> "input.minicolors" js/$ .-minicolors)]
+      (do
+        (log/debug "It loaded")
+        (mc #js {}))
+      (do
+        (log/debug "Trying again")
+        (async/<! (async/timeout 500))
+        (recur)))))

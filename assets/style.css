@@ -604,5 +604,17 @@ rect.inclement {
     width: 35px;
 }
 
+/* Swatch colors */
 
+div.minicolors-theme-weathergen {
+    border: solid 1px black;
+    /* border-radius: 3px; */
+    width: 16px;
+    height: 16px;
+    margin: auto;
+}
+
+.minicolors input[type=hidden] + .minicolors-swatch {
+    width: 0;
+}
 

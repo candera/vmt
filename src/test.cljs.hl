@@ -14,5 +14,8 @@
 
 ;; (reset! ui/max-time {:day 2 :hour 2 :minute 2})
 
+(reset! ui/weather-params
+        ui/default-weather-params)
+
 (ui/weather-page
  :test-section {})
