@@ -474,7 +474,7 @@
                     (reset! open? false))]
     (div
      :class "help"
-     :css {:cursor "help"
+     :css {:cursor "url(images/helpcursor.png) 4 4, auto"
            :border-bottom "dashed 1px blue"}
      :click (fn [e]
               (swap! open? not)
@@ -672,11 +672,7 @@
                           {:toggle true
                            :visible visible})
        "")
-      (if-let [h (:help-for attributes)]
-        (help-for h)
-        [])
       (span
-       :click change-visibility
        (:title attributes)))
      (div
       :class "control-visibility-container"
@@ -688,8 +684,7 @@
   [{:keys [forecast-link? limit-time?]
     :as opts}]
   (control-section
-   :title "Forecast"
-   :help-for [:forecast]
+   :title (with-help [:forecast] "Forecast")
    :id "forecast-section"
    (div
     :id "forecast"
@@ -1891,18 +1886,18 @@
         field-help (fn [& kids] (apply div :class "field-elem field-help" kids))
         field-input (fn [& kids] (apply div :class "field-elem field-input" kids))
         field-label (fn [& kids] (apply div :class "field-elem field-label" kids))]
-    (for [[label selector {:keys [extra type help-base help-path cell] :as opts}]
+    (for [[label selector {:keys [extra type help-base help-path cell ui] :as opts}]
           controls
           :let [cell (or cell weather-params)]]
       (field
-       (field-help (help-for (into [(or help-base :weather-params)]
-                                   (or help-path selector))))
-       (field-label label)
-       (field-input (if (= :pressure type)
-                      (pressure-edit-field cell
-                                           selector
-                                           pressure-unit)
-                      (edit-field cell selector))
+       (field-label (with-help (into [(or help-base :weather-params)]
+                                     (or help-path selector))
+                      label))
+       (field-input (or ui (if (= :pressure type)
+                             (pressure-edit-field cell
+                                                  selector
+                                                  pressure-unit)
+                             (edit-field cell selector)))
                     (or extra []))))))
 
 (defn display-controls
@@ -1920,81 +1915,68 @@
                                             key->name
                                             (= name)))
                        name))))
-        select-row (fn [{:keys [label k key->name name->key change]} help-path]
-                     (tr (td (help-for help-path))
-                         (td label)
-                         (td (select
-                              :change (if change
-                                        #(change (name->key @%))
-                                        #(swap! display-params assoc k (name->key @%)))
-                              (for [name (conj (keys name->key) "None")]
-                                (option
-                                 :value name
-                                 :selected (cell= (-> display-params
-                                                      k
-                                                      key->name
-                                                      (= name)))
-                                 name))))))
         field      (fn [& kids] (apply div :class "field" kids))
         field-help (fn [& kids] (apply div :class "field-elem field-help" kids))
         field-input (fn [& kids] (apply div :class "field-elem field-input" kids))
-        field-label (fn [& kids] (apply div :class "field-elem field-label" kids))]
+        field-label (fn [help-path & kids]
+                      (with-help help-path
+                        (apply div :class "field-elem field-label" kids)))]
     (control-section
      :title "Display controls"
      :id "display-controls-section"
-     (if prevent-map-change?
-       []
-       (field
-        (field-help (help-for [:display-controls :map]))
-        (field-label "Map")
-        (field-input (dropdown {:k :map
-                                :key->name map-key->name
-                                :name->key map-name->key
-                                :change change-theater}))))
-     (field
-      (field-help (help-for [:display-controls :display]))
-      (field-label "Display")
-      (field-input (dropdown {:k :display
-                              :key->name display-key->name
-                              :name->key display-name->key})))
-     (field
-      (field-help (help-for [:display-controls :overlay]))
-      (field-label "Overlay")
-      (field-input (dropdown {:label "Overlay"
-                              :k :overlay
-                              :key->name overlay-key->name
-                              :name->key overlay-name->key})))
-     (field
-      (field-help (help-for [:display-controls :pressure]))
-      (field-label "Pressure")
-      (field-input (select
-                    :change #(do
-                               (swap! display-params
-                                      assoc
-                                      :pressure-unit
-                                      (pressure-unit-name->key @%)))
-                    (for [name (keys pressure-unit-name->key)]
-                      (option
-                       :value name
-                       :selected (cell= (-> display-params
-                                            :pressure-unit
-                                            pressure-unit-key->name
-                                            (= name)))
-                       name)))))
-     (field
-      (field-help (help-for [:display-controls :opacity]))
-      (field-label "Opacity:")
-      (field-input (input {:type "range"
-                           :min 0
-                           :max 100
-                           :value (cell= (-> display-params
-                                             :opacity
-                                             (* 100)
-                                             long))
-                           :change #(swap! display-params
-                                           assoc
-                                           :opacity
-                                           (/ @% 100.0))}))))))
+     (control-layout
+      (let [opts {:cell display-params
+                  :help-base :display-controls}]
+        (into (if prevent-map-change?
+                []
+                [["Map"
+                  [:map]
+                  (merge opts
+                         {:ui (dropdown {:k :map
+                                         :key->name map-key->name
+                                         :name->key map-name->key
+                                         :change change-theater})})]])
+              [["Display"
+                [:display]
+                (merge opts
+                       {:ui (dropdown {:k :display
+                                       :key->name display-key->name
+                                       :name->key display-name->key})})]
+               ["Overlay"
+                [:overlay]
+                (merge opts {:ui (dropdown {:label "Overlay"
+                                            :k :overlay
+                                            :key->name overlay-key->name
+                                            :name->key overlay-name->key})})]
+               ["Pressure"
+                [:pressure]
+                (merge opts {:ui (select
+                                  :change #(do
+                                             (swap! display-params
+                                                    assoc
+                                                    :pressure-unit
+                                                    (pressure-unit-name->key @%)))
+                                  (for [name (keys pressure-unit-name->key)]
+                                    (option
+                                     :value name
+                                     :selected (cell= (-> display-params
+                                                          :pressure-unit
+                                                          pressure-unit-key->name
+                                                          (= name)))
+                                     name)))})]
+               ["Opacity:"
+                [:opacity]
+                (merge opts {:ui (input {:type "range"
+                                         :min 0
+                                         :max 100
+                                         :value (cell= (-> display-params
+                                                           :opacity
+                                                           (* 100)
+                                                           long))
+                                         :change #(swap! display-params
+                                                         assoc
+                                                         :opacity
+                                                         (/ @% 100.0))})})]]))))))
 
 (defn weather-parameters
   [_]
@@ -2019,9 +2001,8 @@
 (defn wind-stability-parameters
   [_]
   (control-section
-   :title "Wind stability regions"
+   :title (with-help [:wind-stability-areas] "Wind stability regions")
    :id "wind-stability-params-section"
-   :help-for [:wind-stability-areas]
    (let [indexed-wind-stability-areas (->> weather-params
                                            :wind-stability-areas
                                            (map-indexed vector)
@@ -2080,9 +2061,8 @@
 (defn weather-override-parameters
   [_]
   (control-section
-   :title "Weather override regions"
+   :title (with-help [:weather-overrides :overview] "Weather override regions")
    :id "weather-override-params-section"
-   :help-for [:weather-overrides :overview]
    (let [indexed-weather-overrides (formula-of
                                     [weather-params]
                                     (->> weather-params
@@ -2100,7 +2080,6 @@
                             (let [id (gensym)]
                               (tr
                                (or row-attrs [])
-                               (td (help-for [:weather-overrides k]))
                                (td
                                 :colspan 2
                                 (input :id id
@@ -2113,28 +2092,34 @@
                                                             update-in
                                                             [:weather-overrides @index k]
                                                             not))))
-                                (label :for id l))))))]
+                                (with-help [:weather-overrides k]
+                                  (label :for id l)))))))]
             (tbody
-             (tr (td (help-for [:weather-overrides :center]))
-                 (td :class "override-label" "Center X/Y")
+             (tr (td :class "override-label"
+                     (with-help [:weather-overrides :center]
+                       "Center X/Y"))
                  (td (edit-field weather-params
                                  [:weather-overrides @index :location :x]
                                  {:input-attrs {:css {:margin-right "3px"}}})
                      (edit-field weather-params [:weather-overrides @index :location :y])))
-             (tr (td (help-for [:weather-overrides :radius]))
-                 (td :class "override-label" "Radius")
+             (tr (td :class "override-label"
+                     (with-help [:weather-overrides :radius]
+                       "Radius"))
                  (td (edit-field weather-params [:weather-overrides @index :radius])))
-             (tr (td (help-for [:weather-overrides :falloff]))
-                 (td :class "override-label" "Falloff")
+             (tr (td :class "override-label"
+                     (with-help [:weather-overrides :falloff]
+                       "Falloff"))
                  (td (edit-field weather-params [:weather-overrides @index :falloff])))
-             (tr (td (help-for [:weather-overrides :pressure]))
-                 (td :class "override-label" "Pressure")
+             (tr (td :class "override-label"
+                     (with-help [:weather-overrides :pressure]
+                       "Pressure"))
                  (td (pressure-edit-field
                       weather-params
                       [:weather-overrides @index :pressure]
                       pressure-unit)))
-             (tr (td (help-for [:weather-overrides :strength]))
-                 (td :class "override-label" "Strength")
+             (tr (td :class "override-label"
+                     (with-help [:weather-overrides :strength]
+                       "Strength"))
                  (td (edit-field weather-params [:weather-overrides @index :strength])))
              (checkbox "Show outline?" :show-outline? {})
              (checkbox "Fade in/out?" :animate?
@@ -2157,8 +2142,8 @@
                               ["Taper" :taper]
                               ["End" :end]]]
                (tr :toggle (cell= (:animate? override))
-                   (td (help-for [:weather-overrides k]))
-                   (td label)
+                   (td (with-help [:weather-overrides k]
+                         label))
                    (td (time-entry weather-params [:weather-overrides @index k]))))
              (checkbox "Exclude from forecast?" :exclude-from-forecast?
                        {:row-attrs {:toggle (cell= (:animate? override))}}))))
@@ -2213,9 +2198,12 @@
     :id "category-params"
     (thead
      (tr (td "")
-         (td :colspan 2 "Pressure" (help-for [:weather-type-config :pressure]))
-         (td :colspan 3 "Wind" (help-for [:weather-type-config :wind]))
-         (td :colspan 3 "Temperature" (help-for [:weather-type-config :temp])))
+         (td :colspan 2 (with-help [:weather-type-config :pressure]
+                          "Pressure"))
+         (td :colspan 3 (with-help [:weather-type-config :wind]
+                          "Wind"))
+         (td :colspan 3 (with-help [:weather-type-config :temp]
+                          "Temperature")))
      (tr (map #(apply td %)
               [[""]
                ["From"] ["To"]
@@ -2290,7 +2278,7 @@
    :title "Advanced Controls"
    (control-layout
     [["X Offset"         [:origin 0] {:help-path [:origin :x]}]
-     ["Y Offset"         [:origin 1] {:help-path {:origin :y}}]
+     ["Y Offset"         [:origin 1] {:help-path [:origin :y]}]
      ["T Offset"         [:time :offset]]
      ["Evolution"        [:evolution]]
      ["Wind uniformity"  [:wind-uniformity]]
@@ -2307,19 +2295,19 @@
    (table
     (tbody
      (if (= mode :browse)
-       (tr (td (help-for [:weather-params :time :falcon-time]))
-           (td "Falcon time: ")
+       (tr (td (with-help [:weather-params :time :falcon-time]
+                 "Falcon time: "))
            (td (cell= (-> weather-params :time :max format-time)))
            (td (button
                 :click #(jump-to-time* (-> @weather-params :time :max))
                 "Jump to")))
        [])
      (if (= mode :browse)
-       (tr (td (help-for [:weather-params :time :browse-time]))
-           (td "Time")
+       (tr (td (with-help  [:weather-params :time :browse-time]
+                 "Time"))
            (td (time-entry weather-params [:time :current])))
-       (tr (td (help-for [:displayed-time]))
-           (td "Time")
+       (tr (td (with-help [:displayed-time]
+                 "Time"))
            (td (time-entry time-params [:displayed]))
            (td (button
                 :click jump-to-time
@@ -2327,8 +2315,8 @@
                (button
                 :click set-time
                 "Set to"))))
-     (tr (map td [(help-for [:step])
-                  "Step interval"
+     (tr (map td [(with-help [:step]
+                    "Step interval")
                   (validating-edit
                    :width "50px"
                    :source (cell= (:step movement-params))
@@ -2440,8 +2428,8 @@
   [_]
   (control-section
    :id "flightpath-controls"
-   :title "Flight Paths"
-   :help-for [:flightpath :section]
+   :title (with-help [:flightpath :section]
+            "Flight Paths")
    (div
     (let [indexes (formula-of
                    [display-params]
@@ -2455,19 +2443,15 @@
          [indexes]
          (when-not (empty? indexes)
            (tr (td :colspan 2
-                   (help-for [:flightpath :name])
-                   "Name")
-               (td (help-for [:flightpath :show?])
-                   "Show?"
-                   ;; TODO: Switch to this everywhere
-                   #_(with-help [:flightpath :show?]
+                   (with-help [:flightpath :name] "Name"))
+               (td (with-help [:flightpath :show?]
                        "Show?"))
-               (td (help-for [:flightpath :labels?])
-                   "Labels?")
-               (td (help-for [:flightpath :color])
-                   "Color")
-               (td (help-for [:flightpath :remove])
-                   "Remove")))))
+               (td (with-help [:flightpath :labels?]
+                     "Labels?"))
+               (td (with-help [:flightpath :color]
+                     "Color"))
+               (td (with-help [:flightpath :remove]
+                     "Remove"))))))
        (tbody
         (formula-of
          [indexes]
