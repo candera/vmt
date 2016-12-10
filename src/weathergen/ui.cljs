@@ -1,5 +1,6 @@
 (ns weathergen.ui
-  (:require [clojure.string :as str]
+  (:require [cljsjs.jquery.minicolors]
+            [clojure.string :as str]
             [javelin.core
              :as j
              :refer [defc defc= cell cell= dosync lens with-let]]
@@ -15,7 +16,6 @@
             [goog.string :as gstring]
             [goog.string.format]
             [goog.style :as gstyle]
-            ;;[jquery.minicolors]
             [longshi.core :as fress]
             [weathergen.canvas :as canvas]
             [weathergen.coordinates :as coords]
@@ -647,10 +647,8 @@
   (with-let [i (input attrs
                       :class "minicolors"
                       :type "hidden")]
-    (retry 20
-           #(when (-> i js/jQuery .-minicolors)
-              (-> i js/jQuery (.minicolors #js {"theme" "weathergen"}))
-              true))))
+    (when-dom i
+      #(-> i js/jQuery (.minicolors #js {"theme" "weathergen"})))))
 
 ;;; Page sections
 
@@ -2576,13 +2574,11 @@
   []
   (h/head
    (title "WeatherGen")
-   (link :href "./js/jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
+   (link :href "jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300"
          :rel "stylesheet"
-         :type "text/css")
-   ;; TODO: Figure out the whole deps.cljs
-   (script :src "./js/jquery.minicolors.min.js")))
+         :type "text/css")))
 
 (defelem body
   [{:keys [] :as attrs}
