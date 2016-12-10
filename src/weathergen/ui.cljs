@@ -468,14 +468,18 @@
 
 (defn with-help
   [help-path & contents]
-  (let [open? (cell false)
-	doc-click (fn click-fn [e]
+  (let [[css contents] (if (= (first contents) :css)
+                         [(second contents) (drop 2 contents)]
+                         [{} contents])
+        open? (cell false)
+        doc-click (fn click-fn [e]
                     (.removeEventListener js/document "click" click-fn)
                     (reset! open? false))]
     (div
      :class "help"
-     :css {:cursor "url(images/helpcursor.png) 4 4, auto"
-           :border-bottom "dashed 1px blue"}
+     :css (merge {:cursor "url(images/helpcursor.png) 4 4, auto"
+                  :border-bottom "dashed 1px blue"}
+                 css)
      :click (fn [e]
               (when (swap! open? not)
                 (with-timeout 0
@@ -2459,10 +2463,13 @@
          [indexes]
          (when-not (empty? indexes)
            (tr (td :colspan 2
-                   (with-help [:flightpath :name] "Name"))
+                   (with-help [:flightpath :name]
+                     "Name"))
                (td (with-help [:flightpath :show?]
-                       "Show?"))
+                     :css {:margin-right "2px"}
+                     "Show?"))
                (td (with-help [:flightpath :labels?]
+                     :css {:margin-right "2px"}
                      "Labels?"))
                (td (with-help [:flightpath :color]
                      "Color"))
