@@ -477,16 +477,12 @@
      :css {:cursor "url(images/helpcursor.png) 4 4, auto"
            :border-bottom "dashed 1px blue"}
      :click (fn [e]
-              (swap! open? not)
-              (with-timeout 0
-                (.addEventListener js/document "click" doc-click)))
+              (when (swap! open? not)
+                (with-timeout 0
+                  (.addEventListener js/document "click" doc-click))))
      (div
       :fade-toggle open?
       :class "content"
-      :click (fn [e]
-               (reset! open? false)
-               (.removeEventListener js/document "click" doc-click)
-               false)
       (get-in help/content help-path))
      contents)))
 
