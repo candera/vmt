@@ -879,3 +879,15 @@
     dtc/flight-path
     pprint
     )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(let [ch (async/chan 10)]
+  (async/go-loop []
+    (async/>! ch "hi")
+    (async/>! ch "hi")
+    (async/
+     go-loop [n 2]
+      (when (pos? n)
+        (println (async/<! ch))
+        (recur (dec n))))))

@@ -1,15 +1,25 @@
 (ns weathergen.ui
   (:require [cljsjs.jquery.minicolors]
+            [cljsjs.jszip]
+            [cljsjs.filesaverjs]
             [clojure.string :as str]
             [javelin.core
              :as j
              :refer [defc defc= cell cell= dosync lens with-let]]
             [hoplon.core
              :as h
-             :refer [a br button defelem div do! fieldset hr html img input
+             :refer [a
+                     br button
+                     defelem div do!
+                     fieldset
+                     hr html
+                     img input
                      label legend link loop-tpl
-                     option p script select span table tbody td thead title tr
-                     timeout when-dom with-init! with-timeout]]
+                     option
+                     p progress
+                     script select span
+                     table tbody td thead title tr timeout
+                     when-dom with-init! with-timeout]]
             [hoplon.svg :as svg]
             [goog.dom :as gdom]
             [goog.crypt.base64 :as base64]
@@ -140,7 +150,10 @@
                       :mouse-mode :select
                       :overlay    :wind
                       :pressure-unit :inhg
-                      :flight-paths nil})
+                      :flight-paths nil
+                      :multi-save {:from {:day 1 :hour 5 :minute 0}
+                                   :to {:day 1 :hour 10 :minute 0}
+                                   :step 60}})
 
 (defc selected-cell nil)
 
@@ -290,7 +303,18 @@
      (swap! time-params
             assoc
             :displayed
-            (:current time)))))
+            (:current time))
+     (swap! display-params
+            update
+            :multi-save
+            (fn [{:keys [from to] :as ms}]
+              (assoc ms
+                     :from (:current time)
+                     :to (-> to
+                             model/falcon-time->minutes
+                             (- (model/falcon-time->minutes from))
+                             (+ (model/falcon-time->minutes (:current time)))
+                             model/minutes->falcon-time)))))))
 
 (defn jump-to-time*
   [t]
@@ -350,6 +374,14 @@
     (.click a)
     (-> js/window .-URL (.revokeObjectURL url))))
 
+(defn fmap-filename
+  "Returns the filename for an FMAP at time `t`."
+  [t]
+  (gstring/format "%d%02d%02d.fmap"
+                  (:day t)
+                  (:hour t)
+                  (:minute t)))
+
 (defn save-fmap
   [weather-params weather-data]
   (let [t (get-in weather-params [:time :current])
@@ -366,10 +398,7 @@
         blob (fmap/get-blob data
                             x-cells
                             y-cells)]
-    (save-data blob (gstring/format "%d%02d%02d.fmap"
-                                    (:day t)
-                                    (:hour t)
-                                    (:minute t)))))
+    (save-data blob (fmap-filename t))))
 
 (defn save-settings
   [_]
@@ -436,6 +465,60 @@
                        :uniquifier (rand-int 1000000)
                        :color "#FFFFFF"
                        :path flight-path})))))))
+
+(def zipbuilder-worker
+  (let [worker (js/Worker. "worker.js")
+        command-ch (async/chan)
+        result-ch (async/chan)
+        output-ch (async/chan)]
+    (-> worker
+        .-onmessage
+        (set! #(go (async/>! result-ch (->> % .-data decode)))))
+    {:command-ch command-ch
+     :worker worker
+     :output-ch output-ch
+     ;;:result result-ch
+     :loop (go-loop []
+             (let [params (async/<! command-ch)]
+               (.postMessage worker (encode params))
+               (async/>! output-ch (async/<! result-ch))
+               (recur)))}))
+
+
+(defn multi-download
+  [{:keys [weather-params nx ny from to step progress cancel]}]
+  (let [cells (for [x (range nx)
+                    y (range ny)]
+                [x y])
+        start (model/falcon-time->minutes from)
+        end (model/falcon-time->minutes to)
+        steps (-> end (- start) (/ step) long inc)
+        zip (js/JSZip.)
+        folder (.folder zip "WeatherMapsUpdates")]
+    (go-loop [t start]
+      (let [p (-> t (- start) (/ (- end start)) (min 1))]
+        (log/debug "progress" p)
+        (reset! progress p))
+      (if (< end t)
+        (-> zip
+            (.generateAsync #js {:type "blob"})
+            (.then (fn [blob]
+                     (js/saveAs blob "weather.zip")
+                     (reset! progress nil))))
+        (do
+          (async/>! (:command-ch zipbuilder-worker)
+                    (-> weather-params
+                        (assoc-in [:time :current]
+                                  (model/minutes->falcon-time t))
+                        (assoc :cells cells)))
+          (let [data (async/<! (:output-ch zipbuilder-worker))]
+            (.file folder
+                   (fmap-filename (model/minutes->falcon-time t))
+                   (fmap/get-blob data nx ny)
+                   #js {:binary true}))
+          (if @cancel
+            (reset! progress nil)
+            (recur (+ t step))))))))
 
 ;;; Help
 
@@ -614,6 +697,16 @@
   (go
     (async/<! (async/timeout interval))
     (f)))
+
+(defn path-lens
+  "Returns a lens over a `get-in` style path `p` into cell `c`."
+  [c p]
+  (lens
+   (formula-of
+    [c]
+    (get-in c p))
+   (fn [v]
+     (swap! c assoc-in p v))))
 
 ;;; Styles
 (def colors
@@ -1706,9 +1799,9 @@
      :value l}))
 
 (defelem validating-edit
-  [{:keys [conform fmt source update width placeholder] :as attrs}
+  [{:keys [conform fmt source update width placeholder css] :as attrs}
    _]
-  (let [attrs (dissoc attrs :source :conform :update :width :fmt :placeholder)
+  (let [attrs (dissoc attrs :source :conform :update :width :fmt :placeholder :css)
         interim (cell nil)
         parsed (formula-of
                 [interim]
@@ -1719,7 +1812,8 @@
         state (cell :set)]
     (div
      attrs
-     :css {:position "relative"}
+     :css (merge {:position "relative"}
+                 css)
      (input :type "text"
             :placeholder placeholder
             :input #(do
@@ -1758,10 +1852,12 @@
           :title (cell= (:message parsed))
           :css (formula-of
                 [parsed]
-                {"width" "14px"
-                 "vertical-align" "middle"
-                 "margin-left" "3px"
-                 "opacity" (if (:valid? parsed)
+                {:width "14px"
+                 :vertical-align "middle"
+                 :margin-left "3px"
+                 :position "relative"
+                 :right "20px"
+                 :opacity (if (:valid? parsed)
                              "0"
                              "1")})))))
 
@@ -1771,7 +1867,7 @@
   [{:keys [source update] :as attrs} _]
   (validating-edit
    attrs
-   :width "50px"
+   :width "60px"
    :fmt format-time
    :placeholder "dd/hhmm"
    :conform #(let [[all dd hh mm] (re-matches #"(\d+)/(\d\d)(\d\d)" %)
@@ -2380,33 +2476,130 @@
 
 (defn serialization-controls
   [_]
-  (control-section
-   :id "load-save-controls"
-   :title "Load/save"
-   (div
-    :class "button-container"
-    (a :click (fn []
-                (save-fmap @weather-params @weather-data)
-                (move 1))
-       :class "button"
-       "Save Current as FMAP")
-    "(Steps forward in time)")
-   (div
-    :class "button-container"
-    (cell=
-     (let [blob (js/Blob. (clj->js [(pr-str {:weather-params weather-params
-                                             :movement-params movement-params
-                                             :display-params display-params
-                                             :revision revision})])
-                          #js{:type "text/plain"})
-           url (-> js/window .-URL (.createObjectURL blob))]
-       (a :href url
-          :download "weathergen-settings.edn"
-          :class "button"
-          "Save Settings"))))
-   (div
-    :class "button-container"
-    (button :class "button" :click load-settings "Load Settings"))))
+  (let [inline (fn [css & contents]
+                 (apply div
+                        :css (merge {:display "inline-block"}
+                                    css)
+                        contents))]
+    (control-section
+     :id "load-save-controls"
+     :title "Load/save"
+     (div
+      :class "button-container"
+      (a :click (fn []
+                  (save-fmap @weather-params @weather-data)
+                  (move 1))
+         :class "button"
+         "Save Current as FMAP")
+      "(Steps forward in time)")
+     (div
+      :class "button-container"
+      (cell=
+       (let [blob (js/Blob. (clj->js [(pr-str {:weather-params weather-params
+                                               :movement-params movement-params
+                                               :display-params display-params
+                                               :revision revision})])
+                            #js{:type "text/plain"})
+             url (-> js/window .-URL (.createObjectURL blob))]
+         (a :href url
+            :download "weathergen-settings.edn"
+            :class "button"
+            "Save Settings"))))
+     (div
+      :class "button-container"
+      (button :class "button" :click load-settings "Load Settings"))
+     (div
+      (let [progress (cell nil)
+            cancelling? (cell false)]
+        [(inline
+          {}
+          (button :css (formula-of
+                        [progress cancelling?]
+                        {:margin-right "4px"
+                         :width "105px"
+                         :background
+                         (if (and (not cancelling?) (some? progress))
+                           (let [pct (long (* 100 progress))]
+                             (gstring/format "linear-gradient(to right, lightblue, lightblue %f%%, white %f%%)"
+                                             pct pct))
+                           "white")})
+                  :class "button"
+                  :click (fn []
+                           (if @progress
+                             (dosync
+                              (reset! cancelling? true))
+                             (do
+                               (reset! cancelling? false)
+                               (multi-download {:weather-params @weather-params
+                                                :from (get-in @display-params [:multi-save :from])
+                                                :to (get-in @display-params [:multi-save :to])
+                                                :step (get-in @display-params [:multi-save :step])
+                                                :progress progress
+                                                :cancel cancelling?
+                                                :nx (-> @weather-params :cell-count first)
+                                                :ny (-> @weather-params :cell-count second)}))))
+                  (formula-of
+                   [progress cancelling?]
+                   (cond
+                     (and progress cancelling?) "Cancelling..."
+                     progress "Cancel"
+                     :else "Generate FMAPs"))))
+         (inline
+          {:margin-right "5px"}
+          (with-help [:display-params :multi-save :from]
+            "from"))
+         (formula-of
+          [progress]
+          (if progress
+            (div
+             :css {:margin-right "3px"
+                   :display "inline-block"}
+             (-> display-params :multi-save :from format-time cell=))
+            (inline
+             {:margin-right "-12px"}
+             (time-entry display-params [:multi-save :from]))))
+         (inline
+          {:margin-right "5px"}
+          (with-help [:display-params :multi-save :to]
+            "to"))
+         (formula-of
+          [progress]
+          (if progress
+            (div
+             :css {:margin-right "3px"
+                   :display "inline-block"}
+             (-> display-params :multi-save :to format-time cell=))
+            (inline
+             {:margin-right "-12px"}
+             (time-entry display-params [:multi-save :to]))))
+         (inline
+          {:margin-right "5px"}
+          (with-help [:display-params :multi-save :step]
+            :css {:display "inline-block"}
+            "step by"))         (formula-of
+          [progress]
+          (if progress
+            (div
+             :css {:margin-right "3px"
+                   :display "inline-block"}
+             (-> display-params :multi-save :step cell=))
+            (inline
+             {}
+             (validating-edit
+              :css {:display "inline-block"
+                    :whitespace "nowrap"}
+              :width "32px"
+              :source (-> display-params :multi-save :step cell=)
+              :update #(swap! display-params assoc-in [:multi-save :step] %)
+              :conform (fn [s]
+                         (let [n (-> s js/Number. .valueOf)
+                               valid? (and (int? n) (pos? n))]
+                           {:valid? valid?
+                            :message (when-not valid?
+                                       "Must be a positive integer")
+                            :value (long n)}))
+              :fmt str
+              :placeholder "60"))))])))))
 
 (defn debug-info
   []
@@ -2479,12 +2672,7 @@
         (formula-of
          [indexes]
          (for [index indexes]
-           (let [path (lens
-                       (formula-of
-                        [display-params]
-                        (get-in display-params [:flight-paths index]))
-                       (fn [v]
-                         (swap! display-params assoc-in [:flight-paths index] v)))
+           (let [path (path-lens display-params [:flight-paths index])
                  label (formula-of
                         [path]
                         (-> path :label :value))
