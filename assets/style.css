@@ -107,7 +107,7 @@ svg {
 }
 
 .right-column {
-    display: flex;
+    display: block;
     align-content: flex-start;
     flex-wrap: wrap;
     flex-grow: 1;
