@@ -25,6 +25,7 @@
                  ;; Had to download as the cljsjs one is pretty far out of date
                  ;;[cljsjs/jszip "2.5.0-0"]
                  [cljsjs/pako "0.2.7-0"]
+                 [cljsjs/tinycolor "1.3.0-0"]
 
                  [clojure-complete "0.2.4" :scope "test"]]
  :source-paths #{"src"}

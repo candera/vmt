@@ -2,6 +2,7 @@
   (:require [cljsjs.jquery.minicolors]
             [cljsjs.jszip]
             [cljsjs.filesaverjs]
+            [cljsjs.tinycolor]
             [clojure.string :as str]
             [javelin.core
              :as j
@@ -472,7 +473,8 @@
                        :show-labels? true
                        :uniquifier (rand-int 1000000)
                        :color "#FFFFFF"
-                       :path flight-path})))))))
+                       :path flight-path
+                       :scale 0.5})))))))
 
 (def zipbuilder-worker
   (let [worker (js/Worker. "worker.js")
@@ -716,7 +718,7 @@
    (fn [v]
      (swap! c assoc-in p v))))
 
-;;; Styles
+;;; Global Styles
 (def colors
   {:invalid       "#c70505"
    :error-message "#c70505"
@@ -744,6 +746,23 @@
    :display        "inline-block"
    :margin-right   "3px"
    :vertical-align "middle"})
+
+(defn contrasting
+  "Returns a color that contrasts well with the specified color."
+  [color]
+  #_(if (-> color js/tinycolor .isLight)
+    "black"
+    "white")
+  ;; http://stackoverflow.com/questions/3942878/how-to-decide-font-color-in-white-or-black-depending-on-background-color
+  ;; if (red*0.299 + green*0.587 + blue*0.114) > 186 use #000000 else use #ffffff
+  (let [rgb (-> color js/tinycolor .toRgb)
+        r (.-r rgb)
+        g (.-g rgb)
+        b (.-b rgb)]
+    (if (< 128 (+ (* r 0.299) (* g 0.587) (* b 0.114)))
+      "black"
+      "white"))
+)
 
 ;;; Controls
 
@@ -1421,59 +1440,120 @@
 
 (defn flight-paths-overlay
   [size display-params]
-  (svg/g
-   :id "flight-paths-overlay"
-   (formula-of
-    [display-params]
-    (for [{:keys [show? show-labels? color path]} (:flight-paths display-params)
-          :when show?
-          :let [opacity 0.9]]
-      [(svg/g
-        (for [{:keys [::dtc/coordinates ::dtc/ordinal ::dtc/alternate? ::dtc/action]} path
-              :let [{:keys [::dtc/x ::dtc/y]} coordinates
-                    [gx gy] (coords/falcon->grid size x y)
-                    marker-size 0.5
-                    style {:stroke         color
-                           :stroke-width   "0.15"
-                           :pointer-events "none"
-                           :fill           "none"
-                           :opacity        opacity}]]
-          [(svg/g
-            :attr {:transform (gstring/format "translate(%f,%f)" gx gy)}
-            (if (#{:cap :strike :bomb :sead :elint} action)
-              (triangle
-               style
-               :r (/ marker-size 2))
-              (svg/circle
-               style
-               :cx 0
-               :cy 0
-               :r (/ marker-size 2))))
-           (if-not show-labels?
-             []
-             (svg/text
-              :stroke color
-              :stroke-width "0.01"
-              :fill color
-              :font-size "4%"
-              :text-anchor "middle"
-              :opacity opacity
-              :x gx
-              :y (- gy marker-size)
-              ;; TODO: Understand and display tanker steerpoint, plus
-              ;; triangles for targets and patrol points.
-              ;; Also need to alter flight path detection algorithm:
-              ;; type goes to -1 when it switches to target point.
-              (if alternate?
-                "Alternate Field"
-                (inc ordinal))))]))
-       (svg/path
-        :stroke color
-        :stroke-width "0.1"
-        :fill "none"
-        :pointer-events "none"
-        :opacity opacity
-        :d (flight-path->path size path))]))))
+  (let [ ;; cells
+        flightpaths (formula-of
+                     [display-params]
+                     (->> display-params
+                          :flight-paths))
+        indexes (-> flightpaths count range cell=)
+        ;; Styling
+        opacity             0.8
+        label-stroke-width  0.01
+        narrow-stroke-width 0.15
+        wide-stroke-width   0.2
+        font-size           4           ; Percent
+        font-weight         400
+        marker-size         0.4
+        background-opacity  0.4
+        strokes (fn [color]
+                  [[wide-stroke-width (contrasting color)]
+                   [narrow-stroke-width color]])
+        magnify (fn [scale]
+                        (->> scale (* 1.5) (+ 1)))]
+    (svg/g
+     :id "flight-paths-overlays"
+     (formula-of
+      [indexes]
+      (for [index indexes
+            :let [flightpath (formula-of [flightpaths] (nth flightpaths index))
+                  show? (-> flightpath :show? cell=)
+                  path (-> flightpath :path cell=)
+                  magnification (-> flightpath :scale magnify cell=)
+                  color (-> flightpath :color cell=)
+                  anticolor (-> color contrasting cell=)
+                  strokes (-> color strokes cell=)]]
+        (svg/g
+         :attr {:class "flight-path-overlay"}
+         :toggle show?
+         ;; The flight path itself
+         (formula-of
+          [strokes magnification]
+          (for [[stroke-width stroke-color] strokes]
+            (svg/path
+             :stroke stroke-color
+             :stroke-width (* stroke-width magnification)
+             :fill "none"
+             :pointer-events "none"
+             :opacity opacity
+             :d (formula-of [path] (flight-path->path size path)))))
+         (formula-of
+          [path]
+          (for [{:keys [::dtc/coordinates ::dtc/ordinal ::dtc/alternate? ::dtc/action]} path
+                :let [{:keys [::dtc/x ::dtc/y]} coordinates
+                      [gx gy] (coords/falcon->grid size x y)
+                      style {:pointer-events "none"
+                             :fill           "none"
+                             :opacity        opacity}]]
+            (svg/g
+             :attr {:transform (gstring/format "translate(%f,%f)" gx gy)}
+             ;; Steerpoint markers
+             [(formula-of
+               [strokes magnification]
+               (for [[stroke-width stroke-color] strokes
+                     :let [style (assoc style
+                                        :opacity opacity
+                                        :stroke stroke-color
+                                        :stroke-width (* 0.6 stroke-width magnification))]]
+                 (if (#{:cap :strike :bomb :sead :elint} action)
+                   (triangle
+                    style
+                    :r (/ (* marker-size magnification) 2))
+                   (svg/circle
+                    style
+                    :cx 0
+                    :cy 0
+                    :r (/ (* marker-size magnification) 2)))))
+              ;; Steerpoint labels
+              (formula-of
+               {show-labels? (-> flightpath :show-labels? cell=)
+                magnification magnification}
+               (if-not show-labels?
+                 []
+                 (let [tw (cell 0)
+                       th (cell 0)
+                       tx (cell 0)
+                       ty (cell 0)
+                       t (svg/text
+                          :stroke color
+                          :stroke-width (* label-stroke-width magnification)
+                          :fill color
+                          :font-size (str (* font-size magnification) "%")
+                          :text-anchor "middle"
+                          :opacity opacity
+                          :x 0
+                          :y (- (* marker-size magnification))
+                          ;; TODO: Understand and display tanker steerpoint, plus
+                          ;; triangles for targets and patrol points.
+                          ;; Also need to alter flight path detection algorithm:
+                          ;; type goes to -1 when it switches to target point.
+                          (if alternate?
+                            "Alternate Field"
+                            (inc ordinal)))
+                       r (svg/rect
+                          :x tx
+                          :y ty
+                          :width tw
+                          :height th
+                          :fill anticolor
+                          :opacity background-opacity)]
+                   (when-dom t
+                     #(dosync
+                       (let [bb (.getBBox t)]
+                         (reset! tx (.-x bb))
+                         (reset! ty (.-y bb))
+                         (reset! tw (.-width bb))
+                         (reset! th (.-height bb)))))
+                   [r t])))])))))))))
 
 (defn within-area?
   "Return true if the specified coordinates fall within the wind
@@ -2683,6 +2763,9 @@
                      "Labels?"))
                (td (with-help [:flightpath :color]
                      "Color"))
+               (td :css {:text-align "center"}
+                   (with-help [:flightpath :scale]
+                     "Size"))
                (td (with-help [:flightpath :remove]
                      "Remove"))))))
        (tbody
@@ -2769,6 +2852,15 @@
                 (color-picker
                  :value (cell= (:color path))
                  :change #(swap! path assoc :color @%))))
+              (td
+               :css {:text-align "center"}
+               (input
+                :css {:width "50px"}
+                :type "range"
+                :min 0
+                :max 100
+                :value (-> path :scale (* 100) long cell=)
+                :change #(swap! path assoc :scale (/ @% 100.0))))
               (td
                :css {:text-align "center"}
                (image-button
