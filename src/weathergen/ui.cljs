@@ -83,6 +83,15 @@
 
 ;;; State
 
+(defc window-size [(-> js/window js/jQuery .width)
+                   (-> js/window js/jQuery .height)])
+
+(-> js/window
+    js/jQuery
+    (.resize #(reset! window-size
+                      [(-> js/window js/jQuery .width)
+                       (-> js/window js/jQuery .height)])))
+
 (def default-weather-params
   {:temp-uniformity 0.7
    :pressure        {:min 29 :max 31}
@@ -138,9 +147,8 @@
                        :direction {:heading 135 :speed 20}
                        :looping? false})
 
-(def initial-size (let [window-width (.width (js/$ js/window))
-                        window-height (.height (js/$ js/window))]
-                    (max 250 (min (- window-width 600)
+(def initial-size (let [[window-width window-height] @window-size]
+                    (max 250 (min window-width
                                   (- window-height 140)))))
 
 (defc display-params {:dimensions [initial-size initial-size]
@@ -1952,11 +1960,14 @@
                   (reset! down true))
      attrs)))
 
-
 (defn button-bar
   []
   (div :class "button-bar"
-       :css {"position" "relative"}
+       :css (formula-of
+             [display-params]
+             {:position "relative"
+              :width (-> display-params :dimensions first (str "px"))
+              :margin "0 0 3px 0"})
        (button :id "enlarge-grid"
                :click #(swap! display-params
                               update
@@ -1964,7 +1975,10 @@
                               (fn [[x y]]
                                 [(+ x 50) (+ y 50)]))
                :title "Enlarge grid"
-               (img :src "images/bigger.png"))
+               (img
+                :css {:width "24px"
+                      :height "24px"}
+                :src "images/bigger.png"))
        (button :id "shrink-grid"
                :click #(swap! display-params
                               update
@@ -1972,11 +1986,14 @@
                               (fn [[x y]]
                                 [(- x 50) (- y 50)]))
                :title "Shrink grid"
-               (img :src "images/smaller.png"))
+               (img
+                :css {:width "24px"
+                      :height "24px"}
+                :src "images/smaller.png"))
        (span
-        :css {"position" "absolute"
-              "right" "27px"
-              "bottom" "0"}
+        :css {:position "absolute"
+              :right "27px"
+              :bottom "0"}
         "Day/Time: " (formula-of
                       [weather-data-params]
                       (let [t (-> weather-data-params :time :current)]
@@ -1988,12 +2005,12 @@
         (if-not computing
           []
           (img :src "images/spinner.gif"
-               :width "24"
-               :height "24"
-               :css {"vertical-align" "bottom"
-                     "position" "absolute"
-                     "right" "3px"
-                     "bottom" "0"})))))
+               :width "24px"
+               :height "24px"
+               :css {:vertical-align "bottom"
+                     :position "absolute"
+                     :right "3px"
+                     :bottom "0"})))))
 
 (defn control-layout
   "Lays out controls for a control section"
@@ -2546,7 +2563,7 @@
                      :else "Generate FMAPs"))))
          (inline
           {:margin-right "5px"}
-          (with-help [:display-params :multi-save :from]
+          (with-help [:display-controls :multi-save :from]
             "from"))
          (formula-of
           [progress]
@@ -2560,7 +2577,7 @@
              (time-entry display-params [:multi-save :from]))))
          (inline
           {:margin-right "5px"}
-          (with-help [:display-params :multi-save :to]
+          (with-help [:display-controls :multi-save :to]
             "to"))
          (formula-of
           [progress]
@@ -2574,7 +2591,7 @@
              (time-entry display-params [:multi-save :to]))))
          (inline
           {:margin-right "5px"}
-          (with-help [:display-params :multi-save :step]
+          (with-help [:display-controls :multi-save :step]
             :css {:display "inline-block"}
             "step by"))         (formula-of
           [progress]
@@ -2820,24 +2837,62 @@
   (html
    (head)
    (body
-    (div :class "two-column"
-         (div :class "left-column"
-              (button-bar)
-              (grid :display-params display-params
-                    :weather-data weather-data
-                    :selected-cell selected-cell
-                    :wind-stability-areas wind-stability-areas
-                    :weather-overrides weather-overrides
-                    :computing computing
-                    :pressure-unit pressure-unit
-                    ;; TODO: Make these reactive, although they never
-                    ;; change, so maybe not
-                    :nx (first (:cell-count @weather-params))
-                    :ny (second (:cell-count @weather-params))))
-         (div :class "right-column"
-              (for [[section opts] (partition 2 section-infos)
-                    :let [ctor (sections section)]]
-                (ctor opts))))
+    (let [right-width 575               ; Min width of controls column
+          portrait? (formula-of
+                     [display-params window-size]
+                     (let [[grid-width grid-height] (:dimensions display-params)
+                           [window-width window-height] window-size]
+                       (< window-width (+ grid-width right-width -10))))]
+      (div
+       :css (formula-of
+             {portrait? portrait?
+              [window-width window-height] window-size}
+             {:display "flex"
+              :flex-direction (if portrait? "column" "row")
+              ;; These next plus the overflow/height in the columns are
+              ;; what let the two sides scroll separately
+              :overflow (if portrait? "show" "hidden")
+              :height (if portrait?
+                        "100%"
+                        (str (- window-height 72) "px"))})
+       (div
+        :class "left-column"
+        :css (formula-of
+              [portrait?]
+              (if portrait?
+                {}
+                {:overflow "auto"
+                 :height "auto"}))
+        (button-bar)
+        (grid :display-params display-params
+              :weather-data weather-data
+              :selected-cell selected-cell
+              :wind-stability-areas wind-stability-areas
+              :weather-overrides weather-overrides
+              :computing computing
+              :pressure-unit pressure-unit
+              ;; TODO: Make these reactive, although they never
+              ;; change, so maybe not
+              :nx (first (:cell-count @weather-params))
+              :ny (second (:cell-count @weather-params))))
+       (div
+        :class "right-column"
+        :css (formula-of
+              [portrait?]
+              (merge {:display "block"
+                      :align-content "flex-start"
+                      :flex-wrap "wrap"
+                      :flex-grow 1
+                      :min-width (str (- right-width 20) "px")
+                      ;;  This one weird trick keeps the column from expanding
+                      ;;  past where it should. Yay CSS.
+                      :width 0}
+                     (when-not portrait?
+                       {:overflow "auto"
+                        :height "auto"})))
+        (for [[section opts] (partition 2 section-infos)
+              :let [ctor (sections section)]]
+          (ctor opts)))))
     (debug-info))))
 
 #_(with-init!

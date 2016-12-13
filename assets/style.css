@@ -98,25 +98,6 @@ svg {
     display: inline-block;
 }
 
-.two-column {
-    display: flex;
-    flex-wrap: wrap;
-}
-
-.left-column {
-}
-
-.right-column {
-    display: block;
-    align-content: flex-start;
-    flex-wrap: wrap;
-    flex-grow: 1;
-    min-width: 500px;
-    /* This one weird trick keeps the column from expanding past where it
-   should. Yay CSS. */
-    width: 0;
-}
-
 rect.sunny {
     fill: rgba(0,128,255,0);
 }
@@ -139,10 +120,6 @@ rect.inclement {
 
 /* Button bar ********************/
 
-.button-bar {
-    margin: 0 0 3px 0;
-}
-
 .button-bar button {
     margin-right: 3px;
 }
@@ -152,16 +129,6 @@ rect.inclement {
     padding: 2px 0 0 2px;
 }
 
-
-#enlarge-grid img {
-    width: 24px;
-    height: 24px;
-}
-
-#shrink-grid img {
-    width: 24px;
-    height: 24px;
-}
 
 #computing-indicator {
     width: 24px;

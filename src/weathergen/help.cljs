@@ -53,7 +53,18 @@
 
     :opacity
     [(p "Controls how opaque or transparent the display layer will be.
-    Slide the slider to the left to more easily see the map.")]}
+    Slide the slider to the left to more easily see the map.")]
+
+    :multi-save
+    {:from
+     (p "Generate a zip file containing multiple FMAP files starting from this time.")
+
+     :to
+     (p "Generate a zip file containing multiple FMAP files up to and
+     including this time.")
+
+     :step
+     (p "Generate a zip file containing multiple FMAP files, each this many minutes apart.")}}
 
    :weather-params
    {:seed
