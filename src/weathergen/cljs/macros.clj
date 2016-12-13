@@ -21,9 +21,9 @@
   (formula-of [x y z] (+ x y z))
 
   (formula-of
-    {foo x
-     {:keys [a b]} y}
-    (+ x a b))"
+    {x-val x-cell
+     {:keys [a b]} y-cell}
+    (+ x-val a b))"
   [cells & body]
   (if (map? cells)
     `((javelin.core/formula
