@@ -27,12 +27,11 @@
             [goog.string :as gstring]
             [goog.string.format]
             [goog.style :as gstyle]
-            [longshi.core :as fress]
             [weathergen.canvas :as canvas]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
             [weathergen.dtc :as dtc]
-            [weathergen.encoding :refer [encode decode]]
+            [weathergen.encoding :refer [encode decode] :as encoding]
             [weathergen.fmap :as fmap]
             [weathergen.help :as help]
             [weathergen.math :as math]
@@ -459,7 +458,9 @@
   (load-text-file
    (fn [contents name]
      (log/debug "load-dtc" :name name)
-     (let [flight-path (-> contents dtc/parse dtc/flight-path)]
+     (let [dtc  (dtc/parse contents)
+           flight-path (dtc/flight-path dtc)
+           lines (dtc/lines dtc)]
        (swap! display-params
               update
               :flight-paths
@@ -471,9 +472,11 @@
                                         name)}
                        :show? true
                        :show-labels? true
+                       :show-lines? true
                        :uniquifier (rand-int 1000000)
                        :color "#FFFFFF"
                        :path flight-path
+                       :lines lines
                        :scale 0.5})))))))
 
 (def zipbuilder-worker
@@ -814,19 +817,19 @@
        airbases
        selected-cell]
       (let [[x y] (:coordinates selected-cell)]
-       (select
-        :id "locations"
-        :change #(change-location @%)
-        (option :selected (not= :named location-type)
-                :value ""
-                (case location-type
-                  :coordinates (str "Cell " x "," y)
-                  :named ""
-                  :none "None selected"))
-        (for [ab airbases]
-          (option :value ab
-                  :selected (= ab (:location selected-cell))
-                  ab)))))
+        (select
+         :id "locations"
+         :change #(change-location @%)
+         (option :selected (not= :named location-type)
+                 :value ""
+                 (case location-type
+                   :coordinates (str "Cell " x "," y)
+                   :named ""
+                   :none "None selected"))
+         (for [ab airbases]
+           (option :value ab
+                   :selected (= ab (:location selected-cell))
+                   ab)))))
      (if-not forecast-link?
        []
        (a :href (formula-of
@@ -834,18 +837,12 @@
                   display-params
                   movement-params
                   time-params]
-                 (let [deflate #(.deflate js/pako %)
-                       write-buf (-> {:weather-params weather-params
-                                      :display-params display-params
-                                      :movement-params movement-params}
-                                     ;; encode
-                                     (fress/write {:handlers fress/clojure-write-handlers}))]
-                   (str "forecast.html?data="
-                        (-> write-buf
-                            longshi.fressian.byte-stream-protocols/get-bytes
-                            (.subarray 0 (longshi.fressian.byte-stream-protocols/bytes-written write-buf))
-                            deflate
-                            (base64/encodeByteArray true)))))
+                 (str "forecast.html?data="
+                      (with-time "encoding shareable forecast"
+                        (encoding/data->base64
+                         (log/spy {:weather-params weather-params
+                                   :display-params display-params
+                                   :movement-params movement-params})))))
           :target "_blank"
           "Shareable Forecast"))
      (formula-of
@@ -1423,6 +1420,20 @@
                       (gstring/format "%f,%f" gx gy)))))
       s)))
 
+(defn line->path
+  [size line]
+  (loop [[point & more] line
+         s nil]
+    (if-let [{:keys [::dtc/coordinates]} point]
+      (let [{:keys [::dtc/x ::dtc/y]} coordinates
+            [gx gy] (coords/falcon->grid size x y)]
+        (recur more
+               (str s
+                    (when s " ")
+                    (if s "L" "M")
+                    (gstring/format "%f,%f" gx gy))))
+      s)))
+
 (defelem triangle
   [attrs _]
   (let [{:keys [r]} attrs
@@ -1449,8 +1460,10 @@
         ;; Styling
         opacity             0.8
         label-stroke-width  0.01
-        narrow-stroke-width 0.15
-        wide-stroke-width   0.2
+        narrow-stroke-width 0.1
+        lines-stroke-dasharray-on 0.1
+        lines-stroke-dasharray-off 0.1
+        wide-stroke-width   0.15
         font-size           4           ; Percent
         font-weight         400
         marker-size         0.4
@@ -1459,7 +1472,7 @@
                   [[wide-stroke-width (contrasting color)]
                    [narrow-stroke-width color]])
         magnify (fn [scale]
-                        (->> scale (* 1.5) (+ 1)))]
+                  (->> scale (* 1.5) (+ 1)))]
     (svg/g
      :id "flight-paths-overlays"
      (formula-of
@@ -1467,7 +1480,10 @@
       (for [index indexes
             :let [flightpath (formula-of [flightpaths] (nth flightpaths index))
                   show? (-> flightpath :show? cell=)
+                  show-lines? (-> flightpath :show-lines? cell=)
                   path (-> flightpath :path cell=)
+                  lines (-> flightpath :lines cell=)
+                  _ (log/spy @lines)
                   magnification (-> flightpath :scale magnify cell=)
                   color (-> flightpath :color cell=)
                   anticolor (-> color contrasting cell=)
@@ -1475,7 +1491,36 @@
         (svg/g
          :attr {:class "flight-path-overlay"}
          :toggle show?
-         ;; The flight path itself
+         ;; The lines
+         (formula-of
+          [strokes magnification lines]
+          (for [line lines]
+            (svg/g
+             :attr {:class "steerpoint-line"}
+             :toggle show-lines?
+             (for [[stroke-width stroke-color] strokes]
+               (svg/path
+                :stroke stroke-color
+                :stroke-width (* stroke-width magnification 0.75)
+                :stroke-dasharray (str lines-stroke-dasharray-on lines-stroke-dasharray-off)
+                :fill "none"
+                :pointer-events "none"
+                :opacity opacity
+                :d (line->path size line)))
+             (svg/g
+              :attr {:class "steerpoint-line-markers"}
+              (for [{:keys [::dtc/coordinates]} line
+                    :let [{:keys [::dtc/x ::dtc/y]} coordinates
+                          [gx gy] (coords/falcon->grid size x y)]]
+                (svg/circle
+                 {:pointer-events "none"
+                  :fill           "none"
+                  :opacity        opacity}
+                 :attr {:transform (gstring/format "translate(%f,%f)" gx gy)}
+                 :cx 0
+                 :cy 0
+                 :r (/ (* marker-size magnification) 2)))))))
+         ;; The flight path route itself
          (formula-of
           [strokes magnification]
           (for [[stroke-width stroke-color] strokes]
@@ -1553,7 +1598,12 @@
                          (reset! ty (.-y bb))
                          (reset! tw (.-width bb))
                          (reset! th (.-height bb)))))
-                   [r t])))])))))))))
+                   [r t])))])))
+         (svg/g
+          :class "steerpoint-lines"
+          (formula-of
+           [lines]
+           ))))))))
 
 (defn within-area?
   "Return true if the specified coordinates fall within the wind
@@ -2758,6 +2808,9 @@
                (td (with-help [:flightpath :show?]
                      :css {:margin-right "2px"}
                      "Show?"))
+               (td (with-help [:flightpath :show-lines?]
+                     :css {:margin-right "2px"}
+                     "Lines?"))
                (td (with-help [:flightpath :labels?]
                      :css {:margin-right "2px"}
                      "Labels?"))
@@ -2837,6 +2890,13 @@
                 :type "checkbox"
                 :value (cell= (:show? path))
                 :change #(swap! path update :show? not)))
+              (td
+               :css {:text-align "center"}
+               (input
+                :css {:margin-bottom "6px"}
+                :type "checkbox"
+                :value (cell= (:show-lines? path))
+                :change #(swap! path update :show-lines? not)))
               (td
                :css {:text-align "center"}
                (input

@@ -1,11 +1,11 @@
 (def project 'weathergen)
 
 (set-env!
- :dependencies '[[org.clojure/clojurescript "1.9.293"]
+ :dependencies '[[org.clojure/clojure       "1.9.0-alpha14"]
+                 [org.clojure/clojurescript "1.9.293"]
                  [adzerk/boot-cljs          "1.7.228-2"]
                  [adzerk/boot-reload        "0.4.13"]
                  [hoplon/hoplon             "6.0.0-alpha17"]
-                 [org.clojure/clojure       "1.9.0-alpha14"]
                  [org.clojure/core.async    "0.2.395"
                   :exclusions [org.clojure/tools.reader]]
                  [tailrecursion/boot-jetty  "0.1.3"]
@@ -19,8 +19,6 @@
                  ;;[funcool/cuerdas "2.0.0"]
                  ;;[com.cemerick/url "0.1.1"]
 
-                 ;; [net.unit8/fressian-cljs "0.1.0"]
-                 [longshi "0.1.4"]
                  [cljsjs/filesaverjs "1.3.3-0"]
                  ;; Had to download as the cljsjs one is pretty far out of date
                  ;;[cljsjs/jszip "2.5.0-0"]

@@ -274,16 +274,23 @@ forward and backward in time. ")
      shown on the map.")
     :name
     (p "An arbitrary label for this flight path, usually the flight
-    callsign. Click the pencil icon to edit it. Not shown on the map.")
+    callsign. Click the pencil icon to edit it. The name is not shown
+    on the map.")
     :show?
     (p "If checked, flight path will be shown. If unchecked,
     flight path will be hidden.")
+    :show-lines?
+    (p "If checked, steerpoint lines from the DTC (if any) will be
+    shown. If unchecked, steerpoint lines will be hidden.")
     :labels?
     (p "If checked, waypoints will be labeled with a number or
     other informative text. If unchecked, no labels will be shown.")
     :color
     (p "Change the color in which the flight path and labels will be
     drawn on the map.")
+    :scale
+    (p "Drag the slider left and right to decrease or increase the
+    size of the text and flight path lines.")
     :remove
     (p "Click to permanently remove this flight path from the
     list.")}} )

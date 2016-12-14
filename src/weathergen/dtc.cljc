@@ -11,7 +11,7 @@
 (defn number
   [^String s]
   #?(:clj (Double. s)
-     :cljs (js/Number. s)))
+     :cljs (-> s js/Number. .valueOf)))
 
 (defn integer
   [^String s]
@@ -89,14 +89,17 @@
 )
 (s/def ::targets (s/* target))
 
+(def line (s/keys :req [::coordinates ::ordinal])
+  ;; A lineSTPT line from the DTC
+  )
+(s/def ::lines (s/* line))
+
 (def ppt (s/keys :req [::coordinates ::ordinal ::radius]
                  :opt [::threat])
   ;; A PPT line from the DTC
 )
 (s/def ::ppts (s/* ppt))
 
-;; TODO: Implement lines - not sure how I want to model this yet.
-(s/def ::lines some?)
 
 (def weapon-target (s/keys :req [::coordinates ::ordinal]
                            :opt [::comment])
@@ -107,7 +110,7 @@
 (s/def ::steerpoints
   (s/keys :req [::targets
                 ;; ::ppts
-                ;; ::lines
+                ::lines
                 ;; ::weapon-targets
                 ]))
 
@@ -119,12 +122,13 @@
         :args (s/cat :line string?)
         :ret (s/keys :req [::category]))
 
-;; Only parsing targets for now. Other categories later
+;; Only parsing targets and lines for now. Other categories later
 (defn parse-stpt-line
   [line]
   (let [[id v] (str/split line #"=")
         [category num-str] (str/split id #"_")]
-    (when (= category "target")
+    (case category
+      "target"
       (let [[x-str y-str z-str action-str comment] (map str/trim (str/split v #","))
             action (some-> action-str number long)]
         {::category ::targets
@@ -133,7 +137,17 @@
                         ::z (number z-str)}
          ::ordinal (integer num-str)
          ::action (stpt-action action action)
-         ::comment comment}))))
+         ::comment comment})
+
+      "lineSTPT"
+      (let [[x-str y-str z-str] (map str/trim (str/split v #","))]
+        {::category ::lines
+         ::coordinates {::x (number x-str)
+                       ::y (number y-str)
+                       ::z (number z-str)}
+         ::ordinal (integer num-str)})
+
+      nil)))
 
 (s/fdef parse
         :args (s/cat :contents string?)
@@ -146,7 +160,8 @@
   ;; TODO: Add more
   [contents]
   {::steerpoints
-   (->> (str/split contents #"\n")
+   (->> contents
+        str/split-lines
         (map str/trim)
         (remove empty?)
         (drop-while #(not= % "[STPT]"))
@@ -176,3 +191,22 @@
                               (assoc point ::alternate? true)
                               point))
                  (or landed? is-land?)))))))
+
+(s/fdef lines
+        :args (s/cat :dtc dtc)
+        :ret (s/coll-of (s/coll-of line :min-count 1 :max-count 5)
+                        :min-count 0 :max-count 4))
+
+(defn lines
+  "Returns a description of the steerpoint lines (e.g. tanker area) in
+  the DTC."
+  [dtc]
+  (->> dtc
+       ::steerpoints
+       ::lines
+       (remove (fn [{:keys [::coordinates]}]
+                 (let [{:keys [::x ::y ::z]} coordinates]
+                   (and (zero? x) (zero? y) (zero? z)))))
+       (group-by #(-> % ::ordinal (/ 5) long inc))
+       (sort-by first)
+       (map second)))

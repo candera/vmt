@@ -891,3 +891,14 @@
       (when (pos? n)
         (println (async/<! ch))
         (recur (dec n))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(-> "/tmp/fnpu-with-lines.ini"
+    slurp
+    dtc/parse
+    dtc/lines
+    ;; ::dtc/steerpoints
+    ;;::dtc/lines
+    pprint
+    )

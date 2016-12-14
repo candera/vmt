@@ -2,7 +2,6 @@
   (:require [clojure.string :as str]
             [cljsjs.pako]
             [goog.crypt.base64 :as base64]
-            [longshi.core :as fress]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
             [weathergen.math :as math]
@@ -17,5 +16,6 @@
 (reset! ui/weather-params
         ui/default-weather-params)
 
-(ui/weather-page
- :test-section {})
+#_(ui/weather-page
+   :test-section {})
+

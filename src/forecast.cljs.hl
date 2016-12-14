@@ -2,13 +2,13 @@
   (:require [clojure.string :as str]
             [cljsjs.pako]
             [goog.crypt.base64 :as base64]
-            [longshi.core :as fress]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
+            [weathergen.encoding :as encoding]
             [weathergen.math :as math]
             [weathergen.model :as model]
             [weathergen.ui :as ui])
@@ -16,17 +16,16 @@
    [cljs.core.async.macros :refer [go go-loop]]
    [weathergen.cljs.macros :refer [with-time formula-of]]))
 
-(let [inflate #(.inflate js/pako %)
-      {:keys [weather-params
+(let [{:keys [weather-params
               display-params
-              movement-params]}
+              movement-params]
+       :as data}
       (-> js/window
           .-location
           .-search
           (subs (count "?data="))
-          base64/decodeStringToUint8Array
-          inflate
-          fress/read)]
+          encoding/base64->data)]
+  #_(log/debug "decoded" data)
   (dosync
    (reset! ui/weather-params weather-params)
    (reset! ui/display-params

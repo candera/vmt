@@ -1,9 +1,10 @@
 (ns user
-  (:require [figwheel-sidecar.repl-api :as fw :refer [start-figwheel! cljs-repl]]
+  (:require [clojure.spec :as s]
+            [weathergen.dtc :as dtc]
             [weathergen.math :as math]
             [weathergen.model :as model]))
 
-(defn cljs
+#_(defn cljs
   []
   (start-figwheel!)
   (cljs-repl))
