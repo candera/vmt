@@ -753,19 +753,16 @@
 (defn contrasting
   "Returns a color that contrasts well with the specified color."
   [color]
-  #_(if (-> color js/tinycolor .isLight)
-    "black"
-    "white")
   ;; http://stackoverflow.com/questions/3942878/how-to-decide-font-color-in-white-or-black-depending-on-background-color
-  ;; if (red*0.299 + green*0.587 + blue*0.114) > 186 use #000000 else use #ffffff
   (let [rgb (-> color js/tinycolor .toRgb)
-        r (.-r rgb)
-        g (.-g rgb)
-        b (.-b rgb)]
+        ;; Advanced compilation is somehow screwing up direct field
+        ;; access, so we have to go in by name.
+        r (aget rgb "r")
+        g (aget rgb "g")
+        b (aget rgb "b")]
     (if (< 128 (+ (* r 0.299) (* g 0.587) (* b 0.114)))
       "black"
-      "white"))
-)
+      "white")))
 
 ;;; Controls
 
@@ -840,9 +837,9 @@
                  (str "forecast.html?data="
                       (with-time "encoding shareable forecast"
                         (encoding/data->base64
-                         (log/spy {:weather-params weather-params
-                                   :display-params display-params
-                                   :movement-params movement-params})))))
+                         {:weather-params weather-params
+                          :display-params display-params
+                          :movement-params movement-params}))))
           :target "_blank"
           "Shareable Forecast"))
      (formula-of
@@ -1483,7 +1480,6 @@
                   show-lines? (-> flightpath :show-lines? cell=)
                   path (-> flightpath :path cell=)
                   lines (-> flightpath :lines cell=)
-                  _ (log/spy @lines)
                   magnification (-> flightpath :scale magnify cell=)
                   color (-> flightpath :color cell=)
                   anticolor (-> color contrasting cell=)
@@ -1594,10 +1590,11 @@
                    (when-dom t
                      #(dosync
                        (let [bb (.getBBox t)]
-                         (reset! tx (.-x bb))
-                         (reset! ty (.-y bb))
-                         (reset! tw (.-width bb))
-                         (reset! th (.-height bb)))))
+                         (when (.-x bb)
+                           (reset! tx (.-x bb))
+                           (reset! ty (.-y bb))
+                           (reset! tw (.-width bb))
+                           (reset! th (.-height bb))))))
                    [r t])))])))
          (svg/g
           :class "steerpoint-lines"
@@ -1866,17 +1863,11 @@
         show? (cell false)
         selected (formula-of
                   [items value]
-                  (log/debug "selected changing" :value value :items items)
                   (->> items
                        (filter #(= value (:value %)))
                        first))
         _ (formula-of
-           [selected]
-           (log/debug "selected changed" :selected selected))]
-    (log/debug "dropdown"
-               :dropdown-value @value
-               :selected @selected
-               :items @items)
+           [selected])]
     (div
      :css {:border "solid 1px black"
            :background "white"
@@ -2081,9 +2072,7 @@
            (merge (image-button-style down)
                   css))
      :mousedown (fn [e]
-                  (log/debug "down")
                   (let [up (fn up-fn [e]
-                             (log/debug "up")
                              (.removeEventListener js/document "mouseup" up-fn)
                              (reset! down false))]
                     (.addEventListener js/document "mouseup" up))
@@ -2306,8 +2295,7 @@
           :height "16px"
           :css (formula-of
                 [area]
-                (log/debug "area" area)
-                (log/spy (image-button-style (:editing? area)))))
+                (image-button-style (:editing? area))))
          (hr)))))
    (button
     :click #(swap! weather-params
@@ -2781,7 +2769,6 @@
       (color-picker
        :value current-color
        :change (fn [val opacity]
-                 (log/debug "color changed" :val @val :opacity opacity)
                  (swap! path assoc :color @val)))])))
 
 (defn flightpath-controls
@@ -2863,10 +2850,8 @@
                         "images/checkmark.png"
                         "images/edit.svg"))
                 :click (fn [_]
-                         (log/debug "click")
                          (let [path* (swap! path update-in [:label :editing?] not)]
                            (when (get-in path* [:label :editing?])
-                             (log/debug "editing")
                              (focus-later editor))))))
               (td
                (formula-of

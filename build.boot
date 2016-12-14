@@ -61,7 +61,8 @@
   []
   (comp
     (hoplon)
-    (cljs :optimizations :advanced)
+    (cljs :optimizations :advanced
+          :compiler-options {:externs ["externs.js"]})
     (target :dir #{"target"})))
 
 (defn run-repl-server
