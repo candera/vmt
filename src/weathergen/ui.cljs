@@ -373,14 +373,7 @@
 
 (defn save-data
   [blob filename]
-  (let [a (gdom/createElement "a")
-        _ (-> (gdom/getDocument) .-body (gdom/appendChild a))
-        _ (gstyle/showElement a false)
-        url (-> js/window .-URL (.createObjectURL blob))]
-    (-> a .-href (set! url))
-    (-> a .-download (set! filename))
-    (.click a)
-    (-> js/window .-URL (.revokeObjectURL url))))
+  (js/saveAs blob filename))
 
 (defn fmap-filename
   "Returns the filename for an FMAP at time `t`."
@@ -516,7 +509,7 @@
         (-> zip
             (.generateAsync #js {:type "blob"})
             (.then (fn [blob]
-                     (js/saveAs blob "weather.zip")
+                     (save-data blob "weather.zip")
                      (reset! progress nil))))
         (do
           (async/>! (:command-ch zipbuilder-worker)
