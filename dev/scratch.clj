@@ -902,3 +902,30 @@
     ;;::dtc/lines
     pprint
     )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(require '[clojure.java.io :as io])
+
+(defn at-offsets
+  [path offsets]
+  (with-open [is (io/input-stream path)]
+   (loop [current 0
+          [offset & more] (sort offsets)
+          info (sorted-map)]
+     (if offset
+       info
+       (do
+         (fmap/get-bytes is (- offset current))
+         (recur (+ offset current 4)
+                more
+                (assoc info offset (fmap/read-float is))))))))
+
+(at-offsets "/Users/candera/GDrive/weather-4.twx" [0x298])
+
+(doseq [n (range 1 10)]
+  (with-open [is (io/input-stream (format "/Users/candera/GDrive/weather-%d.twx" n))]
+    (fmap/get-bytes is 0x298)
+    (println n "," (fmap/read-float is))))
+
+
