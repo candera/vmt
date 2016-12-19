@@ -725,6 +725,7 @@
 (defn image-button-style
   [pressed?]
   {:border-style (if pressed? "inset" "outset")
+   :border-color "#ddd"
    :border-radius "6px"
    :padding "2px"
    :width "16px"
@@ -1740,11 +1741,11 @@
                      :mousedown (fn [e]
                                   (when @drag-handler
                                     (reset! drag-start (grid-coords e))))
+                     ;; Overriding dragstart stops Firefox from trying
+                     ;; to drag and drop SVG as images, which would
+                     ;; interfere with our drag/resize functionality.
+                     :dragstart (constantly false)
                      wind-vector-defs
-                     ;; TODO: Not working in Firefox/Safari because
-                     ;; the image tag doesn't render as
-                     ;; self-closing. Not sure how to convince
-                     ;; Hoplon to change that.
                      (svg/image
                       :id "map-image"
                       :toggle (cell= (-> display-params :map #{:none nil} not))
@@ -2229,12 +2230,16 @@
    :title "Weather parameters"
    :id "weather-params-section"
    (control-layout
-    [["Seed"             [:seed] {:extra (button
-                                          :click #(swap! weather-params
-                                                         assoc
-                                                         :seed
-                                                         (+ (rand-int 5000) 100))
-                                          "Random")}]
+    [["Seed"             [:seed] {:ui (div
+                                       :css {:white-space "nowrap"}
+                                       (edit-field weather-params [:seed])
+                                       (button
+                                        :css {:width "75px"}
+                                        :click #(swap! weather-params
+                                                       assoc
+                                                       :seed
+                                                       (+ (rand-int 5000) 100))
+                                        "Random"))}]
      ["Min pressure"     [:pressure :min] {:type :pressure}]
      ["Max pressure"     [:pressure :max] {:type :pressure}]
      ["Prevailing wind"  [:prevailing-wind :heading]]
