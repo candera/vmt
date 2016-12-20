@@ -70,16 +70,18 @@
               (zipmap (keys agent-props)
                       (map is-agent? (vals agent-props)))))
 
-(cond
-  (and (:safari agents)
-       (not (:chrome agents)))
-  (js/alert "WeatherGen does not work well in Safari, due to Safari's atrocious Javascript performance and some weird layout issues. Chrome and Firefox are the recommended/supported browsers.")
+(def safari? (and (:safari agents) (not (:chrome agents))))
 
-  (or (:firefox agents) (:chrome agents))
-  (println "Chrome or Firefox detected")
+(cond
+  #_(and (:safari agents)
+         (not (:chrome agents)))
+  #_(js/alert "WeatherGen does not work well in Safari, due to Safari's atrocious Javascript performance and some weird layout issues. Chrome and Firefox are the recommended/supported browsers.")
+
+  (or (:safari agents) (:firefox agents) (:chrome agents))
+  (println "Chrome, Firefox, or Safari detected")
 
   :else
-  (js/alert "Browsers other than Chrome and Firefox are not currently supported by WeatherGen. Some features may not behave as expected. Use of Chrome/Firefox is recommended."))
+  (js/alert "Browsers other than Chrome and Firefox are not fully supported by WeatherGen. Some features may not behave as expected. Safari works reasonably well but not as well as Chrome. Use of Chrome is recommended."))
 
 ;;; State
 
@@ -507,7 +509,10 @@
         (reset! progress p))
       (if (< end t)
         (-> zip
-            (.generateAsync #js {:type "blob"})
+            (.generateAsync (if safari?
+                              ;; https://github.com/Stuk/jszip/issues/279
+                              #js {:type "blob" :mimeType "application/octet-stream"}
+                              #js {:type "blob"}))
             (.then (fn [blob]
                      (save-data blob "weather.zip")
                      (reset! progress nil))))
@@ -2732,7 +2737,14 @@
                                        "Must be a positive integer")
                             :value (long n)}))
               :fmt str
-              :placeholder "60"))))])))))
+              :placeholder "60"))))
+         (if-not safari?
+           []
+           (div
+            :css {:font-size "80%"}
+            "Due to a bug in Safari, the generated file will have the
+             name 'Unknown'. Once downloaded, rename it to
+             'weather.zip' to access its contents."))])))))
 
 (defn debug-info
   []
