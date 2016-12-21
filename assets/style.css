@@ -539,15 +539,15 @@ rect.inclement {
 }
 
 .field-label {
-    width: 50px;
+    width: 70px;
 }
 
 #weather-params-section .field-label {
-    width: 95px;
+    width: 120px;
 }
 
 .field-input {
-    width: 100px;
+    width: 120px;
 }
 
 .field-input select,

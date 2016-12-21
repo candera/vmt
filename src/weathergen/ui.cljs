@@ -18,10 +18,12 @@
                      label legend link loop-tpl
                      option
                      p progress
-                     script select span
-                     table tbody td thead title tr timeout
+                     script select span style
+                     table tbody td text thead title tr timeout
                      when-dom with-init! with-timeout]]
             [hoplon.svg :as svg]
+            [garden.core :refer [css]]
+            [garden.selectors :as css-sel]
             [goog.dom :as gdom]
             [goog.crypt.base64 :as base64]
             [goog.string :as gstring]
@@ -72,16 +74,7 @@
 
 (def safari? (and (:safari agents) (not (:chrome agents))))
 
-(cond
-  #_(and (:safari agents)
-         (not (:chrome agents)))
-  #_(js/alert "WeatherGen does not work well in Safari, due to Safari's atrocious Javascript performance and some weird layout issues. Chrome and Firefox are the recommended/supported browsers.")
-
-  (or (:safari agents) (:firefox agents) (:chrome agents))
-  (println "Chrome, Firefox, or Safari detected")
-
-  :else
-  (js/alert "Browsers other than Chrome and Firefox are not fully supported by WeatherGen. Some features may not behave as expected. Safari works reasonably well but not as well as Chrome. Use of Chrome is recommended."))
+(def ie? (:ie agents))
 
 ;;; State
 
@@ -184,6 +177,10 @@
 (defc weather-data-params nil)
 
 (defc computing true)
+
+(defc messages (if (or (:safari agents) (:firefox agents) (:chrome agents))
+                 []
+                 ["Browsers other than Chrome and Firefox are not fully supported by WeatherGen. Some features may not behave as expected. Safari works reasonably well but not as well as Chrome. Use of Chrome is recommended."]))
 
 ;;; Formulas
 
@@ -734,6 +731,7 @@
    :border-radius "6px"
    :padding "2px"
    :width "16px"
+   :height "16px"
    :background (if pressed? "lightgrey" "white")
    :border-width "2px"
    :vertical-align "middle"})
@@ -2632,6 +2630,7 @@
       "(Steps forward in time)")
      (div
       :class "button-container"
+      :css {:display "inline-block"}
       (cell=
        (let [blob (js/Blob. (clj->js [(pr-str {:weather-params weather-params
                                                :movement-params movement-params
@@ -2645,6 +2644,7 @@
             "Save Settings"))))
      (div
       :class "button-container"
+      :css {:display "inline-block"}
       (button :class "button" :click load-settings "Load Settings"))
      (div
       (let [progress (cell nil)
@@ -2853,7 +2853,8 @@
              (tr
               (td
                (image-button
-                :css {:width "12px"}
+                :css {:width "12px"
+                      :height "12px"}
                 :src (formula-of
                       [path]
                       (if (-> path :label :editing?)
@@ -2937,7 +2938,16 @@
    (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300"
          :rel "stylesheet"
-         :type "text/css")))
+         :type "text/css")
+   (style
+    :type "text/css"
+    ;; TODO: Move the rest of the stylesheet stuff into here
+    (css
+     ;; IE fixes
+     [:fieldset
+      {:padding-left "10px"}]
+     [(css-sel/input (css-sel/attr= :type :range))
+      {:padding "5px"}]))))
 
 (defelem body
   [{:keys [] :as attrs}
@@ -2946,24 +2956,50 @@
    (div
     :id "app"
     (div :id "titlebar"
-           (div :id "words"
-                  (span :id "title"
-                          "WeatherGen")
-                  (span :id "byline"
-                          "by"
-                          (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
-                               :target "_blank"
-                               "Tyrant"))
-                  (span :id "helpstring"
-                          "Help? Bug? Feature request? Click"
-                          (a :href "help.html"
-                               :target "_blank"
-                               "here")
-                          "."))
-           (a :href "http://firstfighterwing.com"
-                :target "_blank"
-                (img :id "winglogo"
-                       :src "images/1stVFW_Insignia-64.png")))
+         (div :id "words"
+              (span :id "title"
+                    "WeatherGen")
+              (span :id "byline"
+                    "by"
+                    (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
+                       :target "_blank"
+                       "Tyrant"))
+              (span :id "helpstring"
+                    "Help? Bug? Feature request? Click"
+                    (a :href "help.html"
+                       :target "_blank"
+                       "here")
+                    "."))
+         (a :href "http://firstfighterwing.com"
+            :target "_blank"
+            (img :id "winglogo"
+                 :src "images/1stVFW_Insignia-64.png")))
+    ;; Messages
+    (formula-of
+     [messages]
+     (for [message messages]
+       (let [visible? (cell true)]
+         (div
+          :fade-toggle visible?
+          :css {:border "double"
+                :border-color "black"
+                :background "#945594"
+                :color "white"
+                :position "relative"
+                :margin-bottom "3px"}
+          (div
+           :css {:display "inline-block"
+                 :padding-right "5px"}
+           message)
+          (div
+           :css {:position "absolute"
+                 :font-size "150%"
+                 :font-weight "bold"
+                 :top "-8px"
+                 :right "5px"
+                 :cursor "pointer"}
+           :click #(reset! visible? false)
+           "×")))))
     contents)))
 
 (def sections

@@ -24,6 +24,7 @@
                  ;;[cljsjs/jszip "2.5.0-0"]
                  [cljsjs/pako "0.2.7-0"]
                  [cljsjs/tinycolor "1.3.0-0"]
+                 [garden "1.3.2"]
 
                  [clojure-complete "0.2.4" :scope "test"]]
  :source-paths #{"src"}
