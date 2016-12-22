@@ -16,6 +16,6 @@
 (reset! ui/weather-params
         ui/default-weather-params)
 
-#_(ui/weather-page
+(ui/weather-page
    :test-section {})
 

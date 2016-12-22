@@ -771,6 +771,36 @@
     (when-dom i
       #(-> i js/jQuery (.minicolors #js {"theme" "weathergen"})))))
 
+(defelem triple-border
+  "Creates a three-layer border with :inner and :outer colors."
+  [attrs contents]
+  (let [{:keys [inner outer css]} attrs
+        attrs (dissoc attrs :inner :outer :css)]
+    (div
+     :css (->> css
+               (merge {:border-width "1px"
+                       :border-style "solid"
+                       :border-color outer
+                       :margin 0
+                       :padding 0})
+               cell=)
+     (div
+      :css (->> css
+                (merge {:border-width "2px"
+                        :border-style "solid"
+                        :border-color inner
+                        :margin 0
+                        :padding 0})
+                cell=)
+      (div
+       :css (->> css
+                 (merge {:border-width "1px"
+                         :border-style "solid"
+                         :border-color outer
+                         :margin 0})
+                 cell=)
+       contents)))))
+
 ;;; Page sections
 
 (defelem control-section
@@ -1472,7 +1502,7 @@
      (formula-of
       [indexes]
       (for [index indexes
-            :let [flightpath (formula-of [flightpaths] (nth flightpaths index))
+            :let [flightpath (formula-of [flightpaths] (get flightpaths index))
                   show? (-> flightpath :show? cell=)
                   show-lines? (-> flightpath :show-lines? cell=)
                   path (-> flightpath :path cell=)
@@ -2775,11 +2805,14 @@
    :title "Test"
    (let [path (cell {:color "FFFFFF"})
          current-color (cell= (:color path))]
-     [(span (cell= (str current-color)))
-      (color-picker
-       :value current-color
-       :change (fn [val opacity]
-                 (swap! path assoc :color @val)))])))
+     (triple-border
+      :inner current-color
+      :outer (cell= (contrasting current-color))
+      [(span (cell= (str current-color)))
+       (color-picker
+        :value current-color
+        :change (fn [val opacity]
+                  (swap! path assoc :color @val)))]))))
 
 (defn flightpath-controls
   [_]
@@ -2787,145 +2820,290 @@
    :id "flightpath-controls"
    :title (with-help [:flightpath :section]
             "Flight Paths")
-   (div
-    (let [indexes (formula-of
-                   [display-params]
-                   (->> display-params
-                        :flight-paths
-                        count
-                        range))]
-      (table
-       (thead
-        (formula-of
-         [indexes]
-         (when-not (empty? indexes)
-           (tr (td :colspan 2
-                   (with-help [:flightpath :name]
-                     "Name"))
-               (td (with-help [:flightpath :show?]
-                     :css {:margin-right "2px"}
-                     "Show?"))
-               (td (with-help [:flightpath :show-lines?]
-                     :css {:margin-right "2px"}
-                     "Lines?"))
-               (td (with-help [:flightpath :labels?]
-                     :css {:margin-right "2px"}
-                     "Labels?"))
-               (td (with-help [:flightpath :color]
-                     "Color"))
-               (td :css {:text-align "center"}
-                   (with-help [:flightpath :scale]
-                     "Size"))
-               (td (with-help [:flightpath :remove]
-                     "Remove"))))))
-       (tbody
-        (formula-of
-         [indexes]
-         (for [index indexes]
-           (let [path (path-lens display-params [:flight-paths index])
-                 label (formula-of
-                        [path]
-                        (-> path :label :value))
-                 editor (input
-                         :type "text"
-                         :value label
-                         ;; :blur (fn [_]
-                         ;;         (log/debug "blur start")
-                         ;;         (swap! path
-                         ;;                assoc-in
-                         ;;                [:label :editing?]
-                         ;;                false)
-                         ;;         (log/debug "blur end"))
-                         :keypress (fn [e]
-                                     (when (= (.-keyCode e) ENTER_KEY)
+   (let [indexes (formula-of
+                  [display-params]
+                  (->> display-params
+                       :flight-paths
+                       count
+                       range))]
+     (div
+      :class "weather-override-boxes"
+      (formula-of
+       [indexes]
+       (for [index indexes
+             :let [path (path-lens display-params [:flight-paths index])]]
+         (div
+          :css {:margin-right "5px"}
+          (triple-border
+           :inner (-> path :color cell=)
+           :outer (-> path :color contrasting cell=)
+           (table
+            (let [checkbox-row (fn checkbox
+                                 ([l k {:keys [change row-attrs]}]
+                                  (let [id (gensym)]
+                                    (tr
+                                     (or row-attrs [])
+                                     (td
+                                      (with-help [:display-params :flight-paths]
+                                        (label :for id l)))
+                                     (td
+                                      (input :id id
+                                             :css {:width "25px"}
+                                             :type "checkbox"
+                                             :value (cell= (k path))
+                                             :change (or change
+                                                         (fn [_]
+                                                           (swap! path update k not)))))))))
+                  label (formula-of
+                         [path]
+                         (-> path :label :value))
+                  editor (input
+                          :type "text"
+                          :value label
+                          :keypress (fn [e]
+                                      (when (= (.-keyCode e) ENTER_KEY)
+                                        (swap! path
+                                               assoc-in
+                                               [:label :editing?]
+                                               false)))
+                          :change #(dosync
+                                    (swap! path
+                                           update
+                                           :label
+                                           assoc
+                                           :value @%
+                                           :editing? false)))
+                  focus-later (fn [e] (with-timeout 0 (.focus e)))]
+              (tbody
+               (tr (td (with-help [:display-params :flight-paths :name]
+                         "Name"))
+                   (td (formula-of
+                        {p path}
+                        (if (-> p :label :editing?)
+                          editor
+                          (div
+                           :css {:display "inline-block"
+                                 :margin-right "3px"}
+                           :click #(do
+                                     (focus-later editor)
+                                     (swap! path
+                                            assoc-in
+                                            [:label :editing?]
+                                            true))
+                           label)))
+                       (image-button
+                        :css {:width "12px"
+                              :height "12px"}
+                        :src (formula-of
+                              [path]
+                              (if (-> path :label :editing?)
+                                "images/checkmark.png"
+                                "images/edit.svg"))
+                        :click (fn [_]
+                                 (let [path* (swap! path update-in [:label :editing?] not)]
+                                   (when (get-in path* [:label :editing?])
+                                     (focus-later editor)))))))
+               (checkbox-row "Show?" :show? {})
+               (checkbox-row "Lines?" :show-lines? {})
+               (checkbox-row "Labels?" :show-labels? {})
+               (tr (td (with-help [:flightpath :color]
+                         "Color"))
+                   (td
+                    (div
+                     :css {:padding-left "5px"
+                           :padding-top "2px"}
+                     (color-picker
+                      :value (cell= (:color path))
+                      :change #(swap! path assoc :color @%)))))
+               (tr (td (with-help [:flightpath :scale]
+                         "Size"))
+                   (td
+                    (input
+                     :css {:width "50px"}
+                     :type "range"
+                     :min 0
+                     :max 100
+                     :value (-> path :scale (* 100) long cell=)
+                     :change #(swap! path assoc :scale (/ @% 100.0)))))
+               (tr (td
+                    (image-button
+                     :src "images/trash.png"
+                     :click #(swap! display-params
+                                    update
+                                    :flight-paths
+                                    (fn [paths]
+                                      (remove-nth paths index)))))))))))))))
+   #_(div
+      (let [indexes (formula-of
+                     [display-params]
+                     (->> display-params
+                          :flight-paths
+                          count
+                          range))]
+        (when (empty? indexes)
+          []
+          (table
+           (for [index indexes]
+             :let [path (path-lens display-params [:flight-paths index])
+                   label (formula-of
+                          [path]
+                          (-> path :label :value))
+                   editor (input
+                           :type "text"
+                           :value label
+                           ;; :blur (fn [_]
+                           ;;         (log/debug "blur start")
+                           ;;         (swap! path
+                           ;;                assoc-in
+                           ;;                [:label :editing?]
+                           ;;                false)
+                           ;;         (log/debug "blur end"))
+                           :keypress (fn [e]
+                                       (when (= (.-keyCode e) ENTER_KEY)
+                                         (swap! path
+                                                assoc-in
+                                                [:label :editing?]
+                                                false)))
+                           :change #(dosync
+                                     (swap! path
+                                            update
+                                            :label
+                                            assoc
+                                            :value @%
+                                            :editing? false)))
+                   focus-later (fn [e] (with-timeout 0 (.focus e)))])))
+        #_(table
+           (thead
+            (formula-of
+             [indexes]
+             (when-not (empty? indexes)
+               (tr (td :colspan 2
+                       (with-help [:flightpath :name]
+                         "Name"))
+                   (td (with-help [:flightpath :show?]
+                         :css {:margin-right "2px"}
+                         "Show?"))
+                   (td (with-help [:flightpath :show-lines?]
+                         :css {:margin-right "2px"}
+                         "Lines?"))
+                   (td (with-help [:flightpath :labels?]
+                         :css {:margin-right "2px"}
+                         "Labels?"))
+                   (td (with-help [:flightpath :color]
+                         "Color"))
+                   (td :css {:text-align "center"}
+                       (with-help [:flightpath :scale]
+                         "Size"))
+                   (td (with-help [:flightpath :remove]
+                         "Remove"))))))
+           (tbody
+            (formula-of
+             [indexes]
+             (for [index indexes]
+               (let [path (path-lens display-params [:flight-paths index])
+                     label (formula-of
+                            [path]
+                            (-> path :label :value))
+                     editor (input
+                             :type "text"
+                             :value label
+                             ;; :blur (fn [_]
+                             ;;         (log/debug "blur start")
+                             ;;         (swap! path
+                             ;;                assoc-in
+                             ;;                [:label :editing?]
+                             ;;                false)
+                             ;;         (log/debug "blur end"))
+                             :keypress (fn [e]
+                                         (when (= (.-keyCode e) ENTER_KEY)
+                                           (swap! path
+                                                  assoc-in
+                                                  [:label :editing?]
+                                                  false)))
+                             :change #(dosync
                                        (swap! path
-                                              assoc-in
-                                              [:label :editing?]
-                                              false)))
-                         :change #(dosync
-                                   (swap! path
-                                          update
-                                          :label
-                                          assoc
-                                          :value @%
-                                          :editing? false)))
-                 focus-later (fn [e] (with-timeout 0 (.focus e)))]
-             (tr
-              (td
-               (image-button
-                :css {:width "12px"
-                      :height "12px"}
-                :src (formula-of
-                      [path]
-                      (if (-> path :label :editing?)
-                        "images/checkmark.png"
-                        "images/edit.svg"))
-                :click (fn [_]
-                         (let [path* (swap! path update-in [:label :editing?] not)]
-                           (when (get-in path* [:label :editing?])
-                             (focus-later editor))))))
-              (td
-               (formula-of
-                {p path}
-                (if (-> p :label :editing?)
-                  editor
-                  (div
-                   :css {:display "inline-block"
-                         :margin-right "3px"}
-                   :click #(do
-                             (focus-later editor)
-                             (swap! path
-                                    assoc-in
-                                    [:label :editing?]
-                                    true))
-                   label))))
-              (td
-               :css {:text-align "center"}
-               (input
-                :css {:margin-bottom "6px"}
-                :type "checkbox"
-                :value (cell= (:show? path))
-                :change #(swap! path update :show? not)))
-              (td
-               :css {:text-align "center"}
-               (input
-                :css {:margin-bottom "6px"}
-                :type "checkbox"
-                :value (cell= (:show-lines? path))
-                :change #(swap! path update :show-lines? not)))
-              (td
-               :css {:text-align "center"}
-               (input
-                :css {:margin-bottom "6px"}
-                :type "checkbox"
-                :value (cell= (:show-labels? path))
-                :change #(swap! path update :show-labels? not)))
-              (td
-               :css {:text-align "center"}
-               (div
-                :css {:padding-left "5px"
-                      :padding-top "2px"}
-                (color-picker
-                 :value (cell= (:color path))
-                 :change #(swap! path assoc :color @%))))
-              (td
-               :css {:text-align "center"}
-               (input
-                :css {:width "50px"}
-                :type "range"
-                :min 0
-                :max 100
-                :value (-> path :scale (* 100) long cell=)
-                :change #(swap! path assoc :scale (/ @% 100.0))))
-              (td
-               :css {:text-align "center"}
-               (image-button
-                :src "images/trash.png"
-                :click #(swap! display-params
-                               update
-                               :flight-paths
-                               (fn [paths]
-                                 (remove-nth paths index)))))))))))))
+                                              update
+                                              :label
+                                              assoc
+                                              :value @%
+                                              :editing? false)))
+                     focus-later (fn [e] (with-timeout 0 (.focus e)))]
+                 (tr
+                  (td
+                   (image-button
+                    :css {:width "12px"
+                          :height "12px"}
+                    :src (formula-of
+                          [path]
+                          (if (-> path :label :editing?)
+                            "images/checkmark.png"
+                            "images/edit.svg"))
+                    :click (fn [_]
+                             (let [path* (swap! path update-in [:label :editing?] not)]
+                               (when (get-in path* [:label :editing?])
+                                 (focus-later editor))))))
+                  (td
+                   (formula-of
+                    {p path}
+                    (if (-> p :label :editing?)
+                      editor
+                      (div
+                       :css {:display "inline-block"
+                             :margin-right "3px"}
+                       :click #(do
+                                 (focus-later editor)
+                                 (swap! path
+                                        assoc-in
+                                        [:label :editing?]
+                                        true))
+                       label))))
+                  (td
+                   :css {:text-align "center"}
+                   (input
+                    :css {:margin-bottom "6px"}
+                    :type "checkbox"
+                    :value (cell= (:show? path))
+                    :change #(swap! path update :show? not)))
+                  (td
+                   :css {:text-align "center"}
+                   (input
+                    :css {:margin-bottom "6px"}
+                    :type "checkbox"
+                    :value (cell= (:show-lines? path))
+                    :change #(swap! path update :show-lines? not)))
+                  (td
+                   :css {:text-align "center"}
+                   (input
+                    :css {:margin-bottom "6px"}
+                    :type "checkbox"
+                    :value (cell= (:show-labels? path))
+                    :change #(swap! path update :show-labels? not)))
+                  (td
+                   :css {:text-align "center"}
+                   (div
+                    :css {:padding-left "5px"
+                          :padding-top "2px"}
+                    (color-picker
+                     :value (cell= (:color path))
+                     :change #(swap! path assoc :color @%))))
+                  (td
+                   :css {:text-align "center"}
+                   (input
+                    :css {:width "50px"}
+                    :type "range"
+                    :min 0
+                    :max 100
+                    :value (-> path :scale (* 100) long cell=)
+                    :change #(swap! path assoc :scale (/ @% 100.0))))
+                  (td
+                   :css {:text-align "center"}
+                   (image-button
+                    :src "images/trash.png"
+                    :click #(swap! display-params
+                                   update
+                                   :flight-paths
+                                   (fn [paths]
+                                     (remove-nth paths index)))))))))))))
    (button :click load-dtc "Load DTC")))
 
 ;;; General layout
