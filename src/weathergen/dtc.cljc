@@ -77,7 +77,11 @@
 
 (s/def ::comment string?
   ;; Steerpoint comment.
-)
+  )
+
+(s/def ::threat string?
+  ;; PPT threat label
+  )
 
 (s/def ::alternate? boolean?
   ;; Identifies a steerpoint as an alternate landing site
@@ -109,7 +113,7 @@
 
 (s/def ::steerpoints
   (s/keys :req [::targets
-                ;; ::ppts
+                ::ppts
                 ::lines
                 ;; ::weapon-targets
                 ]))
@@ -143,9 +147,19 @@
       (let [[x-str y-str z-str] (map str/trim (str/split v #","))]
         {::category ::lines
          ::coordinates {::x (number x-str)
-                       ::y (number y-str)
-                       ::z (number z-str)}
+                        ::y (number y-str)
+                        ::z (number z-str)}
          ::ordinal (integer num-str)})
+
+      "ppt"
+      (let [[x-str y-str z-str radius threat] (map str/trim (str/split v #","))]
+        {::category ::ppts
+         ::coordinates {::x (number x-str)
+                        ::y (number y-str)
+                        ::z (number z-str)}
+         ::ordinal (integer num-str)
+         ::radius (number radius)
+         ::threat threat})
 
       nil)))
 
@@ -170,6 +184,16 @@
         (map parse-stpt-line)
         (remove nil?)
         (group-by ::category))})
+
+(s/fdef zero-coords?
+        :args (s/cat :steerpoint (s/keys :req [::coordinates]))
+        :ret boolean?)
+
+(defn zero-coords?
+  "Returns true if all coordinate elements are zero"
+  [{:keys [::coordinates]}]
+  (let [{:keys [::x ::y ::z]} coordinates]
+    (and (zero? x) (zero? y) (zero? z))))
 
 (s/fdef flight-path
         :args (s/cat :dtc dtc)
@@ -204,9 +228,31 @@
   (->> dtc
        ::steerpoints
        ::lines
-       (remove (fn [{:keys [::coordinates]}]
-                 (let [{:keys [::x ::y ::z]} coordinates]
-                   (and (zero? x) (zero? y) (zero? z)))))
+       (remove zero-coords?)
        (group-by #(-> % ::ordinal (/ 5) long inc))
        (sort-by first)
        (map second)))
+
+(s/fdef ppts
+        :args (s/cat :dtc dtc)
+        :ret (s/* ppt))
+
+;; TODO: Need to figure out some way to incorporate the information in
+;; ppt.ini, since the names in the DTC are short. Options:
+;;
+;; 1) Statically convert based on reasonable defaults. Embed mappping
+;; in code. Possibly based on map.
+;; 2) Dynamically convert based on user loading a ppt.ini file.
+;; 2a) Store loaded ppt.ini between sessions for convenience.
+;; 3) Don't use the labels at all.
+;; 4) Write a helper app that knows how to read from the filesystem,
+;; solving several problems at once, including how to read from
+;; the appropriate ppt.ini.
+
+(defn ppts
+  "Returns a description of the pre-planned threats in the DTC."
+  [dtc]
+  (->> dtc
+       ::steerpoints
+       ::ppts
+       (remove zero-coords?)))

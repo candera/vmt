@@ -894,14 +894,19 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(-> "/tmp/fnpu-with-lines.ini"
+(require :reload '[weathergen.dtc :as dtc])
+
+(-> "/Users/candera/GDrive/SMPU-Day  2 07 56 30.ini"
     slurp
     dtc/parse
-    dtc/lines
+    ;;dtc/lines
     ;; ::dtc/steerpoints
     ;;::dtc/lines
+    dtc/ppts
     pprint
     )
+
+(dtc/parse-stpt-line "ppt_0=1530465.000000, 1316693.000000, 0.000000, 18228.35, 13")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
