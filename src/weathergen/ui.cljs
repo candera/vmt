@@ -1945,9 +1945,9 @@
 
 (defn conform-positive-integer
   [s]
-  (let [n (js/Number. s)
+  (let [n (-> s js/Number. .valueOf)
         l (long n)
-        valid? (and (int? l)
+        valid? (and (int? n)
                     (pos? l))]
     {:valid? valid?
      :message (when-not valid?
@@ -1955,6 +1955,20 @@
      :value l}))
 
 (defelem validating-edit
+  "Renders a control that will provide feedback as to whether the
+  contents are valid.
+
+  :conform : A function that returns a map with keys `:valid?`,
+  `:value`, and `:message`, expressing whether the value is valid, and
+  if not, why not.
+  :fmt : A function that turns the validated value into a displayable
+  string
+  :source: A cell containing the source data for the input control.
+  :update: A function that will be called with the new, valid value.
+  Defaults to setting the source cell.
+  :width: Width in pixels of the input area.
+  :placeholder: Placeholder when input is empty.
+  :css: Styling applied to container div."
   [{:keys [conform fmt source update width placeholder css] :as attrs}
    _]
   (let [attrs (dissoc attrs :source :conform :update :width :fmt :placeholder :css)
@@ -1965,10 +1979,15 @@
                   (conform interim)
                   {:valid? true
                    :value @source}))
-        state (cell :set)]
+        update (or update
+                   #(swap! source
+                           (constantly %)))
+        state (cell :set)
+        fmt (or fmt str)]
     (div
      attrs
-     :css (merge {:position "relative"}
+     :css (merge {:position "relative"
+                  :overflow "show"}
                  css)
      (input :type "text"
             :placeholder placeholder
@@ -2009,13 +2028,22 @@
           :css (formula-of
                 [parsed]
                 {:width "14px"
-                 :vertical-align "middle"
-                 :margin-left "3px"
-                 :position "relative"
-                 :right "20px"
+                 :position "absolute"
+                 :right "3px"
+                 :top "5px"
                  :opacity (if (:valid? parsed)
                              "0"
-                             "1")})))))
+                             "1")}))
+     (div
+      :toggle (-> parsed :message empty? not cell=)
+      :css {:position "absolute"
+            :top "24px"
+            :font-size "75%"
+            :background "rgba(221,221,221,0.95)"
+            :border "1px solid #888"
+            :width "200%"
+            :padding-left "2px"}
+      (cell= (:message parsed))))))
 
 ;; TODO: We could consider using a lens here instead of separate
 ;; source and update
@@ -2023,7 +2051,7 @@
   [{:keys [source update] :as attrs} _]
   (validating-edit
    attrs
-   :width "60px"
+   :width "65px"
    :fmt format-time
    :placeholder "dd/hhmm"
    :conform #(let [[all dd hh mm] (re-matches #"(\d+)/(\d\d)(\d\d)" %)
@@ -2159,7 +2187,9 @@
                      :bottom "0"})))))
 
 (defn control-layout
-  "Lays out controls for a control section"
+  "Lays out controls for a control section. `controls` is a sequence
+  of [label selector opts] tuples, where `opts` is a map with
+  keys :extra, :type, :help-base, :help-paths, :cell, or :ui."
   [controls]
   (let [field      (fn [& kids] (apply div :class "field" kids))
         field-help (fn [& kids] (apply div :class "field-elem field-help" kids))
@@ -2644,7 +2674,8 @@
   [_]
   (let [inline (fn [css & contents]
                  (apply div
-                        :css (merge {:display "inline-block"}
+                        :css (merge {:display "inline-block"
+                                     :margin-right "5px"}
                                     css)
                         contents))]
     (control-section
@@ -2683,8 +2714,7 @@
           {}
           (button :css (formula-of
                         [progress cancelling?]
-                        {:margin-right "4px"
-                         :width "105px"
+                        {:width "105px"
                          :background
                          (if (and (not cancelling?) (some? progress))
                            (let [pct (long (* 100 progress))]
@@ -2713,7 +2743,7 @@
                      progress "Cancel"
                      :else "Generate FMAPs"))))
          (inline
-          {:margin-right "5px"}
+          {}
           (with-help [:display-controls :multi-save :from]
             "from"))
          (formula-of
@@ -2724,10 +2754,10 @@
                    :display "inline-block"}
              (-> display-params :multi-save :from format-time cell=))
             (inline
-             {:margin-right "-12px"}
+             {}
              (time-entry display-params [:multi-save :from]))))
          (inline
-          {:margin-right "5px"}
+          {}
           (with-help [:display-controls :multi-save :to]
             "to"))
          (formula-of
@@ -2738,10 +2768,10 @@
                    :display "inline-block"}
              (-> display-params :multi-save :to format-time cell=))
             (inline
-             {:margin-right "-12px"}
+             {}
              (time-entry display-params [:multi-save :to]))))
          (inline
-          {:margin-right "5px"}
+          {}
           (with-help [:display-controls :multi-save :step]
             :css {:display "inline-block"}
             "step by"))         (formula-of
@@ -2759,13 +2789,7 @@
               :width "32px"
               :source (-> display-params :multi-save :step cell=)
               :update #(swap! display-params assoc-in [:multi-save :step] %)
-              :conform (fn [s]
-                         (let [n (-> s js/Number. .valueOf)
-                               valid? (and (int? n) (pos? n))]
-                           {:valid? valid?
-                            :message (when-not valid?
-                                       "Must be a positive integer")
-                            :value (long n)}))
+              :conform conform-positive-integer
               :fmt str
               :placeholder "60"))))
          (if-not safari?
@@ -2933,177 +2957,6 @@
                                     :flight-paths
                                     (fn [paths]
                                       (remove-nth paths index)))))))))))))))
-   #_(div
-      (let [indexes (formula-of
-                     [display-params]
-                     (->> display-params
-                          :flight-paths
-                          count
-                          range))]
-        (when (empty? indexes)
-          []
-          (table
-           (for [index indexes]
-             :let [path (path-lens display-params [:flight-paths index])
-                   label (formula-of
-                          [path]
-                          (-> path :label :value))
-                   editor (input
-                           :type "text"
-                           :value label
-                           ;; :blur (fn [_]
-                           ;;         (log/debug "blur start")
-                           ;;         (swap! path
-                           ;;                assoc-in
-                           ;;                [:label :editing?]
-                           ;;                false)
-                           ;;         (log/debug "blur end"))
-                           :keypress (fn [e]
-                                       (when (= (.-keyCode e) ENTER_KEY)
-                                         (swap! path
-                                                assoc-in
-                                                [:label :editing?]
-                                                false)))
-                           :change #(dosync
-                                     (swap! path
-                                            update
-                                            :label
-                                            assoc
-                                            :value @%
-                                            :editing? false)))
-                   focus-later (fn [e] (with-timeout 0 (.focus e)))])))
-        #_(table
-           (thead
-            (formula-of
-             [indexes]
-             (when-not (empty? indexes)
-               (tr (td :colspan 2
-                       (with-help [:flightpath :name]
-                         "Name"))
-                   (td (with-help [:flightpath :show?]
-                         :css {:margin-right "2px"}
-                         "Show?"))
-                   (td (with-help [:flightpath :show-lines?]
-                         :css {:margin-right "2px"}
-                         "Lines?"))
-                   (td (with-help [:flightpath :labels?]
-                         :css {:margin-right "2px"}
-                         "Labels?"))
-                   (td (with-help [:flightpath :color]
-                         "Color"))
-                   (td :css {:text-align "center"}
-                       (with-help [:flightpath :scale]
-                         "Size"))
-                   (td (with-help [:flightpath :remove]
-                         "Remove"))))))
-           (tbody
-            (formula-of
-             [indexes]
-             (for [index indexes]
-               (let [path (path-lens display-params [:flight-paths index])
-                     label (formula-of
-                            [path]
-                            (-> path :label :value))
-                     editor (input
-                             :type "text"
-                             :value label
-                             ;; :blur (fn [_]
-                             ;;         (log/debug "blur start")
-                             ;;         (swap! path
-                             ;;                assoc-in
-                             ;;                [:label :editing?]
-                             ;;                false)
-                             ;;         (log/debug "blur end"))
-                             :keypress (fn [e]
-                                         (when (= (.-keyCode e) ENTER_KEY)
-                                           (swap! path
-                                                  assoc-in
-                                                  [:label :editing?]
-                                                  false)))
-                             :change #(dosync
-                                       (swap! path
-                                              update
-                                              :label
-                                              assoc
-                                              :value @%
-                                              :editing? false)))
-                     focus-later (fn [e] (with-timeout 0 (.focus e)))]
-                 (tr
-                  (td
-                   (image-button
-                    :css {:width "12px"
-                          :height "12px"}
-                    :src (formula-of
-                          [path]
-                          (if (-> path :label :editing?)
-                            "images/checkmark.png"
-                            "images/edit.svg"))
-                    :click (fn [_]
-                             (let [path* (swap! path update-in [:label :editing?] not)]
-                               (when (get-in path* [:label :editing?])
-                                 (focus-later editor))))))
-                  (td
-                   (formula-of
-                    {p path}
-                    (if (-> p :label :editing?)
-                      editor
-                      (div
-                       :css {:display "inline-block"
-                             :margin-right "3px"}
-                       :click #(do
-                                 (focus-later editor)
-                                 (swap! path
-                                        assoc-in
-                                        [:label :editing?]
-                                        true))
-                       label))))
-                  (td
-                   :css {:text-align "center"}
-                   (input
-                    :css {:margin-bottom "6px"}
-                    :type "checkbox"
-                    :value (cell= (:show? path))
-                    :change #(swap! path update :show? not)))
-                  (td
-                   :css {:text-align "center"}
-                   (input
-                    :css {:margin-bottom "6px"}
-                    :type "checkbox"
-                    :value (cell= (:show-lines? path))
-                    :change #(swap! path update :show-lines? not)))
-                  (td
-                   :css {:text-align "center"}
-                   (input
-                    :css {:margin-bottom "6px"}
-                    :type "checkbox"
-                    :value (cell= (:show-labels? path))
-                    :change #(swap! path update :show-labels? not)))
-                  (td
-                   :css {:text-align "center"}
-                   (div
-                    :css {:padding-left "5px"
-                          :padding-top "2px"}
-                    (color-picker
-                     :value (cell= (:color path))
-                     :change #(swap! path assoc :color @%))))
-                  (td
-                   :css {:text-align "center"}
-                   (input
-                    :css {:width "50px"}
-                    :type "range"
-                    :min 0
-                    :max 100
-                    :value (-> path :scale (* 100) long cell=)
-                    :change #(swap! path assoc :scale (/ @% 100.0))))
-                  (td
-                   :css {:text-align "center"}
-                   (image-button
-                    :src "images/trash.png"
-                    :click #(swap! display-params
-                                   update
-                                   :flight-paths
-                                   (fn [paths]
-                                     (remove-nth paths index)))))))))))))
    (button :click load-dtc "Load DTC")))
 
 ;;; General layout
