@@ -12,6 +12,7 @@
  :forecast-section {:forecast-link? true}
  :flightpath-controls {}
  :weather-type-configuration {}
+ :cloud-controls {}
  :wind-stability-parameters {}
  :weather-override-parameters {}
  :advanced-controls {})

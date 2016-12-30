@@ -20,7 +20,7 @@
                      p progress
                      script select span style
                      table tbody td text thead title tr timeout
-                     when-dom with-init! with-timeout]]
+                     when-dom when-tpl with-init! with-timeout]]
             [hoplon.svg :as svg]
             [garden.core :refer [css]]
             [garden.selectors :as css-sel]
@@ -29,6 +29,7 @@
             [goog.string :as gstring]
             [goog.string.format]
             [goog.style :as gstyle]
+            [octet.core :as buf]
             [weathergen.canvas :as canvas]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
@@ -38,6 +39,7 @@
             [weathergen.help :as help]
             [weathergen.math :as math]
             [weathergen.model :as model]
+            [weathergen.twx :as twx]
             ;; [weathergen.route :as route]
             [cljs.core.async :as async
              :refer [<! >! alts!]]
@@ -50,7 +52,8 @@
                                 spy get-env log-env)])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-time formula-of]])
+  (:refer-clojure :exclude [load-file]))
 
 ;;; Constants
 
@@ -138,6 +141,103 @@
 
 (defc weather-params nil)
 
+(def default-cloud-params
+  {:cumulus-density 5 ; Percent: 5-50
+   :cumulus-size 0.98 ; 0 (Thick) - 5.0 (Scattered)
+   :visibility {:sunny     30
+                :fair      20
+                :poor      10
+                :inclement 5}
+   :stratus-base {:sunny     35000
+                  :fair      30000
+                  :poor      13300
+                  ;; TODO: inclement and fair are tied together in
+                  ;; the BMS UI - do the same?
+                  :inclement :poor}
+   :stratus-thickness {;; TODO: Sunny and fair thickness not exposed
+                       ;; in UI. Do they have an effect if set in the
+                       ;; TWX?
+                       :sunny     nil
+                       :fair      nil
+                       :poor      2000
+                       :inclement 7000}
+   :cumulus-base {:sunny     0
+                  :fair      8000
+                  :poor      7500
+                  :inclement 2000}
+   :contrails {:sunny     34000
+               :fair      28000
+               :poor      25000
+               :inclement 20000}})
+
+(defn random-int
+  ([from to] (random-int from to 1))
+  ([from to step]
+   (let [range (- to from)
+         steps (-> range (/ step) long inc)]
+     (-> (rand)
+         (* steps)
+         long
+         (* step)
+         (+ from)))))
+
+(defn random-cloud-params
+  "Returns a plausible but random set of global weather paramaters."
+  []
+  (let [stratus-base (let [[p f s] (sort (repeatedly
+                                          3
+                                          #(random-int
+                                            1500
+                                            40000
+                                            500)))]
+                       {:sunny s
+                        :fair f
+                        :poor p
+                        :inclement p})]
+    {:cumulus-density (random-int 5 50)
+     :cumulus-size (* 5.0 (rand))
+     :visibility (let [[i p f s] (sort (repeatedly
+                                        4
+                                        #(random-int 0 30)))]
+                   {:sunny s
+                    :fair f
+                    :poor p
+                    :inclement i})
+     :stratus-base stratus-base
+     :stratus-thickness (let [[p i] (sort (repeatedly
+                                           2
+                                           #(random-int 500 10000 500)))]
+                          {:poor p
+                           :inclement i})
+     ;; The BMS UI enforces that cumulus base must be at least 1000
+     ;; feet below the stratus base, so we do, too
+     :cumulus-base (let [[i p f] (sort (repeatedly
+                                        3
+                                        #(random-int 1000 22000 1000)))]
+                     {:sunny 0
+                      :fair (-> stratus-base
+                                :fair
+                                (- 1000)
+                                (min f))
+                      :poor (-> stratus-base
+                                :poor
+                                (- 1000)
+                                (min p))
+                      :inclement (-> stratus-base
+                                     :inclement
+                                     (- 1000)
+                                     (min i))})
+     :contrails (let [[i p f s] (sort (repeatedly
+                                       4
+                                       #(random-int 2000 40000 1000)))]
+                  {:sunny s
+                   :fair f
+                   :poor p
+                   :inclement i})}))
+
+(defc cloud-params
+  default-cloud-params)
+
 (defc movement-params {:step 60
                        :direction {:heading 135 :speed 20}
                        :looping? false})
@@ -154,7 +254,8 @@
                       :overlay    :wind
                       :pressure-unit :inhg
                       :flight-paths nil
-                      :multi-save {:from {:day 1 :hour 5 :minute 0}
+                      :multi-save {:mission-name nil
+                                   :from {:day 1 :hour 5 :minute 0}
                                    :to {:day 1 :hour 10 :minute 0}
                                    :step 60}})
 
@@ -370,6 +471,17 @@
 
 ;;; Serialization
 
+(defn mission-name-base
+  "Compute the extensionless name of the mission file, or default to
+  'weathergen'."
+  [mission-name]
+  (if (empty? mission-name)
+    "weathergen"
+    (let [i (.lastIndexOf mission-name ".")]
+      (if (neg? i)
+        mission-name
+        (subs mission-name 0 i)))))
+
 (defn save-data
   [blob filename]
   (js/saveAs blob filename))
@@ -381,6 +493,10 @@
                   (:day t)
                   (:hour t)
                   (:minute t)))
+
+(defn twx-filename
+  [mission-name]
+  (str (mission-name-base mission-name) ".twx"))
 
 (defn save-fmap
   [weather-params weather-data]
@@ -400,37 +516,87 @@
                             y-cells)]
     (save-data blob (fmap-filename t))))
 
+;; TODO: make these functional instead of relying on the global state?
+(defn settings-blob
+  []
+  (js/Blob. #js [(pr-str {:weather-params @weather-params
+                          :movement-params @movement-params
+                          :display-params @display-params
+                          :cloud-params @cloud-params
+                          :revision revision})]
+            #js{:type "text/plain"}))
+
+(defn settings-filename
+  [mission-name]
+  (str (mission-name-base mission-name) ".settings.edn"))
+
 (defn save-settings
   [_]
-  (save-data (js/Blob. #js[(pr-str {:weather-params @weather-params
-                                    :movement-params @movement-params
-                                    :display-params @display-params
-                                    :revision revision})]
-                       #js{:type "text/plain"})
-             "weathergen-settings.edn"))
+  (save-data (settings-blob)
+             (settings-filename (get-in @display-params [:multi-save :mission-name]))))
+
+(defn twx-blob
+  "Returns a JS blob containing TWX file data."
+  [cloud-params direction]
+  (let [buf (buf/allocate twx/buffer-size)]
+    (twx/populate-buffer buf cloud-params direction)
+    (js/Blob. #js [buf])))
+
+(defn save-twx
+  "Initiates a download of a TWX file."
+  [cloud-params direction mission-name]
+  (save-data (twx-blob cloud-params direction) (twx-filename mission-name)))
+
+(defn load-file
+  "Asynchronously loads a file. Opts can include `:extensions` a CSV
+  of extensions to accept. Extensions must start with a period."
+  ([cb read-fn] (load-file cb read-fn {}))
+  ([cb read-fn opts]
+   (let [{:keys [extensions]} opts
+         attrs (cond-> {:type "file"}
+                 extensions (assoc :accept extensions))
+         i (input attrs)
+         ch (async/chan)]
+     (-> (gdom/getDocument) .-body (gdom/appendChild i))
+     (gstyle/showElement i false)
+     (-> i .-onchange (set! (fn [e]
+                              (async/put! ch e)
+                              (async/close! ch))))
+     (.click i)
+     (go
+       (let [e (<! ch)]
+         (when-let [file (aget (.. e -target -files) 0)]
+           (let [reader (js/FileReader.)]
+             (-> reader
+                 .-onload
+                 (set! #(let [data (-> %
+                                       .-target
+                                       .-result)]
+                          (cb data (.-name file)))))
+             (read-fn reader file))))))))
 
 (defn load-text-file
-  [cb]
-  (let [i (gdom/createElement "input")
-        ch (async/chan)]
-    (-> i .-type (set! "file"))
-    (-> (gdom/getDocument) .-body (gdom/appendChild i))
-    (gstyle/showElement i false)
-    (-> i .-onchange (set! (fn [e]
-                             (async/put! ch e)
-                             (async/close! ch))))
-    (.click i)
-    (go
-      (let [e (<! ch)]
-        (when-let [file (aget (.. e -target -files) 0)]
-          (let [reader (js/FileReader.)]
-            (-> reader
-                .-onload
-                (set! #(let [data (-> %
-                                      .-target
-                                      .-result)]
-                         (cb data (.-name file)))))
-            (.readAsText reader file)))))))
+  ([cb] (load-text-file cb {}))
+  ([cb opts]
+   (load-file
+    cb
+    (fn [reader file]
+      (.readAsText reader file))
+    opts)))
+
+(defn load-file-name
+  "Asks the user to open a file, does nothing with its contents, and
+   asynchronously sets cell `c` to the filename."
+  ([c] (load-file c {}))
+  ([c opts]
+   (load-file
+    ;; We're not doing anything with the contents - all we need is the name.
+    (fn [contents name]
+      (log/debug "Received name" name)
+      (reset! c name))
+    (fn [reader file]
+      (.readAsArrayBuffer reader file))
+    opts)))
 
 (defn load-settings
   [_]
@@ -443,7 +609,8 @@
         (let [{:keys [time]} (reset! weather-params (:weather-params data))]
           (reset! display-params (:display-params data))
           (reset! movement-params (:movement-params data))
-          (swap! time-params assoc :displayed (:current time))))))))
+          (swap! time-params assoc :displayed (:current time))))))
+   {:extensions ".edn"}))
 
 (defn load-dtc
   [_]
@@ -469,7 +636,8 @@
                        :color "#FFFFFF"
                        :path flight-path
                        :lines lines
-                       :scale 0.5})))))))
+                       :scale 0.5})))))
+   {:extensions ".ini"}))
 
 (def zipbuilder-worker
   (let [worker (js/Worker. "worker.js")
@@ -489,9 +657,9 @@
                (async/>! output-ch (async/<! result-ch))
                (recur)))}))
 
-
 (defn multi-download
-  [{:keys [weather-params nx ny from to step progress cancel]}]
+  [{:keys [weather-params cloud-params weather-direction mission-name
+           nx ny from to step progress cancel]}]
   (let [cells (for [x (range nx)
                     y (range ny)]
                 [x y])
@@ -500,18 +668,25 @@
         steps (-> end (- start) (/ step) long inc)
         zip (js/JSZip.)
         folder (.folder zip "WeatherMapsUpdates")]
-    (go-loop [t start]
+    (go-loop [t start
+              first-done? false]
       (let [p (-> t (- start) (/ (- end start)) (min 1))]
         (log/debug "progress" p)
         (reset! progress p))
       (if (< end t)
         (-> zip
+            (.file (twx-filename mission-name)
+                   (twx-blob cloud-params weather-direction)
+                   #js {:binary true})
+            (.file (settings-filename mission-name)
+                   (settings-blob)
+                   #js {:binary true})
             (.generateAsync (if safari?
                               ;; https://github.com/Stuk/jszip/issues/279
                               #js {:type "blob" :mimeType "application/octet-stream"}
                               #js {:type "blob"}))
             (.then (fn [blob]
-                     (save-data blob "weather.zip")
+                     (save-data blob (str (mission-name-base mission-name) ".zip"))
                      (reset! progress nil))))
         (do
           (async/>! (:command-ch zipbuilder-worker)
@@ -519,47 +694,27 @@
                         (assoc-in [:time :current]
                                   (model/minutes->falcon-time t))
                         (assoc :cells cells)))
-          (let [data (async/<! (:output-ch zipbuilder-worker))]
+          (let [data (async/<! (:output-ch zipbuilder-worker))
+                blob (fmap/get-blob data nx ny)]
+            (when-not first-done?
+              (.file zip
+                     (str (mission-name-base mission-name) ".fmap")
+                     blob
+                     #js {:binary true}))
             (.file folder
                    (fmap-filename (model/minutes->falcon-time t))
-                   (fmap/get-blob data nx ny)
+                   blob
                    #js {:binary true}))
           (if @cancel
             (reset! progress nil)
-            (recur (+ t step))))))))
+            (recur (+ t step) true)))))))
 
 ;;; Help
 
-(let [help-states (cell {})]
-  (defelem help [{:keys []} contents]
-    (let [id (str (gensym))
-          content-id (str "content-" id)
-          img-id (str "img-" id)]
-      (div
-       :class "help"
-       (div
-        :id content-id
-        :fade-toggle (cell= (get help-states id))
-        :class "content"
-        :click #(swap! help-states assoc id false)
-        contents)
-       (div
-        :id img-id
-        :class "img"
-        :click #(swap! help-states
-                       (fn [hs]
-                         (merge (zipmap (keys hs) (repeat false))
-                                {id (not (get hs id))})))
-        ;; TODO; Don't make the help go away if the place the mouse
-        ;; has gone is the help content.
-        ;; :mouseout (fn []
-        ;;             (go (<! (async/timeout 1000))
-        ;;                 (swap! help-states assoc id false)))
-        "?")))))
-
 (defn with-help
   [help-path & contents]
-  (let [[css contents] (if (= (first contents) :css)
+  (let [help-ctor (get-in help/content help-path)
+        [css contents] (if (= (first contents) :css)
                          [(second contents) (drop 2 contents)]
                          [{} contents])
         open? (cell false)
@@ -569,7 +724,10 @@
     (div
      :class "help"
      :css (merge {:cursor "url(images/helpcursor.png) 4 4, auto"
-                  :border-bottom "dashed 1px blue"}
+                  :border-bottom (if help-ctor
+                                   "dashed 1px blue"
+                                   ;; This is to clue me in to write help.
+                                   "dashed 2px red")}
                  css)
      :click (fn [e]
               (when (swap! open? not)
@@ -578,14 +736,32 @@
      (div
       :fade-toggle open?
       :class "content"
-      (get-in help/content help-path))
+      :css {:white-space "normal"}
+      (if help-ctor
+        (help-ctor)
+        [(p "Help has not yet been written for this feature.")
+         (p (str help-path))]))
      contents)))
 
-(defn help-for
+(defn help-icon
   [help-path]
-  (help (or (get-in help/content help-path)
-            (p "Help content has not yet been written for this feature."))))
-
+  (let [help? (get-in help/content help-path)]
+    (with-help help-path
+      :css {:border-bottom "none"}
+      ;; A circle - maybe want to make this a control at some point
+      (div
+       :css {:width "18px"
+             :height "18px"
+             :color "white"
+             ;; The color change reminds me to write help
+             :background (if help? "darkblue" "darkred")
+             :border-radius "9px"
+             :text-align "center"
+             :display "inline-block"
+             :margin-right "3px"
+             :margin-left "3px"
+             :font-size "80%"}
+       "?"))))
 
 ;;; Utility
 
@@ -719,8 +895,10 @@
 ;;; Global Styles
 (def colors
   {:invalid       "#c70505"
+   :invalid-background "#fcc"
    :error-message "#c70505"
-   :edit "rgba(128,128,255,0.5)"})
+   :edit "rgba(128,128,255,0.5)"
+   :header-background "lightgray"})
 
 (def resize-handle-size 0.75)
 
@@ -824,6 +1002,25 @@
       :toggle visible
       :fade-toggle visible
       (div :class "control-container" children)))))
+
+(defelem control-subsection
+  "Renders a bordered box with a title bar."
+  [attributes children]
+  (let [{:keys [title]} attributes]
+    (div
+     (dissoc attributes :title)
+     :css {:border "solid 1px #444"
+           :margin "3px"
+           :padding-bottom "2px"}
+     (div
+      :css {:background (colors :header-background)
+            :margin "3px"
+            :padding "3px"
+            :padding-top 0
+            :font-size "90%"
+            :font-weight "bold"}
+      title)
+     children)))
 
 (defn forecast-section
   [{:keys [forecast-link? limit-time?]
@@ -1866,7 +2063,8 @@
                                        :dimensions
                                        :opacity
                                        :map
-                                       :flight-paths))]
+                                       :flight-paths
+                                       :multi-save))]
           (formula-of
            [weather-data display-params*]
            (update-grid weather-data display-params*)))))))
@@ -1954,6 +2152,22 @@
                 "Must be an integer greater than zero.")
      :value l}))
 
+(defn int-conformer
+  "Returns a conformer that will ensure a value parses to an int
+  between `from` and `to`, inclusive."
+  [from to]
+  (let [message (gstring/format "Must be an integer between %d and %d."
+                                from to)]
+    (fn [s]
+      (let [n (-> s js/Number. .valueOf)
+            l (long n)
+            valid? (and (int? n)
+                        (<= from n to))]
+        {:valid? valid?
+         :message (when-not valid?
+                    message)
+         :value l}))))
+
 (defelem validating-edit
   "Renders a control that will provide feedback as to whether the
   contents are valid.
@@ -1973,21 +2187,28 @@
    _]
   (let [attrs (dissoc attrs :source :conform :update :width :fmt :placeholder :css)
         interim (cell nil)
+        fmt (or fmt str)
         parsed (formula-of
-                [interim]
+                [interim source]
                 (if interim
                   (conform interim)
-                  {:valid? true
-                   :value @source}))
+                  (conform (fmt source))
+                  #_{:valid? true
+                     :value @source}))
         update (or update
                    #(swap! source
                            (constantly %)))
         state (cell :set)
-        fmt (or fmt str)]
+        focused? (cell false)
+        valid? (formula-of
+                [parsed]
+                (empty? (:message parsed)))]
     (div
      attrs
      :css (merge {:position "relative"
-                  :overflow "show"}
+                  :overflow "show"
+                  :white-space "nowrap"
+                  :width (or width "125px")}
                  css)
      (input :type "text"
             :placeholder placeholder
@@ -2011,13 +2232,18 @@
                        (dosync
                         (reset! interim nil)
                         (reset! state :set))))
-            :css (cell= {"font-style" (if (= state :editing)
-                                        "italic"
-                                        "")
-                         "color" (if (:valid? parsed)
-                                   ""
-                                   (colors :invalid))
-                         "width" (or width "initial")})
+            :focus #(reset! focused? true)
+            :blur #(reset! focused? false)
+            :css (cell= {:font-style (if (= state :editing)
+                                       "italic"
+                                       "")
+                         :color (if valid?
+                                  ""
+                                  (colors :invalid))
+                         :background (if valid?
+                                       ""
+                                       (colors :invalid-background))
+                         :width (or width "125px")})
             :value (formula-of
                     [interim source]
                     (if interim
@@ -2026,23 +2252,27 @@
      (img :src "images/error.png"
           :title (cell= (:message parsed))
           :css (formula-of
-                [parsed]
-                {:width "14px"
-                 :position "absolute"
-                 :right "3px"
-                 :top "5px"
-                 :opacity (if (:valid? parsed)
-                             "0"
-                             "1")}))
+                [valid?]
+                {:position "relative"
+                 :right "20px"
+                 :width "14px"
+                 :margin-left "3px"
+                 :margin-bottom "2px"
+                 :vertical-align "middle"
+                 :opacity (if valid?
+                            "0"
+                            "1")}))
      (div
-      :toggle (-> parsed :message empty? not cell=)
+      :toggle (cell= (and (not valid?) focused?))
       :css {:position "absolute"
             :top "24px"
             :font-size "75%"
             :background "rgba(221,221,221,0.95)"
             :border "1px solid #888"
-            :width "200%"
-            :padding-left "2px"}
+            :min-width "100%"
+            :max-width "500px"
+            :padding-left "2px"
+            :z-index 1}
       (cell= (:message parsed))))))
 
 ;; TODO: We could consider using a lens here instead of separate
@@ -2127,6 +2357,7 @@
            (merge (image-button-style down)
                   css))
      :mousedown (fn [e]
+                  (log/debug "mouse down in image button")
                   (let [up (fn up-fn [e]
                              (.removeEventListener js/document "mouseup" up-fn)
                              (reset! down false))]
@@ -2583,11 +2814,129 @@
                  (div :class "edit-field"
                       (edit-field weather-params [:categories category param metric]))))))))))
 
+(defn cloud-controls
+  [opts]
+  (control-section
+   :title (with-help [:clouds :overview] "Clouds and contrails")
+   :id (gensym)
+   (help-icon [:clouds :buttons])
+   (button
+    :css {:margin-right "3px"}
+    :click #(reset! cloud-params (random-cloud-params))
+    "Randomize")
+   (button
+    :click #(save-twx @cloud-params
+                      (:direction @movement-params)
+                      (get-in @display-params [:multi-save :mission-name]))
+    "Save .TWX")
+   (table
+    (tr (td (with-help [:clouds :cumulus-coverage]
+              "Cumulus coverage"))
+        (td :css {:text-align "right"}
+            "5%")
+        (let [l (path-lens cloud-params
+                           [:cumulus-density])]
+          (td (input
+               :type "range"
+               :value l
+               :min 5
+               :max 50
+               :change #(reset! l (long @%)))))
+        (td "50%"))
+    (tr (td (with-help [:clouds :cumulus-size]
+              "Cumulus size"))
+        (td :css {:text-align "right"}
+            (div "More/" (br) "Smaller"))
+        (let [l (path-lens cloud-params
+                           [:cumulus-size])]
+          (td (input
+               :type "range"
+               :value (-> l (* 20) long cell=)
+               :min 0
+               :max 100
+               :change #(reset! l (/ (long @%) 20.0)))))
+        (td (div "Fewer/" (br) "Larger"))))
+   (table
+    (thead
+     (let [header (fn [path words]
+                    (td (map #(div
+                               (with-help path
+                                 %))
+                             words)))]
+       (tr :css {:text-align "center"}
+           (td)
+           (header [:clouds :visibility] ["Visibility"])
+           (header [:clouds :stratus-base] ["Stratus" "Base"])
+           (header [:clouds :stratus-thickness] ["Stratus" "Thickness"])
+           (header [:clouds :cumulus-base] ["Cumulus" "Base"])
+           (header [:clouds :contrails] ["Contrails"]))))
+    (tbody
+     (for [category [:sunny :fair :poor :inclement]]
+       (tr (td
+            :class (str "weather-type " (name category))
+            :css {:background-color (let [[r g b] (weather-color category)]
+                                      (str "rgb(" r "," g "," b ")"))}
+            (type-key->name category))
+           (for [column [:visibility :stratus-base :stratus-thickness :cumulus-base :contrails]]
+             (td
+              (let [path [column category]
+                    literal-style {:font-family "monospace"
+                                   :padding-left "3px"
+                                   :padding-top "2px"
+                                   :font-size "93%"}]
+                (cond
+                  (and (= :stratus-thickness column)
+                       (#{:sunny :fair} category))
+                  (div :css literal-style "0")
+
+                  (= [:stratus-base :inclement] path)
+                  (div
+                   :css literal-style
+                   (formula-of
+                    [cloud-params]
+                    (get-in cloud-params
+                            [:stratus-base :poor])))
+
+                  :else
+                  (let [l (path-lens
+                           cloud-params
+                           path)]
+                    (div
+                     :css {:margin-right "5px"}
+                     (validating-edit
+                      :source l
+                      :conform (case column
+                                 :cumulus-base (int-conformer -1000 99999)
+                                 :visibility (int-conformer 0 30)
+                                 (int-conformer 0 99999))
+                      :placeholder (case column
+                                     :visibility "vis (nm)"
+                                     :stratus-thickness "thickness"
+                                     "altitude")
+                      :width (if (= column :visibility)
+                               "35px"
+                               "55px")
+                      :update (fn [v]
+                                (dosync
+                                 (reset! l v)
+                                 (cond
+                                   (= column :stratus-base)
+                                   (swap! cloud-params
+                                          update-in
+                                          [:cumulus-base category]
+                                          (fn [cb] (min (- v 1000) cb)))
+
+                                   (= column :cumulus-base)
+                                   (swap! cloud-params
+                                          update-in
+                                          [:stratus-base category]
+                                          (fn [sb] (max (+ v 1000) sb)))))))))))))))))))
+
 (defn advanced-controls
   [_]
   (control-section
    :id "advanced-params-section"
-   :title "Advanced Controls"
+   :title "Advanced configuration"
    (control-layout
     [["X Offset"         [:origin 0] {:help-path [:origin :x]}]
      ["Y Offset"         [:origin 1] {:help-path [:origin :y]}]
@@ -2681,117 +3030,130 @@
     (control-section
      :id "load-save-controls"
      :title "Load/save"
-     (div
-      :class "button-container"
-      (a :click (fn []
-                  (save-fmap @weather-params @weather-data)
-                  (move 1))
+     (control-subsection
+      :title (with-help [:serialization-controls :save-single-files]
+               "Load/Save individual files")
+      (div
+       :css {:display "flex"
+             :flex-direction "row"
+             :vertical-align "middle"}
+       #_(help-icon [:display-controls :save-single-file-buttons])
+       (div
+        :class "button-container"
+        (a :click #(save-fmap @weather-params @weather-data)
+           :class "button"
+           "Save Current as FMAP"))
+       (div
+        :class "button-container"
+        (a
          :class "button"
-         "Save Current as FMAP")
-      "(Steps forward in time)")
-     (div
-      :class "button-container"
-      :css {:display "inline-block"}
-      (cell=
-       (let [blob (js/Blob. (clj->js [(pr-str {:weather-params weather-params
-                                               :movement-params movement-params
-                                               :display-params display-params
-                                               :revision revision})])
-                            #js{:type "text/plain"})
-             url (-> js/window .-URL (.createObjectURL blob))]
-         (a :href url
-            :download "weathergen-settings.edn"
-            :class "button"
-            "Save Settings"))))
-     (div
-      :class "button-container"
-      :css {:display "inline-block"}
-      (button :class "button" :click load-settings "Load Settings"))
-     (div
+         :click #(save-twx @cloud-params
+                           (:direction @movement-params)
+                           (get-in @display-params
+                                   [:multi-save :mission-name]))
+         "Save .TWX"))
+       (div
+        :class "button-container"
+        (cell=
+         (let [blob (settings-blob)
+               url (-> js/window .-URL (.createObjectURL blob))]
+           (a :href url
+              :click save-settings
+              :download (settings-filename (get-in display-params [:multi-save :mission-name]))
+              :class "button"
+              "Save Settings"))))
+       (div
+        :class "button-container"
+        (a :class "button" :click load-settings "Load Settings"))))
+     (control-subsection
+      :title (with-help [:serialization-controls :multi-save :overview]
+               "Save weather package")
+      (let [row (fn [label help-path edit]
+                  (div
+                   :css {:display "flex"
+                         :flex-direction "row"
+                         :margin "0 2px 3px 2px"}
+                   (div
+                    :css {:white-space "nowrap"
+                          :width "50px"
+                          :margin-left "3px"}
+                    (with-help help-path
+                      label))
+                   edit))]
+        [(row "Mission:"
+              [:serialization-controls :multi-save :mission-name]
+              (let [l (path-lens display-params [:multi-save :mission-name])]
+                [(validating-edit
+                  :conform (fn [v]
+                             (let [valid? (not-empty v)]
+                               {:valid? valid?
+                                :message (when-not valid?
+                                           "Mission name should be set when saving a weather package. It will default to 'weathergen'.")
+                                :value v}))
+                  :source l
+                  :placeholder "Name of mission file")
+                 (div
+                  :css {:margin-left "8px"
+                        ;; Weird fix for Chrome bug, where clicking
+                        ;; was getting eaten (I think) by the
+                        ;; relatively-positioned error image in the
+                        ;; text box to the left.
+                        :z-index 2}
+                  (image-button :src "images/file-open.png"
+                                :width "14px"
+                                :title "Load Mission File (.cam/.tac)"
+                                :click (fn [_]
+                                         (log/debug "loading file name")
+                                         (load-file-name l {:extensions ".cam,.tac,.trn"}))))]))
+         (row "From:"
+              [:serialization-controls :multi-save :from]
+              (time-entry display-params [:multi-save :from]))
+         (row "To:"
+              [:serialization-controls :multi-save :to]
+              (time-entry display-params [:multi-save :to]))
+         (row "Step:"
+              [:serialization-controls :multi-save :step]
+              (validating-edit
+               :width "32px"
+               :source (path-lens display-params [:multi-save :step])
+               :conform conform-positive-integer
+               :fmt str
+               :placeholder "60"))])
       (let [progress (cell nil)
             cancelling? (cell false)]
-        [(inline
-          {}
-          (button :css (formula-of
-                        [progress cancelling?]
-                        {:width "105px"
-                         :background
-                         (if (and (not cancelling?) (some? progress))
-                           (let [pct (long (* 100 progress))]
-                             (gstring/format "linear-gradient(to right, lightblue, lightblue %f%%, white %f%%)"
-                                             pct pct))
-                           "white")})
-                  :class "button"
-                  :click (fn []
-                           (if @progress
-                             (dosync
-                              (reset! cancelling? true))
-                             (do
-                               (reset! cancelling? false)
-                               (multi-download {:weather-params @weather-params
-                                                :from (get-in @display-params [:multi-save :from])
-                                                :to (get-in @display-params [:multi-save :to])
-                                                :step (get-in @display-params [:multi-save :step])
-                                                :progress progress
-                                                :cancel cancelling?
-                                                :nx (-> @weather-params :cell-count first)
-                                                :ny (-> @weather-params :cell-count second)}))))
-                  (formula-of
-                   [progress cancelling?]
-                   (cond
-                     (and progress cancelling?) "Cancelling..."
-                     progress "Cancel"
-                     :else "Generate FMAPs"))))
-         (inline
-          {}
-          (with-help [:display-controls :multi-save :from]
-            "from"))
-         (formula-of
-          [progress]
-          (if progress
-            (div
-             :css {:margin-right "3px"
-                   :display "inline-block"}
-             (-> display-params :multi-save :from format-time cell=))
-            (inline
-             {}
-             (time-entry display-params [:multi-save :from]))))
-         (inline
-          {}
-          (with-help [:display-controls :multi-save :to]
-            "to"))
-         (formula-of
-          [progress]
-          (if progress
-            (div
-             :css {:margin-right "3px"
-                   :display "inline-block"}
-             (-> display-params :multi-save :to format-time cell=))
-            (inline
-             {}
-             (time-entry display-params [:multi-save :to]))))
-         (inline
-          {}
-          (with-help [:display-controls :multi-save :step]
-            :css {:display "inline-block"}
-            "step by"))         (formula-of
-          [progress]
-          (if progress
-            (div
-             :css {:margin-right "3px"
-                   :display "inline-block"}
-             (-> display-params :multi-save :step cell=))
-            (inline
-             {}
-             (validating-edit
-              :css {:display "inline-block"
-                    :whitespace "nowrap"}
-              :width "32px"
-              :source (-> display-params :multi-save :step cell=)
-              :update #(swap! display-params assoc-in [:multi-save :step] %)
-              :conform conform-positive-integer
-              :fmt str
-              :placeholder "60"))))
+        [(button :css (formula-of
+                       [progress cancelling?]
+                       {:width "105px"
+                        :background
+                        (if (and (not cancelling?) (some? progress))
+                          (let [pct (long (* 100 progress))]
+                            (gstring/format "linear-gradient(to right, lightblue, lightblue %f%%, white %f%%)"
+                                            pct pct))
+                          "white")})
+                 :class "button"
+                 :click (fn []
+                          (if @progress
+                            (dosync
+                             (reset! cancelling? true))
+                            (do
+                              (reset! cancelling? false)
+                              (multi-download {:weather-params @weather-params
+                                               :cloud-params @cloud-params
+                                               :weather-direction (:direction @movement-params)
+                                               :mission-name (get-in @display-params [:multi-save :mission-name])
+                                               :from (get-in @display-params [:multi-save :from])
+                                               :to (get-in @display-params [:multi-save :to])
+                                               :step (get-in @display-params [:multi-save :step])
+                                               :progress progress
+                                               :cancel cancelling?
+                                               :nx (-> @weather-params :cell-count first)
+                                               :ny (-> @weather-params :cell-count second)}))))
+                 (formula-of
+                  [progress cancelling?]
+                  (cond
+                    (and progress cancelling?) "Cancelling..."
+                    progress "Cancel"
+                    :else "Save Package")))
          (if-not safari?
            []
            (div
@@ -2827,7 +3189,14 @@
   [{:keys []}]
   (control-section
    :title "Test"
-   (let [path (cell {:color "FFFFFF"})
+   (let [c1 (cell "hi")
+         c2 (cell true)]
+     [(when-tpl c2
+        (.log js/console "Evaluated")
+        (span c1))
+      (button :click #(swap! c2 not) "toggle")
+      (button :click #(swap! c1 str "x") "x")])
+   #_(let [path (cell {:color "FFFFFF"})
          current-color (cell= (:color path))]
      (triple-border
       :inner current-color
@@ -3040,6 +3409,7 @@
    :weather-parameters weather-parameters
    :forecast-section forecast-section
    :weather-type-configuration weather-type-configuration
+   :cloud-controls cloud-controls
    :wind-stability-parameters wind-stability-parameters
    :weather-override-parameters weather-override-parameters
    :advanced-controls advanced-controls

@@ -9,3 +9,5 @@
   []
   (start-figwheel!)
   (cljs-repl))
+
+(in-ns 'boot.user)

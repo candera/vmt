@@ -86,10 +86,6 @@ body {
     vertical-align: bottom;
 }
 
-#load-save-controls button {
-    margin-right: 10px;
-}
-
 svg {
     display: inline-block;
 }

@@ -17,5 +17,5 @@
         ui/default-weather-params)
 
 (ui/weather-page
-   :test-section {})
+ :test-section {})
 

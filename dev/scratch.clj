@@ -934,3 +934,97 @@
     (println n "," (fmap/read-float is))))
 
 
+(require :reload '[weathergen.twx :as twx])
+
+(defn twx-load
+  [path]
+  (-> path
+      java.net.URI.
+      java.nio.file.Paths/get
+      java.nio.file.Files/readAllBytes
+      java.nio.ByteBuffer/wrap
+      twx/parse))
+
+(defn twx-diff
+  [path1 path2]
+  (let [t1 (twx-load path1)
+        t2 (twx-load path2)]
+    (clojure.pprint/pprint (take 2 (clojure.data/diff t1 t2)))))
+
+(doseq [n (range 1 9)]
+  (println n "vs" (inc n))
+  (twx-diff (format "file:///Users/candera/GDrive/weather-%d.twx"
+                    n)
+            (format "file:///Users/candera/GDrive/weather-%d.twx"
+                    (inc n)))
+  (println))
+
+(clojure.pprint/pprint (twx-load "file:///Users/candera/GDrive/weather-1.twx"))
+
+(twx-diff "file:///Users/candera/GDrive/default.twx"
+          "file:///Users/candera/GDrive/sunny-vis-1.twx")
+
+(clojure.pprint/pprint
+ (buf/with-byte-order :little-endian
+   (buf/read* (-> "file:///Users/candera/GDrive/weather-3.twx"
+                  java.net.URI.
+                  java.nio.file.Paths/get
+                  java.nio.file.Files/readAllBytes
+                  java.nio.ByteBuffer/wrap)
+              twx/twx)))
+
+(->> "file:///Users/candera/GDrive/weather-3.twx"
+    twx-load
+    (into (sorted-map))
+    clojure.pprint/pprint)
+
+(twx-diff "file:///tmp/default.twx"
+          "file:///tmp/sunny-vis-1.twx")
+
+(select-keys (twx-load "file:///tmp/default.twx")
+             [:fog-start :fog-end])
+
+(twx-diff #_"file:///tmp/default.twx"
+          "file:///tmp/sunny-vis-1.twx"
+          #_"file:///tmp/sunny-vis-2.twx"
+          #_"file:///tmp/sunny-vis-3.twx" ; Previously lower, back to
+                                        ; where #1 is
+          "file:///tmp/sunny-vis-4.twx" ; Previously 0, back to where
+                                        ; #1 is
+          )
+
+(def twx-def (twx-load "file:///tmp/default.twx"))
+
+(twx-diff "file:///tmp/sunny-vis-10.twx"
+          "file:///tmp/sunny-vis-20.twx")
+
+(doseq [n [0 10 20 30]]
+  (let [twx (twx-load (format "file:///tmp/sunny-vis-%d.twx" n))]
+    (println n
+             :start (get-in twx [:fog-start :sunny])
+             :end (get-in twx [:fog-end :sunny]))))
+
+(twx-diff "file:///tmp/stratus.twx"
+          "file:///tmp/contrail.twx")
+
+(clojure.pprint/pprint
+ (select-keys (twx-load "file:///tmp/stratus.twx")
+              [:stratus-thick :stratus-layer :cumulus-layer]))
+
+(as-> "file:///tmp/twx-test.twx" ?
+  (twx-load ?)
+  (into (sorted-map) ?)
+  (dissoc ? :current-condition :wth-turbulence)
+  (clojure.pprint/pprint ?))
+
+(as-> "file:///tmp/default.twx" ?
+  (twx-load ?)
+  (into (sorted-map) ?)
+  #_(dissoc ? :current-condition :wth-turbulence)
+  (clojure.pprint/pprint ?))
+
+(as-> "file:///tmp/random.twx" ?
+  (twx-load ?)
+  (into (sorted-map) ?)
+  (dissoc ? :current-condition :wth-turbulence)
+  (clojure.pprint/pprint ?))
