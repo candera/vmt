@@ -3211,7 +3211,7 @@
   [_]
   (control-section
    :id "flightpath-controls"
-   :title (with-help [:flightpath :section]
+   :title (with-help [:flight-paths :section]
             "Flight Paths")
    (let [indexes (formula-of
                   [display-params]
@@ -3237,7 +3237,7 @@
                                     (tr
                                      (or row-attrs [])
                                      (td
-                                      (with-help [:display-params :flight-paths]
+                                      (with-help [:flight-paths k]
                                         (label :for id l)))
                                      (td
                                       (input :id id
@@ -3268,7 +3268,7 @@
                                            :editing? false)))
                   focus-later (fn [e] (with-timeout 0 (.focus e)))]
               (tbody
-               (tr (td (with-help [:display-params :flight-paths :name]
+               (tr (td (with-help [:flight-paths :name]
                          "Name"))
                    (td (formula-of
                         {p path}
@@ -3299,7 +3299,7 @@
                (checkbox-row "Show?" :show? {})
                (checkbox-row "Lines?" :show-lines? {})
                (checkbox-row "Labels?" :show-labels? {})
-               (tr (td (with-help [:flightpath :color]
+               (tr (td (with-help [:flight-paths :color]
                          "Color"))
                    (td
                     (div
@@ -3308,7 +3308,7 @@
                      (color-picker
                       :value (cell= (:color path))
                       :change #(swap! path assoc :color @%)))))
-               (tr (td (with-help [:flightpath :scale]
+               (tr (td (with-help [:flight-paths :scale]
                          "Size"))
                    (td
                     (input
