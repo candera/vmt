@@ -138,6 +138,54 @@
   (buf/with-byte-order :little-endian
     (buf/read data twx)))
 
+;; Separated out just to make the below easier to read.
+(def current-condition-template
+  {:stratus-z -35000.0,
+   :pressure {:min 0,
+              :mid 0,
+              :max 0},
+   :temp {:min 0,
+          :mid 0,
+          :max 0},
+   :wind-speed {:min 0,
+                :mid 0,
+                :max 0,
+                :thresh 0},
+   :fog-start-above-layer 6000.0,
+   :stratus-factor {:sunny 1.0,
+                    :fair 0.0,
+                    :poor 0.0,
+                    :inclement 0.0},
+   :horizon-blend 0.5,
+   :cumulus-base 0,
+   :fog-end-above-layer 120000.0,
+   :last-tod 0,
+   :sky-fog-level 0.99,
+   :cumulus-z 0.0,
+   :sky-fog-start-elev 0.0,
+   :stratus-base 35000,
+   :contrail-high 40000.0,
+   :contrail-base 34000,
+   :sky-fog-end-elev 0.0,
+   :contrail-low 34000.0,
+   :fog-end-below-layer 159232.16,
+   :stratus-thick 0,
+   :temperature 0.0,
+   :earth-color {:y 48995.688,
+                 :L 0.0,
+                 :r 0.54509807,
+                 :v 0.0,
+                 :Z 5.003981E-39,
+                 :s 2.832474E-16,
+                 :g 0.63529414,
+                 :h 0.0,
+                 :Y 0.0,
+                 :b 0.76862746,
+                 :X 1.4E-45,
+                 :x 0.0},
+   :haze-min 0.0,
+   :fog-start-below-layer 3991.4685})
+
 ;; This is the default weather data. We just overwrite bits of it to
 ;; come up with our file.
 (def twx-template
@@ -155,52 +203,7 @@
                    :poor 7500,
                    :inclement 2000},
    :cumulus-size 0.98130846,
-   :current-condition
-   {:stratus-z -35000.0,
-    :pressure {:min 0,
-               :mid 0,
-               :max 0},
-    :temp {:min 0,
-           :mid 0,
-           :max 0},
-    :wind-speed {:min 0,
-                 :mid 0,
-                 :max 0,
-                 :thresh 0},
-    :fog-start-above-layer 6000.0,
-    :stratus-factor {:sunny 1.0,
-                     :fair 0.0,
-                     :poor 0.0,
-                     :inclement 0.0},
-    :horizon-blend 0.5,
-    :cumulus-base 0,
-    :fog-end-above-layer 120000.0,
-    :last-tod 0,
-    :sky-fog-level 0.99,
-    :cumulus-z 0.0,
-    :sky-fog-start-elev 0.0,
-    :stratus-base 35000,
-    :contrail-high 40000.0,
-    :contrail-base 34000,
-    :sky-fog-end-elev 0.0,
-    :contrail-low 34000.0,
-    :fog-end-below-layer 159232.16,
-    :stratus-thick 0,
-    :temperature 0.0,
-    :earth-color {:y 48995.688,
-                  :L 0.0,
-                  :r 0.54509807,
-                  :v 0.0,
-                  :Z 5.003981E-39,
-                  :s 2.832474E-16,
-                  :g 0.63529414,
-                  :h 0.0,
-                  :Y 0.0,
-                  :b 0.76862746,
-                  :X 1.4E-45,
-                  :x 0.0},
-    :haze-min 0.0,
-    :fog-start-below-layer 3991.4685},
+   :current-condition current-condition-template,
    :duration 20,
    :fog-end {:sunny 200000.0,
              :fair 159232.16,
@@ -362,11 +365,23 @@
              :cumulus-size (:cumulus-size cloud-params)
              :fog-start (->> cloud-params :visibility (per-weather-type fog-start))
              :fog-end (->> cloud-params :visibility (per-weather-type fog-end))
-             :stratus-thick {:sunny 0
-                             :fair 0
-                             :poor (->> cloud-params :stratus-thickness :poor)
-                             :inclement (->> cloud-params :stratus-thickness :inclement)}
-             :stratus-layer (:stratus-base cloud-params)
+             ;; The TWX file is goofy here: stratus-layer indicates
+             ;; the top of the stratus, and stratus-thickness says how
+             ;; far down it goes. Weirder, it has to been 0 thickness
+             ;; for sunny and fair, and the tops for poor and
+             ;; inclement have to be the same.
+             :stratus-layer (let [{:keys [stratus-base stratus-top]} cloud-params
+                                  {:keys [sunny fair poor inclement]} stratus-base]
+                              {:sunny sunny
+                               :fair fair
+                               :poor stratus-top
+                               :inclement stratus-top})
+             :stratus-thick (let [{:keys [stratus-base stratus-top]} cloud-params
+                                  {:keys [sunny fair poor inclement]} stratus-base]
+                              {:sunny 0
+                               :fair 0
+                               :poor (- stratus-top poor)
+                               :inclement (- stratus-top inclement)})
              :cumulus-layer (:cumulus-base cloud-params)
              :contrail-layer (:contrails cloud-params))))
 

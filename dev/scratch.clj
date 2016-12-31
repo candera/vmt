@@ -1028,3 +1028,6 @@
   (into (sorted-map) ?)
   (dissoc ? :current-condition :wth-turbulence)
   (clojure.pprint/pprint ?))
+
+(-> twx/twx-template
+    (assoc-in [:stratus-layer :poor] ))

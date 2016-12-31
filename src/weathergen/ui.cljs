@@ -142,25 +142,19 @@
 (defc weather-params nil)
 
 (def default-cloud-params
-  {:cumulus-density 5 ; Percent: 5-50
-   :cumulus-size 0.98 ; 0 (Thick) - 5.0 (Scattered)
+  {:cumulus-density 5                   ; Percent: 5-50
+   :cumulus-size 0.98                   ; 0 (Thick) - 5.0 (Scattered)
    :visibility {:sunny     30
                 :fair      20
                 :poor      10
                 :inclement 5}
    :stratus-base {:sunny     35000
                   :fair      30000
-                  :poor      13300
-                  ;; TODO: inclement and fair are tied together in
-                  ;; the BMS UI - do the same?
-                  :inclement :poor}
-   :stratus-thickness {;; TODO: Sunny and fair thickness not exposed
-                       ;; in UI. Do they have an effect if set in the
-                       ;; TWX?
-                       :sunny     nil
-                       :fair      nil
-                       :poor      2000
-                       :inclement 7000}
+                  :poor      11300
+                  :inclement 6300}
+   ;; Sunny and fair cannot have thick stratus layers, and poor and
+   ;; inclement must have the same top
+   :stratus-top 13300
    :cumulus-base {:sunny     0
                   :fair      8000
                   :poor      7500
@@ -184,16 +178,19 @@
 (defn random-cloud-params
   "Returns a plausible but random set of global weather paramaters."
   []
-  (let [stratus-base (let [[p f s] (sort (repeatedly
-                                          3
-                                          #(random-int
-                                            1500
-                                            40000
-                                            500)))]
+  (let [stratus-base (let [[i p f s] (sort (repeatedly
+                                            4
+                                            #(random-int
+                                              1500
+                                              40000
+                                              500)))]
                        {:sunny s
                         :fair f
                         :poor p
-                        :inclement p})]
+                        :inclement i})
+        stratus-top (+ (max (:poor stratus-base)
+                            (:inclement stratus-base))
+                       (random-int 500 10000 500))]
     {:cumulus-density (random-int 5 50)
      :cumulus-size (* 5.0 (rand))
      :visibility (let [[i p f s] (sort (repeatedly
@@ -204,13 +201,9 @@
                     :poor p
                     :inclement i})
      :stratus-base stratus-base
-     :stratus-thickness (let [[p i] (sort (repeatedly
-                                           2
-                                           #(random-int 500 10000 500)))]
-                          {:poor p
-                           :inclement i})
+     :stratus-top stratus-top
      ;; The BMS UI enforces that cumulus base must be at least 1000
-     ;; feet below the stratus base, so we do, too
+     ;; feet below the stratus top, so we do, too
      :cumulus-base (let [[i p f] (sort (repeatedly
                                         3
                                         #(random-int 1000 22000 1000)))]
@@ -219,12 +212,10 @@
                                 :fair
                                 (- 1000)
                                 (min f))
-                      :poor (-> stratus-base
-                                :poor
+                      :poor (-> stratus-top
                                 (- 1000)
                                 (min p))
-                      :inclement (-> stratus-base
-                                     :inclement
+                      :inclement (-> stratus-top
                                      (- 1000)
                                      (min i))})
      :contrails (let [[i p f s] (sort (repeatedly
@@ -2130,27 +2121,51 @@
               " "))
            (:ui item)))))])))
 
+(defn parse-int
+  "Parses an int from a string, returning the int, or nil if it cannot
+  be parsed as an int."
+  [s]
+  (let [n (-> s js/Number. .valueOf)
+        l (long n)]
+    (when (int? n)
+      l)))
+
+;; Conformers are functions that take a cell containing a string value
+;; to conform, and return a cell (presumably a formula of the input
+;; cell) that yields a map containing keys:
+;;
+;; :valid? - True if the value is acceptable
+;; :message - Text describing the problem if any
+;; :value - The parsed
+;;
+;; Note that even if :valid? is false, value may still contain a
+;; value, for those cases wher ethe value could be parsed, but is not
+;; actually valid, like an altitude that's out of bounds. This is
+;; useful in cases where the invalid value is affected by other
+;; values, and may become valid due to changes elsewhere.
+
 (defn conform-nonnegative-integer
   [s]
-  (let [n (js/Number. s)
-        l (long n)
-        valid? (and (int? l)
-                    (not (neg? l)))]
-    {:valid? valid?
-     :message (when-not valid?
-                "Must be whole number, greather than or equal to zero.")
-     :value l}))
+  (formula-of
+   [s]
+   (let [parsed (parse-int s)
+         valid? (and parsed
+                     (not (neg? parsed)))]
+     {:valid? valid?
+      :message (when-not valid?
+                 "Must be whole number, greather than or equal to zero.")
+      :value parsed})))
 
 (defn conform-positive-integer
   [s]
-  (let [n (-> s js/Number. .valueOf)
-        l (long n)
-        valid? (and (int? n)
-                    (pos? l))]
-    {:valid? valid?
-     :message (when-not valid?
-                "Must be an integer greater than zero.")
-     :value l}))
+  (formula-of
+   [s]
+   (let [parsed (parse-int s)
+         valid? (and parsed (pos? parsed))]
+     {:valid? valid?
+      :message (when-not valid?
+                 "Must be an integer greater than zero.")
+      :value parsed})))
 
 (defn int-conformer
   "Returns a conformer that will ensure a value parses to an int
@@ -2159,22 +2174,53 @@
   (let [message (gstring/format "Must be an integer between %d and %d."
                                 from to)]
     (fn [s]
-      (let [n (-> s js/Number. .valueOf)
-            l (long n)
-            valid? (and (int? n)
-                        (<= from n to))]
-        {:valid? valid?
-         :message (when-not valid?
-                    message)
-         :value l}))))
+      (formula-of
+       [s]
+       (let [parsed (parse-int s)
+             valid? (and parsed (<= from parsed to))]
+         {:valid? parsed
+          :message (when-not parsed
+                     message)
+          :value parsed})))))
+
+(defn float-conformer
+  "Returns a conformer that will ensure a value parses to a floating
+  point number between `from` and `to`, inclusive."
+  [from to]
+  (let [message (gstring/format "Must be a number between %f and %f."
+                                from to)]
+    (fn [s]
+      (formula-of
+       [s]
+       (let [n (-> s js/Number. .valueOf)
+             valid? (<= from n to)]
+         {:valid? valid?
+          :message (when-not valid?
+                     message)
+          :value (when-not (js/isNaN n)
+                   n)})))))
+
+(defn compose-conformers
+  "Given two conformers, returns a conformer that will validate only
+  if both of them do. Checks c1 first."
+  [c1 c2]
+  (fn [s]
+    (let [p1 (c1 s)
+          p2 (c2 s)]
+     (formula-of
+      [p1 p2]
+      (if (:valid? p1)
+        p2
+        p1)))))
 
 (defelem validating-edit
   "Renders a control that will provide feedback as to whether the
   contents are valid.
 
-  :conform : A function that returns a map with keys `:valid?`,
-  `:value`, and `:message`, expressing whether the value is valid, and
-  if not, why not.
+  :conform : A function of one argument, a cell containing the current
+  value of the control. Returns a call whose value is a map with keys
+  `:valid?`, `:value`, and `:message`, expressing whether the value is
+  valid, and if not, why not.
   :fmt : A function that turns the validated value into a displayable
   string
   :source: A cell containing the source data for the input control.
@@ -2188,13 +2234,12 @@
   (let [attrs (dissoc attrs :source :conform :update :width :fmt :placeholder :css)
         interim (cell nil)
         fmt (or fmt str)
-        parsed (formula-of
-                [interim source]
-                (if interim
-                  (conform interim)
-                  (conform (fmt source))
-                  #_{:valid? true
-                     :value @source}))
+        value (formula-of
+               [interim source]
+               (if interim
+                 interim
+                 (fmt source)))
+        parsed (conform value)
         update (or update
                    #(swap! source
                            (constantly %)))
@@ -2210,58 +2255,67 @@
                   :white-space "nowrap"
                   :width (or width "125px")}
                  css)
-     (input :type "text"
-            :placeholder placeholder
-            :input #(do
-                      (reset! interim @%)
-                      (if (and (:valid? @parsed)
-                               (= (:value @parsed) @source))
-                        (dosync
-                         (reset! state :set)
-                         (reset! interim nil))
-                        (reset! state :editing)))
-            :change #(do
-                       (let [p @parsed]
-                         (when (:valid? p)
-                           (update (:value p))
-                           (dosync
-                            (reset! interim nil)
-                            (reset! state :set)))))
-            :keyup (fn [e]
-                     (when (= ESCAPE_KEY (.-keyCode e))
-                       (dosync
-                        (reset! interim nil)
-                        (reset! state :set))))
-            :focus #(reset! focused? true)
-            :blur #(reset! focused? false)
-            :css (cell= {:font-style (if (= state :editing)
-                                       "italic"
-                                       "")
-                         :color (if valid?
-                                  ""
-                                  (colors :invalid))
-                         :background (if valid?
-                                       ""
-                                       (colors :invalid-background))
-                         :width (or width "125px")})
-            :value (formula-of
-                    [interim source]
-                    (if interim
-                      interim
-                      (fmt source))))
-     (img :src "images/error.png"
-          :title (cell= (:message parsed))
-          :css (formula-of
-                [valid?]
-                {:position "relative"
-                 :right "20px"
-                 :width "14px"
-                 :margin-left "3px"
-                 :margin-bottom "2px"
-                 :vertical-align "middle"
-                 :opacity (if valid?
-                            "0"
-                            "1")}))
+     (let [i (input :type "text"
+                    :placeholder placeholder
+                    :input #(do
+                              (reset! interim @%)
+                              (reset! state :editing)
+                              #_(if (and (:valid? @parsed)
+                                         (= (:value @parsed) @source))
+                                  (dosync
+                                   (reset! state :set)
+                                   (reset! interim nil))
+                                  (reset! state :editing)))
+                    :change #(let [p @parsed]
+                               (when-let [v (:value p)]
+                                 (dosync
+                                  (update v)
+                                  (reset! interim nil)
+                                  (reset! state :set))))
+                    :keyup (fn [e]
+                             (when (= ESCAPE_KEY (.-keyCode e))
+                               (dosync
+                                (reset! interim nil)
+                                (reset! state :set))))
+                    :focus #(reset! focused? true)
+                    :blur #(let [p @parsed]
+                             (log/debug "blur happening" :p p)
+                             (dosync
+                              (reset! focused? false)
+                              (when-let [v (:value p)]
+                                (log/debug "blur has value" :v v)
+                                (update v)
+                                (reset! interim nil)
+                                (reset! state :set)
+                                (log/debug "blur done"))))
+                    :css (formula-of
+                          [state valid?]
+                          {:font-style (if (= state :editing)
+                                         "italic"
+                                         "")
+                           :color (if valid?
+                                    ""
+                                    (colors :invalid))
+                           :background (if valid?
+                                         ""
+                                         (colors :invalid-background))
+                           :width (or width "125px")})
+                    :value value)]
+       [i
+        (img :src "images/error.png"
+             :title (cell= (:message parsed))
+             :click #(.focus i)
+             :css (formula-of
+                   [valid?]
+                   {:position "relative"
+                    :right "20px"
+                    :width "14px"
+                    :margin-left "3px"
+                    :margin-bottom "2px"
+                    :vertical-align "middle"
+                    :opacity (if valid?
+                               "0"
+                               "1")}))])
      (div
       :toggle (cell= (and (not valid?) focused?))
       :css {:position "absolute"
@@ -2284,34 +2338,37 @@
    :width "65px"
    :fmt format-time
    :placeholder "dd/hhmm"
-   :conform #(let [[all dd hh mm] (re-matches #"(\d+)/(\d\d)(\d\d)" %)
-                   day            (->> dd js/Number. long)
-                   hour           (->> hh js/Number. long)
-                   min            (->> mm js/Number. long)
-                   valid?         (and dd hh mm
-                                       (int? day)
-                                       (int? hour)
-                                       (int? min)
-                                       (<= 0 hour 23)
-                                       (<= 0 min 59))
-                   val            {:day    day
-                                   :hour   hour
-                                   :minute min}
-                   over-max?      (and valid?
-                                       (-> @weather-params :time :max)
-                                       (< (-> @weather-params
-                                              :time
-                                              :max
-                                              model/falcon-time->minutes)
-                                          (model/falcon-time->minutes val)))]
-               {:valid? (and valid? (not over-max?))
-                :message (cond
-                           (not valid?) "Time must be in the format 'dd/hhmm'"
-                           over-max? (str "Time cannot be set later than "
-                                          (-> @weather-params :time :max format-time)))
-                :value {:day    day
-                        :hour   hour
-                        :minute min}})))
+   :conform (fn [val]
+              (formula-of
+               [val]
+               (let [[all dd hh mm] (re-matches #"(\d+)/(\d\d)(\d\d)" val)
+                     day            (->> dd js/Number. long)
+                     hour           (->> hh js/Number. long)
+                     min            (->> mm js/Number. long)
+                     valid?         (and dd hh mm
+                                         (int? day)
+                                         (int? hour)
+                                         (int? min)
+                                         (<= 0 hour 23)
+                                         (<= 0 min 59))
+                     val            {:day    day
+                                     :hour   hour
+                                     :minute min}
+                     over-max?      (and valid?
+                                         (-> @weather-params :time :max)
+                                         (< (-> @weather-params
+                                                :time
+                                                :max
+                                                model/falcon-time->minutes)
+                                            (model/falcon-time->minutes val)))]
+                 {:valid? (and valid? (not over-max?))
+                  :message (cond
+                             (not valid?) "Time must be in the format 'dd/hhmm'"
+                             over-max? (str "Time cannot be set later than "
+                                            (-> @weather-params :time :max format-time)))
+                  :value {:day    day
+                          :hour   hour
+                          :minute min}})))))
 
 (defn edit-field
   ([c path] (edit-field c path {}))
@@ -2814,6 +2871,82 @@
                  (div :class "edit-field"
                       (edit-field weather-params [:categories category param metric]))))))))))
 
+(defmulti cloud-param-conformer
+  (fn [params column category] column))
+
+(defmethod cloud-param-conformer :default
+  [params column category]
+  (int-conformer 0 99999))
+
+(defmethod cloud-param-conformer :visibility
+  [params column category]
+  (float-conformer 0 30))
+
+(defmethod cloud-param-conformer :stratus-base
+  [params column category]
+  (fn [val-c]
+    (let [conformer (int-conformer 0 99999)
+          conformed (conformer val-c)]
+     (formula-of
+      [params conformed]
+      (let [stratus-top (:stratus-top params)]
+        (cond
+          (not (:valid? conformed))
+          conformed
+
+          (and (#{:poor :inclement} category)
+               (< stratus-top (:value conformed)))
+          {:valid? false
+           :message "Stratus base must be below stratus top."
+           :value (:value conformed)}
+
+          :else
+          conformed))))))
+
+(defmethod cloud-param-conformer :stratus-top
+  [params column category]
+  (fn [val-c]
+    (let [ic (int-conformer 0 99999)
+          conformed (ic val-c)]
+      (formula-of
+       [params conformed]
+       (let [stratus-base (max (get-in params [:stratus-base :poor])
+                               (get-in params [:stratus-base :inclement]))]
+         (cond
+           (not (:valid? conformed))
+           conformed
+
+           (and (#{:poor :inclement} category)
+                (< (:value conformed) stratus-base))
+           {:valid? false
+            :message "Stratus base must be below stratus top."
+            :value (:value conformed)}
+
+           :else
+           conformed))))))
+
+(defmethod cloud-param-conformer :cumulus-base
+  [params column category]
+  (fn [val-c]
+    (let [ic (int-conformer 0 99999)
+          conformed (ic val-c)]
+      (formula-of
+       [params conformed]
+       (let [stratus-top (if (#{:sunny :fair} category)
+                           (get-in params [:stratus-base category])
+                           (:stratus-top params))]
+         (cond
+           (not (:valid? conformed))
+           conformed
+
+           (< (- stratus-top 1000) (:value conformed))
+           {:valid? false
+            :message "Cumulus base must be at least 1000 feet below stratus top."
+            :value (:value conformed)}
+
+           :else
+           conformed))))))
+
 (defn cloud-controls
   [opts]
   (control-section
@@ -2844,9 +2977,8 @@
                :change #(reset! l (long @%)))))
         (td "50%"))
     (tr (td (with-help [:clouds :cumulus-size]
-              "Cumulus size"))
-        (td :css {:text-align "right"}
-            (div "More/" (br) "Smaller"))
+              "Cumulus qty/size"))
+        (td (div "Fewer/" (br) "Larger"))
         (let [l (path-lens cloud-params
                            [:cumulus-size])]
           (td (input
@@ -2855,7 +2987,8 @@
                :min 0
                :max 100
                :change #(reset! l (/ (long @%) 20.0)))))
-        (td (div "Fewer/" (br) "Larger"))))
+        (td :css {:text-align "right"}
+            (div "More/" (br) "Smaller"))))
    (table
     (thead
      (let [header (fn [path words]
@@ -2867,7 +3000,7 @@
            (td)
            (header [:clouds :visibility] ["Visibility"])
            (header [:clouds :stratus-base] ["Stratus" "Base"])
-           (header [:clouds :stratus-thickness] ["Stratus" "Thickness"])
+           (header [:clouds :stratus-top] ["Stratus" "Top"])
            (header [:clouds :cumulus-base] ["Cumulus" "Base"])
            (header [:clouds :contrails] ["Contrails"]))))
     (tbody
@@ -2877,7 +3010,7 @@
             :css {:background-color (let [[r g b] (weather-color category)]
                                       (str "rgb(" r "," g "," b ")"))}
             (type-key->name category))
-           (for [column [:visibility :stratus-base :stratus-thickness :cumulus-base :contrails]]
+           (for [column [:visibility :stratus-base :stratus-top :cumulus-base :contrails]]
              (td
               (let [path [column category]
                     literal-style {:font-family "monospace"
@@ -2885,52 +3018,43 @@
                                    :padding-top "2px"
                                    :font-size "93%"}]
                 (cond
-                  (and (= :stratus-thickness column)
+                  (and (= :stratus-top column)
                        (#{:sunny :fair} category))
+                  (div :css literal-style
+                       (formula-of
+                        [cloud-params]
+                        (get-in cloud-params [:stratus-base category])))
+
+                  (= [:cumulus-base :sunny] [column category])
                   (div :css literal-style "0")
 
-                  (= [:stratus-base :inclement] path)
+                  (= [:stratus-top :inclement] path)
                   (div
                    :css literal-style
                    (formula-of
                     [cloud-params]
-                    (get-in cloud-params
-                            [:stratus-base :poor])))
+                    (:stratus-top cloud-params)))
 
                   :else
                   (let [l (path-lens
                            cloud-params
-                           path)]
+                           (if (= column :stratus-top)
+                             [:stratus-top]
+                             path))]
                     (div
                      :css {:margin-right "5px"}
                      (validating-edit
                       :source l
-                      :conform (case column
-                                 :cumulus-base (int-conformer -1000 99999)
-                                 :visibility (int-conformer 0 30)
-                                 (int-conformer 0 99999))
+                      :fmt (if (= column :visibility)
+                             #(.toFixed % 1)
+                             str)
+                      :conform (cloud-param-conformer cloud-params column category)
                       :placeholder (case column
                                      :visibility "vis (nm)"
-                                     :stratus-thickness "thickness"
                                      "altitude")
                       :width (if (= column :visibility)
                                "35px"
-                               "55px")
-                      :update (fn [v]
-                                (dosync
-                                 (reset! l v)
-                                 (cond
-                                   (= column :stratus-base)
-                                   (swap! cloud-params
-                                          update-in
-                                          [:cumulus-base category]
-                                          (fn [cb] (min (- v 1000) cb)))
-
-                                   (= column :cumulus-base)
-                                   (swap! cloud-params
-                                          update-in
-                                          [:stratus-base category]
-                                          (fn [sb] (max (+ v 1000) sb)))))))))))))))))))
+                               "55px"))))))))))))))
 
 (defn advanced-controls
   [_]
@@ -3085,11 +3209,13 @@
               (let [l (path-lens display-params [:multi-save :mission-name])]
                 [(validating-edit
                   :conform (fn [v]
-                             (let [valid? (not-empty v)]
-                               {:valid? valid?
-                                :message (when-not valid?
-                                           "Mission name should be set when saving a weather package. It will default to 'weathergen'.")
-                                :value v}))
+                             (formula-of
+                              [v]
+                              (let [valid? (not-empty v)]
+                                {:valid? valid?
+                                 :message (when-not valid?
+                                            "Mission name should be set when saving a weather package. It will default to 'weathergen'.")
+                                 :value v})))
                   :source l
                   :placeholder "Name of mission file")
                  (div

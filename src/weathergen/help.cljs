@@ -84,7 +84,7 @@
      #(p "The name of the mission file (.cam or .tac) for which
      weather is being generated. This value will be used to name the
      generated .twx and .fmap files. Use the open file button to the
-     right to chose the mission file from the filesystem.")}}
+     right to choose the mission file from the filesystem.")}}
 
    :display-controls
    {:map
@@ -392,24 +392,30 @@ forward and backward in time. ")
     :cumulus-size
     (fn []
       [(p "Affects the appearance of the cumulus clouds. Positions
-    further to the left will result in more, smaller clouds. Positions
-    to the right will result in fewer, larger clouds.")])
+    further to the right will result in more, smaller clouds. Positions
+    to the left will result in fewer, larger clouds.")])
 
     :visibility
     #(p "The visibility (in nm) for each weather type.")
 
     :stratus-base
-    #(p "The altitude (in feet) of the stratus layer. The stratus base
-    for a given weather category must be at least 1000 feet above the
-    corresponding cumulus base.")
+    #(p "The altitude (in feet) of the base stratus
+    layer. The top of the stratus layer must be at least 1000 feet
+    above the cumulus layer.")
 
-    :stratus-thickness
-    #(p "The thickness (in feet) of the stratus layer.")
+    :stratus-top
+    #(p "The altitude (in feet) of the top of the stratus layer. The
+    top of the stratus layer must be at least 1000 feet above the
+    cumulus layer. The top of the stratus layer must be the same for
+    poor and inclement weather, and sunny and fair weather must have a
+    zero-thickness stratus layer - i.e. the top and base must be the
+    same.")
 
     :cumulus-base
     #(p "The altitude (in feet) of the cumulus layer. Set to zero for
     no cumulus clouds. The cumulus base for a given weather category
-    must be at least 1000 feet below the corresponding stratus base.")
+    must be at least 1000 feet below the top of the corresponding
+    stratus base.")
 
     :contrails
     #(p "The altitude at which condensation trails will form.")}})
