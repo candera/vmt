@@ -529,9 +529,7 @@
 (defn twx-blob
   "Returns a JS blob containing TWX file data."
   [cloud-params direction]
-  (let [buf (buf/allocate twx/buffer-size)]
-    (twx/populate-buffer buf cloud-params direction)
-    (js/Blob. #js [buf])))
+  (js/Blob. #js [(twx/get-twx cloud-params direction)]))
 
 (defn save-twx
   "Initiates a download of a TWX file."

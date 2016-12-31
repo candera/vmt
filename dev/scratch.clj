@@ -1023,7 +1023,7 @@
   #_(dissoc ? :current-condition :wth-turbulence)
   (clojure.pprint/pprint ?))
 
-(as-> "file:///tmp/random.twx" ?
+(as-> "file:///tmp/weathergen.twx" ?
   (twx-load ?)
   (into (sorted-map) ?)
   (dissoc ? :current-condition :wth-turbulence)

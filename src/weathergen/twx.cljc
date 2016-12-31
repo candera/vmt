@@ -1,6 +1,7 @@
 (ns weathergen.twx
   "A library for reading and writing TWX files."
-  (:require [octet.core :as buf]))
+  (:require [octet.core :as buf]
+            [octet.buffer]))
 
 (def buffer-size 764)
 
@@ -135,7 +136,8 @@
   "Given a ByteBuffer (JVM) or a ArrayBuffer (CLJS) over the contents
   of a TWX file, returns a data structure with the parsed contents."
   [data]
-  (buf/with-byte-order :little-endian
+  ;; buf/with-byte-order fails under advanced compilation
+  (binding [octet.buffer/*byte-order* :little-endian]
     (buf/read data twx)))
 
 ;; Separated out just to make the below easier to read.
@@ -385,13 +387,18 @@
              :cumulus-layer (:cumulus-base cloud-params)
              :contrail-layer (:contrails cloud-params))))
 
-(defn populate-buffer
-  "Given a ByteBuffer (JVM) or an ArrayBuffer (CLJS) and global
-  weather parameters, populate the buffer with the contents of a TWX
-  file."
-  [buf cloud-params direction]
-  (buf/with-byte-order :little-endian
-    (buf/write! buf (params->twx cloud-params direction) twx)))
+(defn get-twx
+  "Given global weather parameters and weather direction, return a
+  ByteBuffer (JVM) or an ArrayBuffer (CLJS) populated with the
+  contents of a TWX file."
+  [cloud-params direction]
+  (let [buf (buf/allocate buffer-size)]
+    ;; Unfortunately, there seems to be a problem with using
+    ;; buf/with-byte-order. Something something ClojureScript and
+    ;; macros.
+    (binding [octet.buffer/*byte-order* :little-endian]
+      (buf/write! buf (params->twx cloud-params direction) twx))
+    buf))
 
 (comment
   ;; JVM
