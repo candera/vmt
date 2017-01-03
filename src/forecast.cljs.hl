@@ -18,7 +18,8 @@
 
 (let [{:keys [weather-params
               display-params
-              movement-params]
+              movement-params
+              cloud-params]
        :as data}
       (-> js/window
           .-location
@@ -28,6 +29,7 @@
   #_(log/debug "decoded" data)
   (dosync
    (reset! ui/weather-params weather-params)
+   (reset! ui/cloud-params cloud-params)
    (reset! ui/display-params
            (assoc
             display-params
