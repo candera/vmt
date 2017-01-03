@@ -263,9 +263,13 @@ forward and backward in time. ")
    :forecast
    {:overview
     #(p "Displays the weather forecast for the selected location in
-   the weather grid. The 'shareable forecast' link goes to a view of
-   the weather that can be handed out to other pilots. It does not
-   allow editing, nor advancing the weather past the current time.")
+   the weather grid.")
+    :share
+    #(p "The 'shareable forecast' link goes to a view of the weather
+   that can be handed out to other pilots. It does not allow editing,
+   nor advancing the weather past the current time, but does include
+   the (potentially inaccurate) forecast, any loaded DTC files, wind
+   stability regions, etc. etc.")
     :time
     #(p "The date and time of the forecast conditions. Forecasts
      are (as in the real world) not perfectly accurate.")

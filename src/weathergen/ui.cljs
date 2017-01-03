@@ -1111,20 +1111,22 @@
                    ab)))))
      (if-not forecast-link?
        []
-       (a :href (formula-of
-                 [weather-params
-                  display-params
-                  movement-params
-                  cloud-params]
-                 (str "forecast.html?data="
-                      (with-time "encoding shareable forecast"
-                        (encoding/data->base64
-                         {:weather-params weather-params
-                          :display-params display-params
-                          :movement-params movement-params
-                          :cloud-params cloud-params}))))
-          :target "_blank"
-          "Shareable Forecast"))
+       [(a :css {:margin-left "5px"}
+           :href (formula-of
+                  [weather-params
+                   display-params
+                   movement-params
+                   cloud-params]
+                  (str "forecast.html?data="
+                       (with-time "encoding shareable forecast"
+                         (encoding/data->base64
+                          {:weather-params weather-params
+                           :display-params display-params
+                           :movement-params movement-params
+                           :cloud-params cloud-params}))))
+           :target "_blank"
+           "Shareable Forecast")
+        (help-icon [:forecast :share])])
      (formula-of
       [pressure-unit
        forecast
