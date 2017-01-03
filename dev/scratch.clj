@@ -1031,3 +1031,15 @@
 
 (-> twx/twx-template
     (assoc-in [:stratus-layer :poor] ))
+
+(as-> "file:///tmp/stratus.twx" ?
+  (twx-load ?)
+  (into (sorted-map) ?)
+  #_(dissoc ? :current-condition :wth-turbulence)
+  (clojure.pprint/pprint ?))
+
+(twx-diff "file:///tmp/stratus.twx"
+          "file:///tmp/weathergen.twx" )
+
+(twx-diff "file:///tmp/stratus.twx"
+          "file:///tmp/stratus3.twx" )

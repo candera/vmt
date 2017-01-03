@@ -195,7 +195,11 @@
      :cumulus-size (* 5.0 (rand))
      :visibility (let [[i p f s] (sort (repeatedly
                                         4
-                                        #(random-int 0 30)))]
+                                        ;; Under 2, we allow a decimal point
+                                        #(let [r (random-int 0 30)]
+                                           (if (< r 2)
+                                             (/ (random-int 0 20) 10.0)
+                                             r))))]
                    {:sunny s
                     :fair f
                     :poor p
@@ -824,12 +828,77 @@
   [inhg]
   (* inhg mbar-per-inhg))
 
+(defn format-type
+  "Returns a string describing a weather type."
+  [type]
+  (case type
+    :sunny "Sunny"
+    :fair "Fair"
+    :poor "Poor"
+    :inclement "Incl."))
+
 (defn format-pressure
   "Format a pressure in inches Mercury as appropriate for the unit."
   [inhg unit]
   (if (= :inhg unit)
     (.toFixed inhg 2)
     (-> inhg inhg->mbar (.toFixed 0))))
+
+(defn format-temperature
+  "Format a temperature string"
+  [temp]
+  (.toFixed temp 0))
+
+(defn format-wind
+  "Format a wind string."
+  [wind]
+  (let [{:keys [speed heading]} wind]
+    (str (gstring/format "%02d" (.toFixed speed 0))
+         "kts@"
+         (gstring/format "%03d" heading))))
+
+(defn format-visibility
+  "Format a visibility so that only numbers below 1 get decimal places."
+  [vis]
+  (if (< vis 2)
+    (.toFixed vis 1)
+    (.toFixed vis 0)))
+
+(defn cloud-descriptions
+  [cloud-params type]
+  (if (= type :sunny)
+    ["SKC"]
+    (let [stratus-base (get-in cloud-params [:stratus-base type])
+          cumulus-base (get-in cloud-params [:cumulus-base type])
+          cumulus-density (:cumulus-density cloud-params)
+          density-str (if (< 25 cumulus-density)
+                        "SCT"
+                        "FEW")
+          cumulus-level (gstring/format "%03d" (-> cumulus-base (/ 100) long))
+          stratus-level (gstring/format "%03d" (-> stratus-base (/ 100) long))]
+      (cond-> []
+        (and (pos? cumulus-base)
+             (< cumulus-base stratus-base))
+        (conj (str density-str cumulus-level " "))
+
+        (not= type :fair)
+        (conj (str "OVC" stratus-level))))))
+
+(defn format-cloud
+  "Returns a string describing the clouds for the given weather type."
+  [cloud-params type]
+  (->> (cloud-descriptions cloud-params type)
+       (interpose " ")
+       (reduce str)))
+
+(defn format-precipitation
+  "Returns a string describing precipitation."
+  [temperature type]
+  (if (= type :inclement)
+    (if (pos? temperature)
+      "Rain"
+      "Snow")
+    "None"))
 
 (defn format-time
   [{:keys [day hour minute]}]
@@ -1015,7 +1084,7 @@
   [{:keys [forecast-link? limit-time?]
     :as opts}]
   (control-section
-   :title (with-help [:forecast] "Forecast")
+   :title (with-help [:forecast :overview] "Forecast")
    :id "forecast-section"
    (div
     :id "forecast"
@@ -1057,26 +1126,37 @@
           "Shareable Forecast"))
      (formula-of
       [pressure-unit
-       forecast]
+       forecast
+       cloud-params]
       (table
        (thead
-        (tr (td "Day/Time")
-            (td "Weather Type")
-            (td "Pressure")
-            (td "Temperature")
-            (td "Wind Speed")
-            (td "Wind Heading")))
+        (tr (td (with-help [:forecast :time] "Day/Time"))
+            (td (with-help [:forecast :type] "Type"))
+            (td (with-help [:forecast :pressure] "Press"))
+            (td (with-help [:forecast :temperature] "Temp"))
+            (td :css {:text-align "center"}
+                (with-help [:forecast :wind] "Wind"))
+            (td (with-help [:forecast :visibility] "Vis"))
+            (td (with-help [:forecast :precipitation] "Precip"))
+            (td (with-help [:forecast :cloud] "Cloud"))))
        (tbody
         (if-not forecast
-          (tr (td :colspan 6
+          (tr (td :colspan 8
                   "No location is selected. Choose a location from the list, or click on the weather map to select one."))
-          (for [[time weather] forecast]
+          (for [[time weather] forecast
+                :let [{:keys [pressure temperature wind type]} weather]]
             (tr (td (format-time time))
-                (td (-> weather :type type-key->name))
-                (td (-> weather :pressure (format-pressure pressure-unit)))
-                (td (-> weather :temperature (.toFixed 1)))
-                (td (-> weather :wind :speed (.toFixed 0)))
-                (td (-> weather :wind :heading (.toFixed 0)))))))))))))
+                (td :css {:padding-right "3px"}
+                    (format-type type))
+                (td (format-pressure pressure pressure-unit))
+                (td :css {:text-align "center"}
+                    (format-temperature temperature))
+                (td :css {:padding-right "5px"}
+                    (format-wind wind))
+                (td :css {:padding-right "3px"}
+                    (format-visibility (get-in cloud-params [:visibility type])))
+                (td (format-precipitation temperature type))
+                (td (format-cloud cloud-params type))))))))))))
 
 ;;; Grid interaction
 
@@ -1282,66 +1362,67 @@
                             (* 0.5 tail-step))))))))))
 
 (defn info-overlay
-  [hover-cell weather-data pressure-unit nx ny]
-  (if-not hover-cell
-    []
-    (let [width 8
-          height 5
-          {:keys [x y]} hover-cell
-          {:keys [pressure temperature wind type]} (get weather-data [x y])
-          {:keys [speed heading]} wind]
-      #_(log/debug :x x
-                 :y y
-                 :hover-cell hover-cell
-                 :pressure pressure
-                 :temperature temperature
-                 :wind wind
-                 :type type)
-      [(svg/rect
-        :attr {:fill "black"
-               :opacity "0.5"
-               :pointer-events "none"}
-        :x x
-        :y y
-        :width 1
-        :height 1)
-       (svg/g
-        :id "info-overlay"
-        :toggle (cell= (some? hover-cell))
-        :attr {:transform (gstring/format
-                           "translate(%d, %d)"
-                           (if (< x (- nx width))
-                             (+ x 1)
-                             (- x width))
-                           (if (< y (- nx height))
-                             (inc y)
-                             (- y height)))}
-        (svg/rect
-         :attr {:fill         "white"
-                :opacity      "0.85"
-                :stroke       "black"
-                :stroke-width "0.1px"}
-         :x 0
-         :y 0
-         :width width
-         :height height)
-        (svg/g
-         :css {:font-size "6%"}
-         (for [[line label value] [[0 "Pressure" (format-pressure pressure
-                                                                  pressure-unit)]
-                                   [1 "Temp" (.toFixed temperature 1)]
-                                   [2 "Wind" (str (.toFixed speed 0)
-                                                "kts@"
-                                                (gstring/format "%03d" heading))]
-                                   [3 "Weather" (type-key->name type)]]]
-           [(svg/text
-              :x 0.2
-              :y (+ line 1.2)
-              (str label ":"))
-            (svg/text
-             :x 4
-             :y (+ line 1.2)
-             value)])))])))
+  [hover-cell weather-data pressure-unit nx ny cloud-params]
+  (let [{:keys [x y]} hover-cell]
+    (if (not (and x y (<= 0 x (dec nx)) (<= 0 y (dec ny))))
+      []
+      (let [width 10
+            height 7
+            {:keys [pressure temperature wind type]} (get weather-data [x y])
+            {:keys [speed heading]} wind]
+        #_(log/debug :x x
+                     :y y
+                     :hover-cell hover-cell
+                     :pressure pressure
+                     :temperature temperature
+                     :wind wind
+                     :type type)
+        [(svg/rect
+          :attr {:fill "black"
+                 :opacity "0.5"
+                 :pointer-events "none"}
+          :x x
+          :y y
+          :width 1
+          :height 1)
+         (svg/g
+          :id "info-overlay"
+          :toggle (cell= (some? hover-cell))
+          :attr {:transform (gstring/format
+                             "translate(%d, %d)"
+                             (if (< x (- nx width))
+                               (+ x 1)
+                               (- x width))
+                             (if (< y (- nx height))
+                               (inc y)
+                               (- y height)))}
+          (svg/rect
+           :attr {:fill         "white"
+                  :opacity      "0.85"
+                  :stroke       "black"
+                  :stroke-width "0.1px"}
+           :x 0
+           :y 0
+           :width width
+           :height height)
+          (svg/g
+           :css {:font-size "6%"}
+           (let [cloud-descriptions (cloud-descriptions cloud-params type)]
+             (for [[line label value] [[0 "Pressure" (format-pressure pressure
+                                                                      pressure-unit)]
+                                       [1 "Temp" (format-temperature temperature)]
+                                       [2 "Wind" (format-wind wind)]
+                                       [3 "Vis" (format-visibility (get-in cloud-params [:visibility type]))]
+                                       [4 "Precip" (format-precipitation temperature type)]
+                                       [5 "Cloud" (format-cloud cloud-params type)]]]
+               [(svg/text
+                 :x 0.2
+                 :y (+ line 1.2)
+                 (str label ":"))
+                (svg/text
+                 :x 4
+                 :y (+ line 1.2)
+                 value)]))))]))))
 
 (defn adjust-west
   "Returns a `bounds` with its west edge adjusted by `dx` units from
@@ -1936,11 +2017,12 @@
                                     nil
                                     hover-cell))
         info-overlay             (formula-of
-                                  [effective-hover-cell weather-data pressure-unit]
+                                  [effective-hover-cell weather-data pressure-unit cloud-params]
                                   (info-overlay effective-hover-cell
                                                 weather-data
                                                 pressure-unit
-                                                nx ny))]
+                                                nx ny
+                                                cloud-params))]
     (with-let [elem (svg/svg
                      :id "grid"
                      (-> attrs
@@ -3044,7 +3126,7 @@
                      (validating-edit
                       :source l
                       :fmt (if (= column :visibility)
-                             #(.toFixed % 1)
+                             format-visibility
                              str)
                       :conform (cloud-param-conformer cloud-params column category)
                       :placeholder (case column

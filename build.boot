@@ -5,6 +5,7 @@
                  [org.clojure/clojurescript "1.9.293"]
                  [adzerk/boot-cljs          "1.7.228-2"]
                  [adzerk/boot-reload        "0.4.13"]
+                 ;;[hoplon/javelin "3.9.0"]
                  [hoplon/hoplon             "6.0.0-alpha17"]
                  [org.clojure/core.async    "0.2.395"
                   :exclusions [org.clojure/tools.reader]]

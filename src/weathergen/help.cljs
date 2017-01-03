@@ -261,8 +261,46 @@ forward and backward in time. ")
    there are in the weather forecast.")
 
    :forecast
-   #(p "Displays the weather forecast for the selected location in the
+   {:overview
+    #(p "Displays the weather forecast for the selected location in the
    weather grid.")
+    :time
+    #(p "The date and time of the forecast conditions. Forecasts
+     are (as in the real world) not perfectly accurate.")
+    :type
+    #(p "The forecast Falcon weather type at the selected location.")
+    :pressure
+    #(p "The forecast barometric pressure at the selected location.")
+    :temperature
+    #(p "The forecast temperature (in degrees C) at the selected location.")
+    :wind
+    #(p "The forecast wind strength and direction at the selected
+     location. E.g. '05kts@270' is a 5-knot wind from the west. Note
+     that wind directions indicate the direction the wind is coming
+     from, not the direction it is blowing towards.")
+    :visibility
+    #(p "The forecast visibility (in nm) at the selected location.")
+    :precipitation
+    #(p "The forecast precipitation at the selected location.")
+    :cloud
+    (fn []
+      [(p "The forecast cloud cover at the selected location.")
+       (dl
+        (dt "SKC")
+        (dd "Sky is clear - no significant clouds. A thin 'stratus'
+        layer may be present.")
+        (dt "FEWxxx")
+        (dd "Cumulus clouds covering less than 25% of the sky are
+        present, with a base at xxx hundreds of feet. E.g. FEW050
+        indicates cumulus clouds present at 5000 feet MSL.")
+        (dt "SCTxxx")
+        (dd "Cumulus clouds covering between 25% and 50% of the sky
+        are present, with a base at xxx hundreds of feet. E.g. SCT050
+        indicates cumulus clouds present at 5000 feet MSL.")
+        (dt "OVCxxx")
+        (dd "A solid overcast layer is present with a base at xxx
+        hundreds of feet. E.g. OVC050 indicates a solid overcast
+        starting at 5000 feet MSL."))])}
 
    :weather-overrides
    {:overview
