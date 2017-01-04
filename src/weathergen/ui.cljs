@@ -3265,14 +3265,10 @@
          "Save .TWX"))
        (div
         :class "button-container"
-        (cell=
-         (let [blob (settings-blob)
-               url (-> js/window .-URL (.createObjectURL blob))]
-           (a :href url
-              :click save-settings
-              :download (settings-filename (get-in display-params [:multi-save :mission-name]))
-              :class "button"
-              "Save Settings"))))
+        (a
+         :class "button"
+         :click save-settings
+         "Save Settings"))
        (div
         :class "button-container"
         (a :class "button" :click load-settings "Load Settings"))))
