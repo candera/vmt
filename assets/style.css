@@ -140,7 +140,7 @@ rect.inclement {
 #forecast thead tr td {
     background: lightgray;
     border-bottom: 1px solid black;
-    padding-right: 7px;
+    /* padding-right: 7px; */
 }
 
 #forecast table tr:nth-child(even) {

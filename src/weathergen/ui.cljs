@@ -1131,35 +1131,39 @@
       [pressure-unit
        forecast
        cloud-params]
-      (table
-       (thead
-        (tr (td (with-help [:forecast :time] "Day/Time"))
-            (td (with-help [:forecast :type] "Type"))
-            (td (with-help [:forecast :pressure] "Press"))
-            (td (with-help [:forecast :temperature] "Temp"))
-            (td :css {:text-align "center"}
-                (with-help [:forecast :wind] "Wind"))
-            (td (with-help [:forecast :visibility] "Vis"))
-            (td (with-help [:forecast :precipitation] "Precip"))
-            (td (with-help [:forecast :cloud] "Cloud"))))
-       (tbody
-        (if-not forecast
-          (tr (td :colspan 8
-                  "No location is selected. Choose a location from the list, or click on the weather map to select one."))
-          (for [[time weather] forecast
-                :let [{:keys [pressure temperature wind type]} weather]]
-            (tr (td (format-time time))
-                (td :css {:padding-right "3px"}
-                    (format-type type))
-                (td (format-pressure pressure pressure-unit))
-                (td :css {:text-align "center"}
-                    (format-temperature temperature))
-                (td :css {:padding-right "5px"}
-                    (format-wind wind))
-                (td :css {:padding-right "3px"}
-                    (format-visibility (get-in cloud-params [:visibility type])))
-                (td (format-precipitation temperature type))
-                (td (format-cloud cloud-params type))))))))))))
+      (let [td1 (fn [& args] (apply td
+                                    :css {:padding-right "3px"
+                                          :padding-left "3px"}
+                                    args))
+            td2 (fn [& args] (apply td
+                                    :css {:padding-right "3px"
+                                          :padding-left "3px"
+                                          :text-align "center"}
+                                    args))]
+        (table
+         (thead
+          (tr (td1(with-help [:forecast :time] "Day/Time"))
+              (td1 (with-help [:forecast :type] "Type"))
+              (td1 (with-help [:forecast :pressure] "Press"))
+              (td2 (with-help [:forecast :temperature] "Temp"))
+              (td2 (with-help [:forecast :wind] "Wind"))
+              (td2 (with-help [:forecast :visibility] "Vis"))
+              (td1 (with-help [:forecast :precipitation] "Precip"))
+              (td1 (with-help [:forecast :cloud] "Cloud"))))
+         (tbody
+          (if-not forecast
+            (tr (td :colspan 8
+                    "No location is selected. Choose a location from the list, or click on the weather map to select one."))
+            (for [[time weather] forecast
+                  :let [{:keys [pressure temperature wind type]} weather]]
+              (tr (td1 (format-time time))
+                  (td1 (format-type type))
+                  (td1 (format-pressure pressure pressure-unit))
+                  (td2 (format-temperature temperature))
+                  (td1 (format-wind wind))
+                  (td2 (format-visibility (get-in cloud-params [:visibility type])))
+                  (td1 (format-precipitation temperature type))
+                  (td1 (format-cloud cloud-params type)))))))))))))
 
 ;;; Grid interaction
 
@@ -3562,6 +3566,7 @@
   [{:keys [] :as attrs}
    contents]
   (h/body
+   :css {:margin "8px"}
    (div
     :id "app"
     (div :id "titlebar"
@@ -3647,7 +3652,7 @@
               :overflow (if portrait? "show" "hidden")
               :height (if portrait?
                         "100%"
-                        (str (- window-height 72) "px"))})
+                        (str (- window-height 90) "px"))})
        (div
         :class "left-column"
         :css (formula-of
