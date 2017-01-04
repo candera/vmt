@@ -39,12 +39,12 @@
         .twx extension.")
 
         (dt "Save Settings")
-        (dd "Saves a .settings.edn file with all the values from the
+        (dd "Saves a .wgs.edn file with all the values from the
         WeatherGen application. Use this to preserve the state of
         WeatherGen so you can later pick up where you left off.")
 
         (dt "Load Settings")
-        (dd "Loads a previously saved .settings.edn file. Note that
+        (dd "Loads a previously saved .wgs.edn file. Note that
         this will overwrite any settings currently in use - be sure to
         save first if necessary."))])
 

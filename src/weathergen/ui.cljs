@@ -523,7 +523,7 @@
 
 (defn settings-filename
   [mission-name]
-  (str (mission-name-base mission-name) ".settings.edn"))
+  (str (mission-name-base mission-name) ".wgs.edn"))
 
 (defn save-settings
   [_]
