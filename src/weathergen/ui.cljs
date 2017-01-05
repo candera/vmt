@@ -597,7 +597,16 @@
    (fn [contents name]
      (let [data (-> contents
                     reader/read-string
-                    (model/upgrade revision))]
+                    (model/upgrade revision))
+           ;; Conversions for the upgrade from the first public
+           ;; release to the second
+           data (cond-> data
+                  (-> data :display-params :multi-save nil?)
+                  (assoc-in [:display-params :multi-save]
+                            {:mission-name nil
+                             :from         (-> data :weather-params :time :current)
+                             :to           (-> data :weather-params :time :current (model/add-time (* 6 60)))
+                             :step         (-> data :movement-params :step)}))]
        (dosync
         (let [{:keys [time]} (reset! weather-params (:weather-params data))]
           (reset! display-params (:display-params data))
