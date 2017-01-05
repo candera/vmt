@@ -873,6 +873,10 @@
     (.toFixed vis 1)
     (.toFixed vis 0)))
 
+(defn format-coords
+  [x y]
+  (str x ", " y))
+
 (defn cloud-descriptions
   [cloud-params type]
   (if (= type :sunny)
@@ -1111,7 +1115,7 @@
          (option :selected (not= :named location-type)
                  :value ""
                  (case location-type
-                   :coordinates (str "Cell " x "," y)
+                   :coordinates (str "Location " (format-coords x y))
                    :named ""
                    :none "None selected"))
          (for [ab airbases]
@@ -1383,7 +1387,7 @@
     (if (not (and x y (<= 0 x (dec nx)) (<= 0 y (dec ny))))
       []
       (let [width 10
-            height 7
+            height 8
             {:keys [pressure temperature wind type]} (get weather-data [x y])
             {:keys [speed heading]} wind]
         #_(log/debug :x x
@@ -1424,13 +1428,15 @@
           (svg/g
            :css {:font-size "6%"}
            (let [cloud-descriptions (cloud-descriptions cloud-params type)]
-             (for [[line label value] [[0 "Pressure" (format-pressure pressure
-                                                                      pressure-unit)]
-                                       [1 "Temp" (format-temperature temperature)]
-                                       [2 "Wind" (format-wind wind)]
-                                       [3 "Vis" (format-visibility (get-in cloud-params [:visibility type]))]
-                                       [4 "Precip" (format-precipitation temperature type)]
-                                       [5 "Cloud" (format-cloud cloud-params type)]]]
+             (for [[line [label value]] (map-indexed
+                                         vector
+                                         [["Location" (format-coords x y)]
+                                          ["Pressure" (format-pressure pressure pressure-unit)]
+                                          ["Temp" (format-temperature temperature)]
+                                          ["Wind" (format-wind wind)]
+                                          ["Vis" (format-visibility (get-in cloud-params [:visibility type]))]
+                                          ["Precip" (format-precipitation temperature type)]
+                                          ["Cloud" (format-cloud cloud-params type)]])]
                [(svg/text
                  :x 0.2
                  :y (+ line 1.2)
