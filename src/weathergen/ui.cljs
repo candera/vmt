@@ -477,6 +477,13 @@
         mission-name
         (subs mission-name 0 i)))))
 
+(defn safari-safe-binary
+  [blob]
+  ;; https://github.com/Stuk/jszip/issues/279
+  (if safari?
+    (js/Blob. #js [blob]
+              #js {:type "application/octet-stream"})))
+
 (defn save-data
   [blob filename]
   (js/saveAs blob filename))
@@ -509,7 +516,7 @@
         blob (fmap/get-blob data
                             x-cells
                             y-cells)]
-    (save-data blob (fmap-filename t))))
+    (save-data (safari-safe-binary blob) (fmap-filename t))))
 
 ;; TODO: make these functional instead of relying on the global state?
 (defn settings-blob
@@ -538,7 +545,8 @@
 (defn save-twx
   "Initiates a download of a TWX file."
   [cloud-params direction mission-name]
-  (save-data (twx-blob cloud-params direction) (twx-filename mission-name)))
+  (save-data (safari-safe-binary (twx-blob cloud-params direction))
+             (twx-filename mission-name)))
 
 (defn load-file
   "Asynchronously loads a file. Opts can include `:extensions` a CSV
@@ -739,7 +747,8 @@
      (div
       :fade-toggle open?
       :class "content"
-      :css {:white-space "normal"}
+      :css {:white-space "normal"
+            :font-weight "normal"}
       (if help-ctor
         (help-ctor)
         [(p "Help has not yet been written for this feature.")
@@ -3266,6 +3275,23 @@
     (control-section
      :id "load-save-controls"
      :title "Load/save"
+     (if-not safari?
+       []
+       (let [p* #(p :css {:margin-bottom "3px"
+                          :margin-top "3px"}
+                    %&)]
+         (div
+          :css {:font-size "80%"}
+          (p* "Due to a bug in Safari, settings files will open in a new
+        tab Use the browser's File->Save As to save the file. Be sure
+        to select 'Page Source' for the format. ")
+          (p* "Due to the same bug, all other files will download with
+        name 'Unknown'. For these, once downloaded rename it with the
+        appropriate extension: .fmap for FMAPs, .twx for TWX files,
+        and .zip for weather packages.")
+          (p* "Better still, don't use Safari. This application works
+        best in Chrome, but has also been tested in Firefox and
+        Internet Explorer."))))
      (control-subsection
       :title (with-help [:serialization-controls :save-single-files]
                "Load/Save individual files")
@@ -3387,14 +3413,7 @@
                   (cond
                     (and progress cancelling?) "Cancelling..."
                     progress "Cancel"
-                    :else "Save Package")))
-         (if-not safari?
-           []
-           (div
-            :css {:font-size "80%"}
-            "Due to a bug in Safari, the generated file will have the
-             name 'Unknown'. Once downloaded, rename it to
-             'weather.zip' to access its contents."))])))))
+                    :else "Save Package")))])))))
 
 (defn debug-info
   []
