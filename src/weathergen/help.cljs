@@ -399,9 +399,12 @@ forward and backward in time. ")
     :show-lines?
     #(p "If checked, steerpoint lines from the DTC (if any) will be
     shown. If unchecked, steerpoint lines will be hidden.")
+    :show-numbers?
+    #(p "If checked, steerpoints not otherwise labeled will be labeled
+     with their numbers.")
     :show-labels?
-    #(p "If checked, waypoints will be labeled with a number or
-    other informative text. If unchecked, no labels will be shown.")
+    #(p "If checked, alternate field and tanker steerpoints will be
+     labeled as such.")
     :color
     #(p "Change the color in which the flight path and labels will be
     drawn on the map.")

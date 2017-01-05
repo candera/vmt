@@ -633,6 +633,7 @@
                                         name)}
                        :show? true
                        :show-labels? true
+                       :show-numbers? true
                        :show-lines? true
                        :uniquifier (rand-int 1000000)
                        :color "#FFFFFF"
@@ -1873,45 +1874,57 @@
               ;; Steerpoint labels
               (formula-of
                {show-labels? (-> flightpath :show-labels? cell=)
+                show-numbers? (-> flightpath :show-numbers? cell=)
                 magnification magnification}
-               (if-not show-labels?
-                 []
-                 (let [tw (cell 0)
-                       th (cell 0)
-                       tx (cell 0)
-                       ty (cell 0)
-                       t (svg/text
-                          :stroke color
-                          :stroke-width (* label-stroke-width magnification)
-                          :fill color
-                          :font-size (str (* font-size magnification) "%")
-                          :text-anchor "middle"
-                          :opacity opacity
-                          :x 0
-                          :y (- (* marker-size magnification))
-                          ;; TODO: Understand and display tanker steerpoint, plus
-                          ;; triangles for targets and patrol points.
-                          ;; Also need to alter flight path detection algorithm:
-                          ;; type goes to -1 when it switches to target point.
-                          (if alternate?
-                            "Alternate Field"
-                            (inc ordinal)))
-                       r (svg/rect
-                          :x tx
-                          :y ty
-                          :width tw
-                          :height th
-                          :fill anticolor
-                          :opacity background-opacity)]
-                   (when-dom t
-                     #(dosync
-                       (let [bb (.getBBox t)]
-                         (when (.-x bb)
-                           (reset! tx (.-x bb))
-                           (reset! ty (.-y bb))
-                           (reset! tw (.-width bb))
-                           (reset! th (.-height bb))))))
-                   [r t])))])))
+               (let [txt (cond
+                           ;; TODO: This whole setup is suboptimal.
+                           ;; Seems like what you really want is to be
+                           ;; able to decide, for each steerpoint,
+                           ;; whether it gets a number or a label, and
+                           ;; to be able to do the same thing for the
+                           ;; whole setup all-up. It's similar to the
+                           ;; PPT problem - still need a solution.
+                           (and show-labels? alternate?)
+                           "Alternate Field"
+
+                           (and show-labels? (= action :refuel))
+                           (when show-labels? "Tanker")
+
+                           :else
+                           (when show-numbers? (inc ordinal)))
+                     tw (cell 0)
+                     th (cell 0)
+                     tx (cell 0)
+                     ty (cell 0)
+                     t (svg/text
+                        :stroke color
+                        :stroke-width (* label-stroke-width magnification)
+                        :fill color
+                        :font-size (str (* font-size magnification) "%")
+                        :text-anchor "middle"
+                        :opacity opacity
+                        :x 0
+                        :y (- (* marker-size magnification))
+                        txt)
+                     r (svg/rect
+                        :x tx
+                        :y ty
+                        :width tw
+                        :height th
+                        :fill anticolor
+                        :opacity background-opacity)]
+                 (when-dom t
+                   #(dosync
+                     (let [bb (.getBBox t)]
+                       (when (.-x bb)
+                         (reset! tx (.-x bb))
+                         (reset! ty (.-y bb))
+                         (reset! tw (.-width bb))
+                         (reset! th (.-height bb))))))
+                 (svg/g
+                  :display (if (some? txt) "normal" "none")
+                  r
+                  t)))])))
          (svg/g
           :class "steerpoint-lines"
           (formula-of
@@ -3522,6 +3535,7 @@
                                      (focus-later editor)))))))
                (checkbox-row "Show?" :show? {})
                (checkbox-row "Lines?" :show-lines? {})
+               (checkbox-row "Numbers?" :show-numbers? {})
                (checkbox-row "Labels?" :show-labels? {})
                (tr (td (with-help [:flight-paths :color]
                          "Color"))
