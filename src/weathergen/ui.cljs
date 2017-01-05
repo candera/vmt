@@ -2154,7 +2154,6 @@
                                "http://www.w3.org/2000/svg"
                                "text")
                           (.setAttribute "transform"
-                                         ;; TODO: figure out how to center these stupid things
                                          (gstring/format "scale(%f) translate(%f, %f)"
                                                          scale
                                                          (/ (+ x 0.5) scale)
@@ -2792,23 +2791,21 @@
           :id "weather-override-params"
           (let [checkbox (fn checkbox
                            ([l k {:keys [change row-attrs]}]
-                            (let [id (gensym)]
-                              (tr
-                               (or row-attrs [])
-                               (td
-                                :colspan 2
-                                (input :id id
-                                       :css {:width "25px"}
-                                       :type "checkbox"
-                                       :value (cell= (k override))
-                                       :change (or change
-                                                   (fn [_]
-                                                     (swap! weather-params
-                                                            update-in
-                                                            [:weather-overrides @index k]
-                                                            not))))
-                                (with-help [:weather-overrides k]
-                                  (label :for id l)))))))]
+                            (tr
+                             (or row-attrs [])
+                             (td
+                              :colspan 2
+                              (input :css {:width "25px"}
+                                     :type "checkbox"
+                                     :value (cell= (k override))
+                                     :change (or change
+                                                 (fn [_]
+                                                   (swap! weather-params
+                                                          update-in
+                                                          [:weather-overrides @index k]
+                                                          not))))
+                              (with-help [:weather-overrides k]
+                                (label l))))))]
             (tbody
              (tr (td :class "override-label"
                      (with-help [:weather-overrides :center]
@@ -3470,20 +3467,18 @@
            (table
             (let [checkbox-row (fn checkbox
                                  ([l k {:keys [change row-attrs]}]
-                                  (let [id (gensym)]
-                                    (tr
-                                     (or row-attrs [])
-                                     (td
-                                      (with-help [:flight-paths k]
-                                        (label :for id l)))
-                                     (td
-                                      (input :id id
-                                             :css {:width "25px"}
-                                             :type "checkbox"
-                                             :value (cell= (k path))
-                                             :change (or change
-                                                         (fn [_]
-                                                           (swap! path update k not)))))))))
+                                  (tr
+                                   (or row-attrs [])
+                                   (td
+                                    (with-help [:flight-paths k]
+                                      (label l)))
+                                   (td
+                                    (input :css {:width "25px"}
+                                           :type "checkbox"
+                                           :value (cell= (k path))
+                                           :change (or change
+                                                       (fn [_]
+                                                         (swap! path update k not))))))))
                   label (formula-of
                          [path]
                          (-> path :label :value))
