@@ -239,7 +239,9 @@
 
 (def initial-size (let [[window-width window-height] @window-size]
                     (max 250 (min window-width
-                                  (- window-height 140)))))
+                                  (- window-height (if ie?
+                                                     150
+                                                     140))))))
 
 (defc display-params {:dimensions [initial-size initial-size]
                       :opacity    0.75
@@ -1257,7 +1259,7 @@
     val
     (mbar->inhg val)))
 
-(def max-wind-vector-speed 50)
+(def max-wind-vector-speed 150)
 
 (defn wind-vector-id
   [speed]
@@ -1350,46 +1352,93 @@
 (def wind-vector-defs
   (svg/defs
     (for [speed (range 5 (inc max-wind-vector-speed) 5)]
-      (let [ticks (math/clamp 1 100 (int (/ speed 5)))
+      (let [pennants (-> speed (/ 50) long)
+            speed' (-> speed (- (* 50 pennants)))
+            ticks (math/clamp (if (zero? pennants) 1 0)
+                              100
+                              (int (/ speed' 5)))
             full-tails (int (/ ticks 2))
             half-tail? (odd? ticks)
+            ;; Handle the case of a single half-tail by offsetting it
+            ;; from the beginning of the barb
+            single-half-tail? (and half-tail?
+                                   (zero? full-tails)
+                                   (zero? pennants))
+            starts-with-tail? (and (zero? pennants)
+                                   (pos? full-tails))
             scale 1
             offset 0.1
-            tail-step 0.18
+            tail-step 0.16
             tail-slant 0.1
-            tail-width (* 0.25 1.5)]
+            tail-width (* 0.25 1.5)
+            pennant-base 0.2
+            pennant-step 0.25
+            pennant-offset (* pennant-step pennants)]
         (svg/g
          :id (wind-vector-id speed)
-         ;; TODO: Combine the vector line and the first tail into a
-         ;; single stroke so we eliminate the corner artifacts.
-         ;; Vector line
-         (svg/line
-          :attr {:class "wind-vector"}
-          :x1 0
-          :x2 0
-          :y1 (- 0.5 tail-slant)
-          :y2 (+ -0.5 tail-slant))
+         ;; TODO: Refactor this so it uses paths everywhere rather
+         ;; than a mixture of lines and paths
+         (if starts-with-tail?
+           (svg/path
+            :attr {:class "wind-vector"
+                   :fill "none"}
+            :d (gstring/format
+                "M%f,%f L%f,%f L%f,%f"
+                tail-width, -0.50
+                0, (+ -0.5 tail-slant)
+                0, (- 0.5 tail-slant)))
+           (svg/line
+            :attr {:class "wind-vector"}
+            :x1 0
+            :x2 0
+            :y1 (- 0.5 tail-slant)
+            :y2 (+ -0.5 tail-slant)))
+
+         ;; Pennants
+         (svg/g
+          :attr {:class "wind-vector pennant"}
+          (for [n (range pennants)]
+            (svg/path
+             :attr {:fill "black"}
+             :d (gstring/format "M%f,%f L%f,%f L%f,%f Z"
+                                0
+                                (+ -0.5 (* pennant-step n))
+                                tail-width
+                                (+ -0.50 (* pennant-step n))
+                                0
+                                (+ -0.5
+                                   (* pennant-step n)
+                                   pennant-base)))))
 
          ;; Full tails
          (svg/g
           :attr {:class "wind-vector full-tail"}
-          (for [n (range full-tails)]
+          (for [n (range (if starts-with-tail? 1 0) full-tails)]
             (svg/line :x1 0
-                      :y1 (+ (+ -0.5 tail-slant)
+                      :y1 (+ -0.5
+                             tail-slant
+                             pennant-offset
                              (* tail-step n))
                       :x2 tail-width
-                      :y2 (+ -0.50 (* tail-step n)))))
+                      :y2 (+ -0.5
+                             pennant-offset
+                             (* tail-step n)))))
 
          ;; Half tails
          (when half-tail?
-           (svg/line
-            :attr {:class "wind-vector half-tail"}
-            :x1 0
-            :y1 (+ (+ -0.50 tail-slant)
-                   (* tail-step full-tails))
-            :x2 (* tail-width 0.5)
-            :y2 (+ -0.50 (+ (* tail-step full-tails)
-                            (* 0.5 tail-step))))))))))
+           (let [length 0.5]
+             (svg/line
+              :attr {:class "wind-vector half-tail"}
+              :x1 0
+              :y1 (+ -0.50
+                     tail-slant
+                     pennant-offset
+                     (* tail-step (+ full-tails (if single-half-tail? 1.5 0))))
+              :x2 (* tail-width length)
+              :y2 (+ -0.50
+                     (* tail-slant length)
+                     pennant-offset
+                     (* tail-step (+ full-tails (if single-half-tail? 1.5 0))))))))))))
 
 (defn info-overlay
   [hover-cell weather-data pressure-unit nx ny cloud-params]
@@ -2069,17 +2118,22 @@
                                                 cloud-params))]
     (with-let [elem (svg/svg
                      :id "grid"
-                     (-> attrs
-                         (dissoc :display-params
-                                 :selected-cell
-                                 :weather-data
-                                 :wind-stability-areas
-                                 :weather-overrides)
-                         (assoc :viewBox (gstring/format "0 0 %d %d" nx ny)
-                                :width (cell= (-> display-params :dimensions first))
-                                :height (cell= (-> display-params :dimensions second))
-                                :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
-                                       "xmlns" "http://www.w3.org/2000/svg"}))
+                     (let [dims (formula-of
+                                 [display-params]
+                                 (if ie?
+                                   (map #(- % 10) (:dimensions display-params))
+                                   (:dimensions display-params)))]
+                       (-> attrs
+                           (dissoc :display-params
+                                   :selected-cell
+                                   :weather-data
+                                   :wind-stability-areas
+                                   :weather-overrides)
+                           (assoc :viewBox (gstring/format "0 0 %d %d" nx ny)
+                                  :width (cell= (first dims))
+                                  :height (cell= (second dims))
+                                  :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
+                                         "xmlns" "http://www.w3.org/2000/svg"})))
                      :mouseleave (fn [_]
                                    (dosync
                                     (reset! hover-cell nil)))
