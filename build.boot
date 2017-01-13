@@ -30,7 +30,9 @@
 
                  [clojure-complete "0.2.4" :scope "test"]]
  :source-paths #{"src"}
- :asset-paths  #{"assets"})
+ :asset-paths  #{"assets"}
+ :repl-server-port 5559
+ :repl-server-name (str project))
 
 (require
  '[adzerk.boot-cljs         :refer [cljs]]
@@ -74,18 +76,3 @@
     (cljs :optimizations :advanced
           :compiler-options {:externs ["externs.js"]})
     (target :dir #{"target"})))
-
-(defn run-repl-server
-  [port]
-  (clojure.core.server/start-server {:port port
-                                     :name (name project)
-                                     :accept 'clojure.core.server/repl
-                                     :daemon false}))
-
-(deftask repl-server
-  "Run a REPL socket server"
-  [p port PORT int "Port to run the server on. Defaults to 5555."]
-  (let [port (or port 5559)]
-    (run-repl-server port)
-    (println "Server is running on port" port)
-    (Thread/sleep Long/MAX_VALUE)))
