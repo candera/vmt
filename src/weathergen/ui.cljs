@@ -909,12 +909,23 @@
         (not= type :fair)
         (conj (str "OVC" stratus-level))))))
 
+(defn contrail-description
+  [cloud-params type]
+  (gstring/format "COTRA%03d"
+                  (-> cloud-params
+                      :contrails
+                      (get type)
+                      (/ 100)
+                      long)))
+
 (defn format-cloud
   "Returns a string describing the clouds for the given weather type."
   [cloud-params type]
-  (->> (cloud-descriptions cloud-params type)
-       (interpose " ")
-       (reduce str)))
+  (str (->> (cloud-descriptions cloud-params type)
+            (interpose " ")
+            (reduce str))
+       " "
+       (contrail-description cloud-params type)))
 
 (defn format-precipitation
   "Returns a string describing precipitation."

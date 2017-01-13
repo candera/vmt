@@ -306,7 +306,10 @@ forward and backward in time. ")
         (dt "OVCxxx")
         (dd "A solid overcast layer is present with a base at xxx
         hundreds of feet. E.g. OVC050 indicates a solid overcast
-        starting at 5000 feet MSL."))])}
+        starting at 5000 feet MSL.")
+        (dt "COTRAxxx")
+        (dd "Contrails form above xxx, in hundreds of feet. E.g.
+        COTRA200 indicates contrails above 20000 feet MSL."))])}
 
    :weather-overrides
    {:overview
