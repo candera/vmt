@@ -6,7 +6,9 @@
 
 (def ft-per-nm 6076.12)
 
-(def nm-per-grid 9.3728813559322)
+;; TODO: This should really be 553, which is the size of the map in
+;; nm, then divide it out by nx or ny
+(def nm-per-map 553.0)
 
 (defn nm->ft
   [nm]
@@ -20,7 +22,7 @@
   (+ d (/ m 60.0)))
 
 (defn lat-long->grid
-  "Convert from degree/minute coordinates to grid coordinates"
+  "Convert from degree/minute coordinates to fractional grid coordinates"
   [[nx ny] theater [lat long]]
   (let [{:keys [left top bottom top-right]} (get-in db/theater-info [theater :mapping])
         [left* top* bottom* top-right* lat* long*] (map dm->deg [left top bottom top-right lat long])
@@ -31,13 +33,11 @@
          (/ (- top-right* left*))
          (/ (Math/cos topr))
          (* (Math/cos latr))
-         (* nx)
-         int)
+         (* nx))
      (-> lat*
          (- top*)
          (/ (- bottom* top*))
-         (* ny)
-         int)]))
+         (* ny))]))
 
 (defn airbase-coordinates
   "Returns the grid coordinates of an airbase"
@@ -54,5 +54,5 @@
 (defn falcon->grid
   "Returns fractional grid coordinates from Falcon-style x/y feet"
   [[nx ny] x y]
-  [(-> y ft->nm (/ nm-per-grid))
-   (- nx (-> x ft->nm (/ nm-per-grid)))])
+  [(-> y ft->nm (/ nm-per-map ny))
+   (- nx (-> x ft->nm (/ nm-per-map nx)))])
