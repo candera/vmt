@@ -1380,7 +1380,7 @@
             scale 1
             offset 0.1
             tail-step 0.16
-            tail-slant 0.1
+            tail-slant 0.15
             tail-width (* 0.25 1.5)
             pennant-base 0.2
             pennant-step 0.25
@@ -1437,7 +1437,7 @@
 
          ;; Half tails
          (when half-tail?
-           (let [length 0.5]
+           (let [length 0.6]
              (svg/line
               :attr {:class "wind-vector half-tail"}
               :x1 0
@@ -1447,7 +1447,7 @@
                      (* tail-step (+ full-tails (if single-half-tail? 1.5 0))))
               :x2 (* tail-width length)
               :y2 (+ -0.50
-                     (* tail-slant length)
+                     (* tail-slant (- 1 length))
                      pennant-offset
                      (* tail-step (+ full-tails (if single-half-tail? 1.5 0))))))))))))
 
