@@ -1,5 +1,24 @@
 (ns weathergen.help
-  (:require [hoplon.core :refer [b dl dt dd em i li p ul]]))
+  (:require [goog.string :as gstring]
+            [goog.string.format]
+            [hoplon.core :refer [b dl dt dd div em i li p span ul]]
+            [hoplon.svg :as svg]
+            [weathergen.wind :as wind]))
+
+(defn wind-barb
+  [speed heading]
+  (svg/svg
+   :viewBox "0 0 1 1"
+   :width 20
+   :height 20
+   :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
+          "xmlns" "http://www.w3.org/2000/svg"
+          :overflow "visible"}
+   (svg/g
+    :transform "translate(0.5, 0.5)"
+    (svg/g
+     :transform (gstring/format "rotate(%d)" heading)
+     (wind/barb speed)))))
 
 ;; These are functions because we need to be able to show the same
 ;; help in more than one place, and if we simply return a node, it
@@ -468,4 +487,71 @@ forward and backward in time. ")
     stratus base.")
 
     :contrails
-    #(p "The altitude at which condensation trails will form.")}})
+    #(p "The altitude at which condensation trails will form.")}
+
+   :map
+   {:legend
+    #(let [section (fn [title & contents]
+                     (div
+                      (div :css {:background "lightgray"
+                                 :margin-top "3px"
+                                 :padding "0 0 2px 3px"
+                                 :font-size "105%"}
+                           title)
+                      contents))]
+       (div
+        (section
+         "Weather Type"
+         (p "Colors in each square in the map indicate the weather type.")
+         (for [[type color description]
+               [["Sunny"
+                 "rgb(128,240,255)"
+                 "Clear skies."]
+                ["Fair"
+                 "rgb(0,255,0)"
+                 "Few to scattered cumulus clouds. No precipitation."]
+                ["Poor"
+                 "rgb(255,255,0)"
+                 "Solid overcast with no precipitation."]
+                ["Inclement"
+                 "rgb(192, 0, 0)"
+                 "Solid overcast with precipitation (rain or snow)."]]]
+           (div
+            :css {:white-space "nowrap"}
+            (div
+             :css {:display "inline-block"}
+             (span
+              :css {:width "20px"
+                    :height "20px"
+                    :display "inline-block"
+                    :border "solid 1px black"
+                    :margin-right "3px"
+                    :vertical-align "middle"
+                    :background color}
+              ""))
+            (div
+             :css {:display "inline-block"}
+             (div
+              :css {:display "inline-block"
+                    :margin-right "3px"}
+              (span :css {:font-weight "900"
+                          :margin-right "3px"}
+                    type)
+              "-")
+             description))))
+        (section
+         "Wind"
+         (p "Wind barbs show the direction and strength of the
+         wind in each square. The orientation shows the direction the
+         wind, with 'tails' on the upwind side. A half tail indicates
+         five knots. Each full tail indicates ten knots. Each
+         pennant (filled-in triangle) indicates fifty knots.")
+         (for [[speed heading description]
+               [[5 0 "Wind at 5 knots from the north."]
+                [25 270 "Wind at 25 knots from the west."]
+                [115 134 "Wind at 115 knots from the southeast."]]]
+           (div :css {:white-space "nowrap"}
+                (div :css {:display "inline-block"
+                           :vertical-align "middle"}
+                     (wind-barb speed heading))
+                description)))))}})
