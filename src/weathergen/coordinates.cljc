@@ -54,5 +54,5 @@
 (defn falcon->grid
   "Returns fractional grid coordinates from Falcon-style x/y feet"
   [[nx ny] x y]
-  [(-> y ft->nm (/ nm-per-map ny))
-   (- nx (-> x ft->nm (/ nm-per-map nx)))])
+  [(-> y ft->nm (/ nm-per-map) (* ny))
+   (- nx (-> x ft->nm (/ nm-per-map) (* nx)))])
