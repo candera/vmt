@@ -4,6 +4,20 @@
 (reset! ui/weather-params
         ui/default-weather-params)
 
+(when ui/safari?
+  (swap! ui/messages conj
+         ["Due to bugs related to downloading files in Safari, Safari
+  is not recommended for use with WeatherGen. To use Safari, make use
+  of the workarounds detailed below. Use of Chrome is recommended."]))
+
+(when ui/ie?
+  (swap! ui/messages conj
+         ["Unfortunately, the weather design features of
+         WeatherGen (i.e. this page) do not currently work correctly
+         in Internet Explorer. Shared forecasts work fine, so forecast
+         links can be shared with pilots using IE. Use of Chrome is
+         recommended."]))
+
 (ui/weather-page
  :serialization-controls {}
  :step-controls {:mode :edit}

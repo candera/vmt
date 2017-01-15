@@ -69,7 +69,8 @@
                                   neg?
                                   not))
                   agent-props {:chrome  "Chrome"
-                               :ie      "MSIE"
+                               :msie    "MSIE"
+                               :trident "Trident"
                                :firefox "Firefox"
                                :safari  "Safari"
                                :opera   "op"}]
@@ -78,7 +79,7 @@
 
 (def safari? (and (:safari agents) (not (:chrome agents))))
 
-(def ie? (:ie agents))
+(def ie? (or (:msie agents) (:trident agents)))
 
 ;;; State
 
@@ -240,9 +241,7 @@
 
 (def initial-size (let [[window-width window-height] @window-size]
                     (max 250 (min window-width
-                                  (- window-height (if ie?
-                                                     150
-                                                     140))))))
+                                  (- window-height 140)))))
 
 (defc display-params {:dimensions [initial-size initial-size]
                       :opacity    0.75
@@ -277,9 +276,7 @@
 
 (defc computing true)
 
-(defc messages (if (or (:safari agents) (:firefox agents) (:chrome agents))
-                 []
-                 ["Browsers other than Chrome and Firefox are not fully supported by WeatherGen. Some features may not behave as expected. Safari works reasonably well but not as well as Chrome. Use of Chrome is recommended."]))
+(defc messages [])
 
 ;;; Formulas
 
@@ -862,29 +859,38 @@
 (defn format-pressure
   "Format a pressure in inches Mercury as appropriate for the unit."
   [inhg unit]
-  (if (= :inhg unit)
-    (.toFixed inhg 2)
-    (-> inhg inhg->mbar (.toFixed 0))))
+  (if-not inhg
+    ""
+    (if (= :inhg unit)
+      (.toFixed inhg 2)
+      (-> inhg inhg->mbar (.toFixed 0)))))
 
 (defn format-temperature
   "Format a temperature string"
   [temp]
-  (.toFixed temp 0))
+  (if-not temp
+    ""
+    (.toFixed temp 0)))
 
 (defn format-wind
   "Format a wind string."
   [wind]
-  (let [{:keys [speed heading]} wind]
-    (str (gstring/format "%02d" (.toFixed speed 0))
-         "kts@"
-         (gstring/format "%03d" heading))))
+  (if-not wind
+    ""
+    (let [{:keys [speed heading]} wind]
+      (str (gstring/format "%03d" heading)
+           "@"
+           (gstring/format "%02d" (.toFixed speed 0))
+           "kts"))))
 
 (defn format-visibility
   "Format a visibility so that only numbers below 1 get decimal places."
   [vis]
-  (if (< vis 2)
-    (.toFixed vis 1)
-    (.toFixed vis 0)))
+  (if-not vis
+    ""
+    (if (< vis 2)
+      (.toFixed vis 1)
+      (.toFixed vis 0))))
 
 (defn format-coords
   [x y]
@@ -2048,9 +2054,9 @@
                      :id "grid"
                      (let [dims (formula-of
                                  [display-params]
-                                 (if ie?
-                                   (map #(- % 10) (:dimensions display-params))
-                                   (:dimensions display-params)))]
+                                 ;; Edge doesn't render right, so we
+                                 ;; have to make a little extra room
+                                 (map #(- % 7) (:dimensions display-params)))]
                        (-> attrs
                            (dissoc :display-params
                                    :selected-cell
