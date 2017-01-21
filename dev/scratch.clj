@@ -1043,3 +1043,116 @@
 
 (twx-diff "file:///tmp/stratus.twx"
           "file:///tmp/stratus3.twx" )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(require '[octet.core :as buf]
+         '[taoensso.timbre :as log]
+         '[clojure.string :as str]
+         '[clojure.pprint :as pprint :refer [pprint]])
+
+(require :reload '[weathergen.mission-files :as mission])
+
+(let [input (buf/allocate 100)]
+  (require :reload '[weathergen.lzss :as lzss])
+  (doseq [[idx data] (map-indexed vector [0x6f 1 2 3 4 1 1 5 6])]
+    (octet.buffer/write-byte input idx data))
+  (->> (lzss/expand input 0 100 8)
+       .array
+       (into [])))
+
+(do
+  (require :reload '[weathergen.mission-files :as mission])
+  (let [buf (buf/allocate 100)]
+    ;;(buf/write! buf 4 buf/int16)
+    (buf/write! buf [1 2 3 4] (mission/larray buf/int16 buf/int32) {:offset 10})
+    (log/debug (->> buf .array (into [])))
+    (buf/read* buf (mission/larray buf/int16 buf/int32) {:offset 10})
+    ))
+
+
+(do
+  (require :reload '[weathergen.lzss :as lzss])
+  (require :reload '[weathergen.mission-files :as mission])
+  (-> "file:///Users/candera/falcon/Data/Data/Campaign/Save/SMPU-Day%20%203%2000%2041%2048.cam"
+      #_"file:////Users/candera/falcon/Data/Data/Campaign/Save/SA-17%20Loft.tac"
+      file-buf
+      mission/read-mission
+      first
+      :data
+      (dissoc :map)
+      pprint))
+
+(do
+  (require :reload '[weathergen.lzss :as lzss])
+  (require :reload '[weathergen.mission-files :as mission])
+  (-> "/Users/candera/falcon/Data/Data/Campaign/Save/SMPU-Day  3 00 41 48.cam"
+      #_"/Users/candera/falcon/Data/Data/Campaign/Save/SA-17 Loft.tac"
+      file-buf
+      (mission/read-mission {:class-table (-> "/Users/candera/falcon/4.33.3/Data/Terrdata/objects/FALCON4.ct"
+                                              file-buf
+                                              mission/read-class-table)})
+      :units
+      #_:campaign-info
+      first
+      :data
+      ;;(dissoc :map)
+      pprint))
+
+(do
+  (require :reload '[weathergen.lzss :as lzss])
+  (require :reload '[weathergen.mission-files :as mission])
+  (-> "/Users/candera/falcon/4.33.3/Data/Terrdata/objects/FALCON4.ct"
+      file-buf
+      mission/read-class-table
+      (nth 7)
+      ))
+
+  (-> "/Users/candera/falcon/4.33.3/Data/Terrdata/objects/FALCON4.ct"
+      file-buf)
+
+(def class-table (-> "/Users/candera/falcon/4.33.3/Data/Terrdata/objects/FALCON4.ct"
+                     file-buf
+                     mission/read-class-table))
+
+(do
+  #_(require :reload '[weathergen.lzss :as lzss])
+  (require :reload '[weathergen.mission-files :as mission])
+  (-> "/Users/candera/falcon/4.33.3/Data/Campaign/Save/SMPU-Day  3 00 41 48.cam"
+      #_"/Users/candera/falcon/4.33.3/Data/Campaign/Save/SA-17 Loft.tac"
+      file-buf
+      (mission/read-mission {:class-table class-table})
+      :units
+      first
+      :data
+      ;;first :data
+      (->> (take 10))
+      pprint))
+
+
+(do
+  #_(require :reload '[weathergen.lzss :as lzss])
+  (require :reload '[weathergen.mission-files :as mission])
+  (let [data (-> "/Users/candera/falcon/4.33.3/Data/Campaign/Save/SMPU-Day  3 00 41 48.cam"
+                 #_"/Users/candera/falcon/4.33.3/Data/Campaign/Save/SA-17 Loft.tac"
+                 file-buf
+                 (mission/read-mission {:class-table class-table})
+                 :teams
+                 first
+                 :data)]
+    #_(class data)
+    #_(buf/read* data (buf/repeat
+                       1
+                       (mission/unit-record class-table)))
+    #_(first data)
+    (->> data
+         ;; rand-nth
+         pr-str
+         (spit "/tmp/data.clj"))
+    #_(doseq [item data]
+        (println item))
+    ))
+
+;; battalion -> 115
+;; battalion + flight => 946 (includes 2 + 10 mystery)
+

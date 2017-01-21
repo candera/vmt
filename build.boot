@@ -29,10 +29,12 @@
                  [funcool/octet "1.0.1"]
 
                  [clojure-complete "0.2.4" :scope "test"]]
- :source-paths #{"src"}
+ :source-paths #{"src" "dev"}
  :asset-paths  #{"assets"}
  :repl-server-port 5559
- :repl-server-name (str project))
+ :repl-server-name (str project)
+ ;; :repl-server-init-ns 'weathergen.math
+ )
 
 (require
  '[adzerk.boot-cljs         :refer [cljs]]
@@ -42,7 +44,11 @@
  '[tailrecursion.boot-jetty :refer [serve]]
  'complete.core
  '[octet.core :as buf]
- '[clojure.repl :refer :all])
+ '[clojure.repl :refer :all]
+ '[clojure.pprint :refer [pprint]]
+ '[weathergen.mission-files :as mission])
+
+(alter-var-root #'*print-length* (constantly 1000))
 
 (deftask dev
   "Build weathertest for local development."
@@ -76,3 +82,16 @@
     (cljs :optimizations :advanced
           :compiler-options {:externs ["externs.js"]})
     (target :dir #{"target"})))
+
+;;; Utility functions
+
+(defn file-buf
+  "Returns a ByteBuffer wrapping the contents of the file at `path`."
+  [path]
+  (-> path
+      (clojure.string/replace " " "%20")
+      (->> (str "file://"))
+      java.net.URI.
+      java.nio.file.Paths/get
+      java.nio.file.Files/readAllBytes
+      java.nio.ByteBuffer/wrap))

@@ -10,4 +10,6 @@
   (start-figwheel!)
   (cljs-repl))
 
-(in-ns 'boot.user)
+#_(in-ns 'boot.user)
+
+(println "I'm here")
