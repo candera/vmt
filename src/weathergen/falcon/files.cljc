@@ -1,11 +1,19 @@
-(ns weathergen.mission-files
+(ns weathergen.falcon.files
   (:require [clojure.string :as str]
             [octet.core :as buf]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
+            [weathergen.falcon.constants :refer :all]
+            [weathergen.filesystem :as fs]
             [weathergen.lzss :as lzss]))
+
+;;; Cross-platform error support
+(def all-errors #?(:clj Throwable
+                   :cljs :default))
+
+;;; Spec helpers
 
 (defn lstring
   "Length prefixed string"
@@ -87,7 +95,7 @@
       (read [_ buff pos]
         (let [n (buf/read buff length-spec
                           {:offset pos})
-
+              ;; _ (log/debug "larray" :n n :pos pos)
               [datasize data] (buf/read* buff
                                          (buf/repeat n item-spec)
                                          {:offset (+ pos len-size)})]
@@ -103,6 +111,10 @@
   "Returns a spec that decodes from read values via the mapping in m."
   [item-spec m]
   (reify
+    octet.spec/ISpecSize
+    (size [_]
+      (buf/size item-spec))
+
     octet.spec/ISpec
     (read [_ buf pos]
       (let [[datasize val] (buf/read* buf
@@ -157,6 +169,111 @@
         (recur (+ size size*)
                (merge data data*)
                more)))))
+
+;;; Class Table - classtbl.h
+
+(def vu-entity
+  (buf/spec :id                      buf/uint16
+            :collision-type          buf/uint16
+            :collision-radius        buf/float
+            :class-info              (buf/spec :domain buf/byte
+                                               :class  buf/byte
+                                               :type   buf/byte
+                                               :stype  buf/byte
+                                               :sptype buf/byte
+                                               :owner  buf/byte
+                                               :field6 buf/byte
+                                               :field7 buf/byte)
+            :update-rate             buf/uint32
+            :update-tolerance        buf/uint32
+            :fine-update-range       buf/float
+            :fine-update-force-range buf/float
+            :fine-update-multiplier  buf/float
+            :damage-speed            buf/uint32
+            :hitpoints               buf/int32
+            :major-revision-number   buf/uint16
+            :minor-revision-number   buf/uint16
+            :create-priority         buf/uint16
+            :management-domain       buf/byte
+            :transferable            buf/byte
+            :private                 buf/byte
+            :tangible                buf/byte
+            :collidable              buf/byte
+            :global                  buf/byte
+            :persistent              buf/byte
+            :padding                 (buf/repeat 3 buf/byte)))
+
+(def falcon4-entity
+  (buf/spec :vu-class-data      vu-entity
+            :vis-type           (buf/repeat 7 buf/int16)
+            :vehicle-data-index buf/int16
+            :data-type          buf/byte
+            :data-pointer       buf/int32 ; Memory pointer - meaningless in file
+            ))
+
+(defn read-class-table
+  "Given a path to a class table (.ct) file, read,
+  parse, and return it."
+  [path]
+  (let [buf (fs/file-buf path)]
+    (binding [octet.buffer/*byte-order* :little-endian]
+      (buf/read buf (larray buf/int16 falcon4-entity)))))
+
+(defn read-strings
+  "Given paths to the strings.idx and strings.wch files, return
+  a function, given an index that will yield the string at that index."
+  [idx-path wch-path]
+  (let [idx-buf (fs/file-buf idx-path)
+        wch-buf (fs/file-buf wch-path)]
+    (binding [octet.buffer/*byte-order* :little-endian]
+      (let [n (buf/read idx-buf buf/uint16)
+            indices (buf/read idx-buf
+                              (buf/repeat n buf/uint16)
+                              {:offset 2})
+            strings (buf/read wch-buf
+                              (fixed-string (nth indices (dec n))))]
+        (fn [n]
+          (subs strings (nth indices n) (nth indices (inc n))))))))
+
+;;; Unit class table
+
+(def unit-class-data
+  ;; Source: entity.h
+  (buf/spec :index buf/int16
+            :num-elements (buf/repeat VEHICLE_GROUPS_PER_UNIT
+                                      buf/int32)
+            :vehicle-type  (buf/repeat VEHICLE_GROUPS_PER_UNIT
+                                       buf/int16)
+            :vehicle-class (buf/repeat VEHICLE_GROUPS_PER_UNIT
+                                       (buf/repeat 8 buf/byte))
+            :flags buf/int32
+            :name (fixed-string 20)
+            :movement-type buf/int32
+            :movement-speed buf/int16
+            :max-range buf/int16
+            :fuel buf/int32
+            :rate buf/int16
+            :pt-data-index buf/int16
+            :scores (buf/repeat MAXIMUM_ROLES buf/byte)
+            :role buf/byte
+            :hit-chance (buf/repeat MOVEMENT_TYPES buf/byte)
+            :strength (buf/repeat MOVEMENT_TYPES buf/byte)
+            :range (buf/repeat MOVEMENT_TYPES buf/byte)
+            :detection (buf/repeat MOVEMENT_TYPES buf/byte)
+            :damage-mod (buf/repeat (inc OtherDam) buf/byte)
+            :radar-vehicle buf/byte
+            :special-index buf/int16
+            :padding0 (buf/repeat 2 buf/byte)
+            :icon-index buf/int16
+            ;; This is a sign that the structure is wrong - just needed to add this to get the alignment right
+            :padding (buf/repeat 3 buf/byte)))
+
+(defn read-unit-class-table
+  "Given a path to the falcon4.ucd file, read, parse, and return it."
+  [path]
+  (let [buf (fs/file-buf path)]
+    (binding [octet.buffer/*byte-order* :little-endian]
+      (buf/read buf (larray buf/uint16 unit-class-data)))))
 
 (def campaign-time
   (reify
@@ -218,7 +335,7 @@
 
 (defn read-embedded-file
   [type entry buf database]
-  (log/debug "read-embedded-file"
+  #_(log/debug "read-embedded-file"
              :type type
              :file-name (:file-name entry))
   (read-embedded-file* type entry buf database))
@@ -228,24 +345,133 @@
             :offset buf/uint32
             :length buf/uint32))
 
+(defn find-install-dir
+  "Given a path somewhere in the filesystem, figure out which theater
+  it's in and return a map describing it."
+  [path]
+  (loop [dir (fs/parent path)]
+    (when dir
+      (if (every? #(fs/exists? (fs/path-combine dir %))
+                  ["Bin" "Data" "Tools" "User"])
+        dir
+        (recur (fs/parent dir))))))
+
+(defn campaign-dir
+  "Return the path to the campaign directory."
+  [installation theater]
+  (fs/path-combine (:data-dir installation)
+                   (:campaigndir theater)))
+
+(defn object-dir
+  "Return the path to the objects directory."
+  [installation theater]
+  #_(log/debug "object-dir"
+             :installation installation
+             :theater theater)
+  (fs/path-combine (:data-dir installation)
+                   (:objectdir theater)))
+
+(defn parse-theater-def-line
+  "Parse a line from the theater.tdf file."
+  [line]
+  (if-let [idx (str/index-of line " ")]
+    [(-> line (subs 0 idx) keyword)
+     (-> line (subs (inc idx)))]))
+
+(defn read-theater-def
+  "Reads the theater TDF from the given path, relative to `data-dir`."
+  [data-dir path]
+  (->> path
+       (fs/path-combine data-dir)
+       fs/file-text
+       str/split-lines
+       (map str/trim)
+       (remove str/blank?)
+       (remove #(.startsWith % "#"))
+       (map parse-theater-def-line)
+       (into {})))
+
+(defn read-theater-defs
+  "Read, parse, and return information about the installled theaters
+  from the theater list."
+  [data-dir]
+  (->> "Terrdata/theaterdefinition/theater.lst"
+       (fs/path-combine data-dir)
+       fs/file-text
+       str/split-lines
+       (map str/trim)
+       (remove #(.startsWith % "#"))
+       (remove str/blank?)
+       (map #(read-theater-def data-dir %))))
+
+(defn load-installation
+  "Return information about the installed theaters."
+  [install-dir]
+  (let [data-dir (fs/path-combine install-dir "Data")]
+    {:install-dir install-dir
+     :data-dir data-dir
+     :theaters (read-theater-defs data-dir)}))
+
+(defn find-theater
+  "Given the path to a mission file, return the theater it's in."
+  [installation path]
+  (->> installation
+       :theaters
+       (filter #(fs/ancestor? (campaign-dir installation %)
+                              path))
+       first))
+
+(defn load-database
+  "Load all the files needed to process a mission in a given theater."
+  [installation theater]
+  {:class-table (read-class-table
+                 (fs/path-combine
+                  (object-dir installation theater)
+                  "FALCON4.ct"))
+   :unit-class-table (read-unit-class-table
+                      (fs/path-combine
+                       (object-dir installation theater)
+                       "FALCON4.UCD"))
+   :strings (read-strings (fs/path-combine
+                           (campaign-dir installation theater)
+                           "Strings.idx")
+                          (fs/path-combine
+                           (campaign-dir installation theater)
+                           "Strings.wch"))})
+
 (defn read-mission
-  "Given a buffer holding a mission (.cam/.tac/.trn) file, read,
-  parse, and return it. `database` contains supporting files."
-  [buf {:keys [class-table] :as database}]
-  (binding [octet.buffer/*byte-order* :little-endian]
-    ;; TODO: Make this whole thing into a spec
-    (let [dir-offset (buf/read buf buf/uint32)
-          dir-file-count (buf/read buf buf/uint32 {:offset dir-offset})
-          directory (buf/read buf (buf/repeat dir-file-count directory-entry)
-                              {:offset (+ dir-offset 4)})]
-      (->> (for [entry directory
-                 :let [type (-> entry
-                                :file-name
-                                file-type)]]
-             (assoc entry
-                    :type type
-                    :data (read-embedded-file type entry buf database)))
-           (group-by :type)))))
+  "Given a path to a mission (.cam/.tac/.trn) file, read,
+  parse, and return it."
+  [path]
+  (let [install-dir  (find-install-dir path)
+        installation (load-installation install-dir)
+        theater      (find-theater installation path)
+        database     (load-database installation theater)
+        buf          (fs/file-buf path)]
+    (binding [octet.buffer/*byte-order* :little-endian]
+      ;; TODO: Make this whole thing into a spec
+      (let [dir-offset (buf/read buf buf/uint32)
+            dir-file-count (buf/read buf buf/uint32 {:offset dir-offset})
+            directory (buf/read buf (buf/repeat dir-file-count directory-entry)
+                                {:offset (+ dir-offset 4)})
+            files (for [entry directory
+                        :let [type (-> entry
+                                       :file-name
+                                       file-type)]]
+                    (assoc entry
+                           :type type
+                           :data (read-embedded-file type entry buf database)))]
+        ;; Making the assumption here that there's exactly one file
+        ;; per type
+        (assert (->> files
+                     (map :type)
+                     distinct
+                     count
+                     (= (count files))))
+        {:files (zipmap (map :type files) files)
+         :database database
+         :installation installation
+         :theater theater}))))
 
 ;; Common structures
 (def vu-id (buf/spec :name buf/uint32
@@ -664,9 +890,6 @@
   (buf/spec :id    (buf/repeat 16 buf/uint16) ; Widened from byte in version 73
             :count (buf/repeat 16 buf/byte)))
 
-#_(def loadout
-  (buf/spec :stores (buf/repeat 5 weapon)))
-
 (def flight
   (apply buf/spec
          (into unit-fields
@@ -843,35 +1066,129 @@
 
 ;; unit-record
 
+(defn class-info
+  "Retrieves the unit class info (the most important elements of which
+  are things like domain and type) for a given unit type."
+  [{:keys [class-table] :as database} type-id]
+  (let [class-entry (nth class-table
+                         (- type-id VU_LAST_ENTITY_TYPE))]
+    (-> class-entry
+        :vu-class-data
+        :class-info)))
+
 (defn unit-record
   "Returns an octet spec for unit records against the given
   class table."
-  [class-table]
+  [database]
   (reify
     octet.spec/ISpec
     (read [_ buf pos]
-      (let [unit-type (buf/read buf buf/int16 {:offset pos})
-            unit-class-entry (nth class-table (- unit-type 100))
-            unit-class-info (-> unit-class-entry
-                                :vu-class-data
-                                :class-info)
-            spc (condp = [(:domain unit-class-info)
-                          (:type unit-class-info)]
-                  [:air 1] flight
-                  [:air 2] package
-                  [:air 3] squadron
-                  [:land 1] battalion
-                  [:land 2] brigade
-                  [:sea 1] task-force)
-            [datasize data] (buf/read* buf
-                                       spc
-                                       {:offset (+ pos 2)})]
-        [(+ datasize 2) data]))
+      (let [type-id (buf/read buf buf/int16 {:offset pos})]
+        #_(log/debug "unit-record reading"
+                   :pos pos
+                   :unit-type unit-type)
+        (if (zero? type-id)
+          (do
+            #_(log/debug "unit-record: found zero unit-type entry..")
+            [2 nil])
+          (let [{:keys [domain type]} (class-info
+                                       database
+                                       type-id)
+                ;; _ (log/debug "unit-record decoding"
+                ;;              :pos pos
+                ;;              :domain domain
+                ;;              :type type)
+                spc (condp = [domain type]
+                      [DOMAIN_AIR  TYPE_FLIGHT] flight
+                      [DOMAIN_AIR  TYPE_PACKAGE] package
+                      [DOMAIN_AIR  TYPE_SQUADRON] squadron
+                      [DOMAIN_LAND TYPE_BATTALION] battalion
+                      [DOMAIN_LAND TYPE_BRIGADE] brigade
+                      [DOMAIN_SEA  TYPE_TASKFORCE] task-force)
+                [datasize data] (try
+                                  (buf/read* buf
+                                             spc
+                                             {:offset (+ pos 2)})
+                                  (catch #?(:clj Throwable
+                                            :cljs :default)
+                                      x
+                                      (log/error x
+                                                 "unit-record read"
+                                                 :domain domain
+                                                 :type type
+                                                 :pos pos)
+                                      (throw x)))]
+            #_(log/debug "unit-record decoded"
+                         :data (keys data)
+                         :datasize datasize)
+            [(+ datasize 2) data]))))
 
     ;; TODO : implement write
     ))
 
+(defn ordinal-suffix
+  "Returns the appropriate ordinal suffix for a given number. I.e. \"st\" for 1, to give \"1st\"."
+  [n {:keys [strings] :as database}]
+  (cond
+    (and (= 1 (mod n 10))
+         (not= n 11))
+    (strings 15)
+
+    (and (= 2 (mod n 10))
+         (not= n 12))
+    (strings 16)
+
+    (and (= 3 (mod n 10))
+         (not= n 13))
+    (strings 17)
+
+    :else
+    (strings 18)))
+
+(defn partial=
+  "Returns true if the coll1 and coll2 have corresponding elements
+  equal, ignoring any excess."
+  [coll1 coll2]
+  (every? identity (map = coll1 coll2)))
+
+(defn get-size-name
+  "Returns the size portion of a unit name"
+  [unit database]
+  (let [{:keys [type-id]} unit
+        {:keys [type domain]} (class-info database type-id)
+        {:keys [strings]} database]
+    #_(log/debug "get-size-name" :domain domain :type type)
+    (strings
+     (condp partial= [domain type]
+       [DOMAIN_AIR TYPE_SQUADRON]   610
+       [DOMAIN_AIR TYPE_FLIGHT]     611
+       [DOMAIN_AIR TYPE_PACKAGE]    612
+       [DOMAIN_LAND TYPE_BRIGADE]   614
+       [DOMAIN_LAND TYPE_BATTALION] 615
+       [DOMAIN_SEA]               616
+       617))))
+
+(defn unit-name
+  "Returns a human-readable name for the given unit"
+  [unit {:keys [strings unit-class-table] :as database}]
+  (let [{:keys [name-id type-id]} unit
+        {:keys [domain class type] :as ci} (class-info
+                                            database
+                                            type-id)]
+    #_(log/debug "unit-name" :type type)
+    (condp = [domain type]
+      [DOMAIN_LAND TYPE_BATTALION]
+      (let [{:keys [name-id]} unit]
+        (format "%d%s %s %s"
+                name-id
+                (ordinal-suffix name-id
+                                database)
+                (-> unit-class-table (nth class) :name)
+                (get-size-name unit database)))
+      "TODO")))
+
 (defmethod read-embedded-file* :units
+  ;; Ref: UniFile.cs, units.cpp
   [_
    {:keys [offset length] :as entry}
    buf
@@ -880,7 +1197,8 @@
     (let [header-spec (buf/spec :compressed-size buf/int32
                                 :num-units buf/int16
                                 :uncompressed-size buf/int32)
-          {:keys [num-units
+          {:keys [compressed-size
+                  num-units
                   uncompressed-size]} (buf/read buf
                                                 header-spec
                                                 {:offset offset})
@@ -888,104 +1206,21 @@
                             (+ offset (buf/size header-spec))
                             (- length 6)
                             uncompressed-size)]
-      (buf/read data (buf/repeat num-units
-                                 (unit-record class-table))))))
+      ;; Oddly, there can be entries in the table where the unit type
+      ;; is zero. That'll return a nil unit when read, which we throw
+      ;; away.
+      #_(log/debug "read-embedded-file* (:units)"
+                 :num-units num-units
+                 :compressed-size compressed-size
+                 :uncompressed-size uncompressed-size)
+      (->> (buf/read
+            data
+            (buf/repeat num-units (unit-record database)))
+           (remove nil?)
+           (map (fn [unit]
+                  (assoc unit :name (unit-name unit database))))))))
 
 (defmethod read-embedded-file* :default
   [_ entry buf _]
   :not-yet-implemented)
 
-;;; Class Table
-
-(def class-table-domain
-  {1 :abstract
-   2 :air
-   3 :land
-   4 :sea
-   5 :space
-   6 :underground
-   7 :undersea})
-
-(def class-table-classes
-  {0  :abstract
-   1  :animal
-   2  :feature
-   3  :manager
-   4  :objective
-   5  :sfx
-   6  :unit
-   7  :vehicle
-   8  :weapon
-   9  :weather
-   10 :session
-   11 :game
-   12 :group
-   13 :dialog})
-
-#_(def class-table-unit-types
-  {{:domain :air
-    :class :unit} {1 :flight
-                   2 :package
-                   3 :squadron}
-   {:domain :air
-    :class :vehicle} {1 :airplane
-                      2 :bomb
-                      3 :pod
-                      4 :fuel-tank
-                      5 :helicopter
-                      6 :missile
-                      7 :recon
-                      8 :rocket}
-
-   })
-
-(def vu-entity
-  (buf/spec :id                      buf/uint16
-            :collision-type          buf/uint16
-            :collision-radius        buf/float
-            ;; TODO: It's nice to decode to keywords here, but :type
-            ;; depends on domain (and I think class) to decode to
-            ;; something semantic, so we'll probably have to write a
-            ;; custom spec to do the serialization at some point. For
-            ;; now, stay numbers.
-            :class-info              (buf/spec :domain (enum buf/byte class-table-domain)
-                                               :class  (enum buf/byte class-table-classes)
-                                               :type   buf/byte
-                                               :stype  buf/byte
-                                               :sptype buf/byte
-                                               :owner  buf/byte
-                                               :field6 buf/byte
-                                               :field7 buf/byte)
-            :update-rate             buf/uint32
-            :update-tolerance        buf/uint32
-            :fine-update-range       buf/float
-            :fine-update-force-range buf/float
-            :fine-update-multiplier  buf/float
-            :damage-speed            buf/uint32
-            :hitpoints               buf/int32
-            :major-revision-number   buf/uint16
-            :minor-revision-number   buf/uint16
-            :create-priority         buf/uint16
-            :management-domain       buf/byte
-            :transferable            buf/byte
-            :private                 buf/byte
-            :tangible                buf/byte
-            :collidable              buf/byte
-            :global                  buf/byte
-            :persistent              buf/byte
-            :padding                 (buf/repeat 3 buf/byte)))
-
-(def falcon4-entity
-  (buf/spec :vu-class-data      vu-entity
-            :vis-type           (buf/repeat 7 buf/int16)
-            :vehicle-data-index buf/int16
-            :data-type          buf/byte
-            :data-pointer       buf/int32 ; Memory pointer - meaningless in file
-            ))
-
-(defn read-class-table
-  "Given a buffer holding a class table (.ct) file, read,
-  parse, and return it."
-  [buf]
-  (binding [octet.buffer/*byte-order* :little-endian]
-    (buf/read buf (larray buf/int16 falcon4-entity))))
