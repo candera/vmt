@@ -269,7 +269,7 @@
             ;; This is a sign that the structure is wrong - just needed to add this to get the alignment right
             :padding (buf/repeat 3 buf/byte)))
 
-(defn read-unit-class-table
+(defn read-unit-class-data
   "Given a path to the falcon4.ucd file, read, parse, and return it."
   [path]
   (let [buf (fs/file-buf path)]
@@ -429,7 +429,7 @@
                  (fs/path-combine
                   (object-dir installation theater)
                   "FALCON4.ct"))
-   :unit-class-table (read-unit-class-table
+   :unit-class-data (read-unit-class-data
                       (fs/path-combine
                        (object-dir installation theater)
                        "FALCON4.UCD"))
@@ -1169,34 +1169,38 @@
        [DOMAIN_SEA]               616
        617))))
 
+(defn data-table
+  "Return the appropriate data table."
+  [database data-type]
+  (let [k (condp = data-type
+            DTYPE_UNIT :unit-class-data
+            nil)]
+    (if k
+      (get database k)
+      ;; This is a TODO
+      (vec (repeat 10000 {})))))
+
+(defn class-data
+  "Return the class data appropriate to the type."
+  [database type-id]
+  (let [{:keys [class-table]} database
+        {:keys [data-pointer data-type]} (nth class-table (- type-id VU_LAST_ENTITY_TYPE))]
+    (nth (data-table database data-type) data-pointer)))
+
 (defn unit-name
   "Returns a human-readable name for the given unit"
-  [unit {:keys [strings class-table unit-class-table] :as database}]
+  [unit database]
   (let [{:keys [name-id type-id]} unit
-        ;; TODO; Refactor this into something more general, and that
-        ;; takes the various data tables into account. Also, rename
-        ;; unit-class-table to unit-data-table to be more consistent
-        ;; with the F4 source.
-        class-table-entry (nth class-table (- type-id 100))
-        {:keys [data-pointer]} class-table-entry
-        {:keys [domain type] :as ci} (class-info database type-id)]
-    (log/debug "unit-name"
-               :type type
-               :data-pointer data-pointer
-               :domain domain
-               :type type
-               :class-table (class class-table))
+        {:keys [name]} (class-data database type-id)
+        ;;{:keys [domain type] :as ci} (class-info database type-id)
+        ]
     ;; Ref: unit.cpp::GetName
-    (condp = [domain type]
-      [DOMAIN_LAND TYPE_BATTALION]
-      (let [{:keys [name-id]} unit]
-        (format "%d%s %s %s"
-                name-id
-                (ordinal-suffix name-id
-                                database)
-                (-> unit-class-table (nth data-pointer) :name)
-                (get-size-name unit database)))
-      "TODO")))
+    (let [{:keys [name-id]} unit]
+      (format "%d%s %s %s"
+              name-id
+              (ordinal-suffix name-id database)
+              name
+              (get-size-name unit database)))))
 
 (defmethod read-embedded-file* :units
   ;; Ref: UniFile.cs, units.cpp

@@ -1350,7 +1350,7 @@
      :data
      ;;shuffle
      (take 10)
-     (map (juxt :type :name :name-id :id))
+     (map (juxt :type :name :type-id :camp-id :name-id))
      pprint)
 
 (def u (->> smpu
@@ -1401,3 +1401,20 @@ u
    (spit "/tmp/units.csv" ?)))
 
 
+(-> @smpu
+    :database
+    :class-table
+    (nth 71)
+    (select-keys [:data-pointer :data-type]))
+
+(-> @smpu
+    :database
+    :unit-class-data
+    (nth 213)
+    :name)
+
+(let [database (:database @smpu)
+      type-id 171
+      {:keys [class-table]} database
+      {:keys [data-pointer data-type]} (nth class-table (- type-id 100))]
+  (count (files/data-table database data-type)))
