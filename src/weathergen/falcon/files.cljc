@@ -208,8 +208,9 @@
             :vis-type           (buf/repeat 7 buf/int16)
             :vehicle-data-index buf/int16
             :data-type          buf/byte
-            :data-pointer       buf/int32 ; Memory pointer - meaningless in file
-            ))
+            ;; Only a pointer in the sense of indexing into the
+            ;; appropriate class table.
+            :data-pointer       buf/int32))
 
 (defn read-class-table
   "Given a path to a class table (.ct) file, read,
@@ -1170,12 +1171,22 @@
 
 (defn unit-name
   "Returns a human-readable name for the given unit"
-  [unit {:keys [strings unit-class-table] :as database}]
+  [unit {:keys [strings class-table unit-class-table] :as database}]
   (let [{:keys [name-id type-id]} unit
-        {:keys [domain class type] :as ci} (class-info
-                                            database
-                                            type-id)]
-    #_(log/debug "unit-name" :type type)
+        ;; TODO; Refactor this into something more general, and that
+        ;; takes the various data tables into account. Also, rename
+        ;; unit-class-table to unit-data-table to be more consistent
+        ;; with the F4 source.
+        class-table-entry (nth class-table (- type-id 100))
+        {:keys [data-pointer]} class-table-entry
+        {:keys [domain type] :as ci} (class-info database type-id)]
+    (log/debug "unit-name"
+               :type type
+               :data-pointer data-pointer
+               :domain domain
+               :type type
+               :class-table (class class-table))
+    ;; Ref: unit.cpp::GetName
     (condp = [domain type]
       [DOMAIN_LAND TYPE_BATTALION]
       (let [{:keys [name-id]} unit]
@@ -1183,7 +1194,7 @@
                 name-id
                 (ordinal-suffix name-id
                                 database)
-                (-> unit-class-table (nth class) :name)
+                (-> unit-class-table (nth data-pointer) :name)
                 (get-size-name unit database)))
       "TODO")))
 

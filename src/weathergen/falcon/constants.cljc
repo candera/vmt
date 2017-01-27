@@ -2246,6 +2246,18 @@
     SPTYPE_APU                  = 3,
     SPTYPE_WTRAILER             = 4,
     )
+
+  ;; data Type Class table Entries
+  (defenum Data_Types
+    DTYPE_MIN = 0, ;; JB 010106 for sanity checks
+    DTYPE_FEATURE               = 1,
+    DTYPE_NONE                  = 2,
+    DTYPE_OBJECTIVE             = 3,
+    DTYPE_UNIT                  = 4,
+    DTYPE_VEHICLE               = 5,
+    DTYPE_WEAPON                = 6,
+    DTYPE_MAX = 7, ;; JB 010106 for sanity checks
+    )
   )
 
 (with-file "falcent.h"

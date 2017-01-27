@@ -1348,7 +1348,7 @@
      :files
      :units
      :data
-     shuffle
+     ;;shuffle
      (take 10)
      (map (juxt :type :name :name-id :id))
      pprint)
