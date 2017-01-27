@@ -1,5 +1,3 @@
-(ns scratch)
-
 (require '[weathergen.fmap :as fmap])
 (require '[weathergen.model :as model])
 
@@ -1137,7 +1135,7 @@
                  #_"/Users/candera/falcon/4.33.3/Data/Campaign/Save/SA-17 Loft.tac"
                  file-buf
                  (mission/read-mission {:class-table class-table})
-                 :teams
+                 :units
                  first
                  :data)]
     #_(class data)
@@ -1145,14 +1143,261 @@
                        1
                        (mission/unit-record class-table)))
     #_(first data)
-    (->> data
-         ;; rand-nth
-         pr-str
-         (spit "/tmp/data.clj"))
+    (spit "/tmp/data.clj"
+          (-> data
+              (nth 14)
+              pr-str))
     #_(doseq [item data]
         (println item))
     ))
 
 ;; battalion -> 115
 ;; battalion + flight => 946 (includes 2 + 10 mystery)
+
+(do
+  (require :reload '[weathergen.mission-files :as mission])
+  (let [strings (mission/read-strings
+                 (file-buf "/Users/candera/falcon/4.33.3/Data/Campaign/Save/Strings.idx")
+                 (file-buf "/Users/candera/falcon/4.33.3/Data/Campaign/Save/Strings.wch"))]
+    (map strings (range 100 15d0))))
+
+(def smpu
+  (-> "/Users/candera/falcon/4.33.3/Data/Campaign/Save/SMPU-Day  3 00 41 48.cam"
+      #_"/Users/candera/falcon/4.33.3/Data/Campaign/Save/SA-17 Loft.tac"
+      file-buf
+      (mission/read-mission {:class-table class-table})))
+
+(def battalion (-> smpu :units first :data rand-nth))
+(-> smpu :units first :data rand-nth (select-keys [:type :name-id]))
+
+(def strings
+  (mission/read-strings
+   (file-buf "/Users/candera/falcon/4.33.3/Data/Campaign/Save/Strings.idx")
+   (file-buf "/Users/candera/falcon/4.33.3/Data/Campaign/Save/Strings.wch")))
+
+(doseq [f (map str "abcdefgoprtstwx")]
+  (println f ":" (cl-format nil (str "~" f) 3)))
+
+(require :reload '[weathergen.mission-files :as mission])
+
+(mission/unit-name battalion {:class-table class-table
+                              :strings strings})
+
+(doseq [battalion (->> smpu
+                       :units
+                       first
+                       :data
+                       shuffle
+                       (filter #(-> % :type (= :battalion)))
+                       (take 20))]
+  (println (mission/unit-name battalion {:class-table class-table
+                                         :strings strings})))
+
+(do
+  (require :reload '[weathergen.mission-files :as mission])
+  (->> "/Users/candera/falcon/4.33.3/Data/Terrdata/objects/FALCON4.UCD"
+       file-buf
+       mission/read-unit-class-table
+       (def unit-class-table)))
+
+(- 0x628 0x4d8)
+
+(/ (- 0x8c8 0x628) 2)
+
+(/ (- 0x628 2) 336)
+
+(mod (- 0x628 2) 336)
+
+(buf/size
+ (buf/spec :index buf/int16
+           :num-elements (buf/repeat 16
+                                     buf/int32)
+           :vehicle-type  (buf/repeat 16
+                                      buf/int16)
+           :vehicle-class (buf/repeat 16
+                                      (buf/repeat 8 buf/byte))
+           :flags buf/int16
+           ;; :name (fixed-string 20)
+           ;; :movement-type move-type-read-spec
+           ;; :movement-speed buf/int16
+           ;; :max-range buf/int16
+           ;; :fuel buf/int32
+           ;; :rate buf/int16
+           ;; :pt-data-index buf/int16
+           ;; :scores (buf/repeat MAXIMUM_ROLES buf/byte)
+           ;; :role buf/byte
+           ;; :hit-chance (buf/repeat MOVEMENT_TYPES buf/byte)
+           ;; :strength (buf/repeat MOVEMENT_TYPES buf/byte)
+           ;; :range (buf/repeat MOVEMENT_TYPES buf/byte)
+           ;; :detection (buf/repeat MOVEMENT_TYPES buf/byte)
+           ;; :damage-mod (buf/repeat damage-type-enum-count
+           ;;                         buf/byte)
+           ;; :radar-vehicle buf/byte
+           ;; :special-index buf/int16
+           ;; :icon-index buf/int16
+           ;; ;; This is a sign that the structure is wrong - just trying to see if the alignment is right at this point
+           ;; :padding (buf/repeat 7 buf/byte))
+           ))
+
+(do
+  (require :reload '[weathergen.mission-files :as mission])
+  (->> "/Users/candera/falcon/4.33.3/Data/Terrdata/objects/FALCON4.UCD"
+       file-buf
+       mission/read-unit-class-table
+       (def unit-class-table))
+  (->> unit-class-table shuffle (take 10) (map #(select-keys % [:name :icon-index])) pprint))
+
+(def class-table (mission/read-class-table ))
+
+(require :reload '[weathergen.mission-files :as mission])
+
+(->> smpu
+     :units
+     first
+     :data
+     shuffle
+     (take 10)
+     (map #(mission/unit-name % {:class-table class-table
+                                 :strings strings})))
+
+
+(do
+  (def strings
+    (mission/read-strings
+     (file-buf "/Users/candera/falcon/4.33.3/Data/Campaign/Save/Strings.idx")
+     (file-buf "/Users/candera/falcon/4.33.3/Data/Campaign/Save/Strings.wch")))
+  (def class-table (-> "/Users/candera/falcon/4.33.3/Data/Terrdata/objects/FALCON4.ct"
+                       file-buf
+                       mission/read-class-table))
+  (def smpu
+    (-> "/Users/candera/falcon/4.33.3/Data/Campaign/Save/SMPU-Day  3 00 41 48.cam"
+        #_"/Users/candera/falcon/4.33.3/Data/Campaign/Save/SA-17 Loft.tac"
+        file-buf
+        (mission/read-mission {:class-table class-table}))))
+
+(do
+  (require :reload '[weathergen.mission-files :as mission])
+  (->> smpu
+       :units
+       first
+       :data
+       shuffle
+       (take 10)
+       (map #(mission/unit-name % {:class-table class-table
+                                   :strings strings}))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(let [path "/Users/candera/falcon/4.33.3/Data/Campaign/Save/SMPU-Day  1 08 05 03.cam"
+      install-dir (files/find-install-dir path)
+      installation (files/load-installation install-dir)]
+  (fs/parent path)
+  #_installation
+  #_(pprint
+   (for [theater (:theaters installation)
+         :let [cd (files/campaign-dir installation theater)]]
+     {:campaign-dir cd
+      :name (:name theater)
+      :ancestor? (fs/ancestor? cd path)}))
+  #_(->> installation
+         :theaters
+         (map #(files/campaign-dir installation %)))
+  #_(files/find-theater installation path))
+
+;; This file seems to be corrupt.
+(def smpu (files/read-mission "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/SMPU-Day  1 08 05 03.cam"))
+
+(def tac (files/read-mission "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/stratus.tac"))
+
+;; This one reads okay
+(def smpu (files/read-mission "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/SMPU-Day  3 00 41 48.cam"))
+
+;; This isn't fully general yet, but shows how to dump a compressed
+;; campaign embedded file to disk
+(binding [octet.buffer/*byte-order* :little-endian]
+  (let [path "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/SMPU-Day  1 08 05 03.cam"
+        buf (fs/file-buf path)
+        dir-offset (log/spy (buf/read buf buf/uint32))
+        dir-file-count (buf/read buf buf/uint32 {:offset dir-offset})
+        directory (buf/read buf (buf/repeat dir-file-count
+                                            files/directory-entry)
+                            {:offset (+ dir-offset 4)})
+        ;; Entered manually
+        offset 3663
+        length 77046
+        header-spec (buf/spec :compressed-size buf/int32
+                              :num-units buf/int16
+                              :uncompressed-size buf/int32)
+        {:keys [compressed-size
+                num-units
+                uncompressed-size]} (buf/read buf
+                                              header-spec
+                                              {:offset offset})
+        ;; size = 0x2f42f (193583)
+        data (lzss/expand buf
+                          (+ offset (buf/size header-spec))
+                          (- length 6)
+                          uncompressed-size)]
+    (.write (java.io.FileOutputStream. "/tmp/units.raw")
+            (.array data))))
+
+;; This one reads okay
+(def smpu (files/read-mission "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/SMPU-Day  3 00 41 48.cam"))
+
+(->> @smpu
+     :files
+     :units
+     :data
+     shuffle
+     (take 10)
+     (map (juxt :type :name :name-id :id))
+     pprint)
+
+(def u (->> smpu
+            :files
+            :units
+            :data
+            (filter #(-> % :id :name (= 4339)))
+            first))
+
+u
+
+(:id u)
+
+(:name-id u)
+
+(let [{:keys [name-id unit-type]} u
+      {:keys [domain type]} (files/unit-class-info
+                             (:database smpu)
+                             unit-type)]
+  {:name-id name-id
+   :unit-type unit-type
+   :domain domain
+   :type type
+   :size-name (files/get-size-name u (:database smpu))})
+
+
+(files/unit-name u (:database smpu))
+
+(do
+ (->> @smpu
+      :database
+      :unit-class-table
+      csv-ize
+      (spit "/tmp/unit-class-table.csv"))
+
+ (->> @smpu
+      :database
+      :class-table
+      csv-ize
+      (spit "/tmp/class-table.csv"))
+
+ (as-> @smpu ?
+   (:files ?)
+   (:units ?)
+   (:data ?)
+   #_(take 2 ?)
+   (csv-ize ? {:initial-columns [:camp-id :name :name-id :type-id]})
+   (spit "/tmp/units.csv" ?)))
+
 

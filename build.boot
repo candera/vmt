@@ -27,14 +27,15 @@
                  [cljsjs/tinycolor "1.3.0-0"]
                  [garden "1.3.2"]
                  [funcool/octet "1.0.1"]
-
-                 [clojure-complete "0.2.4" :scope "test"]]
+                 [org.clojure/core.match "0.3.0-alpha4"]
+                 [org.clojure/tools.namespace "0.2.11" :scope "test"]]
+ ;; TODO: Really need a way to hook into the repl-server so that dev
+ ;; doesn't wind up in the source path for released code.
  :source-paths #{"src" "dev"}
  :asset-paths  #{"assets"}
  :repl-server-port 5559
  :repl-server-name (str project)
- ;; :repl-server-init-ns 'weathergen.math
- )
+ :repl-server-init-ns 'user)
 
 (require
  '[adzerk.boot-cljs         :refer [cljs]]
@@ -46,12 +47,18 @@
  '[octet.core :as buf]
  '[clojure.repl :refer :all]
  '[clojure.pprint :refer [pprint]]
- '[weathergen.mission-files :as mission])
+ '[weathergen.falcon.files :as files]
+ '[weathergen.filesystem :as fs]
+ '[clojure.tools.namespace.repl :refer [refresh]]
+ 'user)
+
+;; No idea why I have to do this to get things to work.
+(clojure.tools.namespace.repl/set-refresh-dirs "src" "dev")
 
 (alter-var-root #'*print-length* (constantly 1000))
 
 (deftask dev
-  "Build weathertest for local development."
+  "Build and serve WeatherGen for local development."
   []
   (comp
    (watch)
@@ -66,6 +73,35 @@
    (cljs)
    (serve :port 8006)))
 
+(deftask electron-build []
+  (comp
+   (speak)
+   (hoplon)
+   ;; Compile everything except main
+   (cljs      :ids #{"renderer" "worker" "index.html"})
+   ;; Compile JS for main process ==============================
+   ;; path.resolve(".") which is used in CLJS's node shim
+   ;; returns the directory `electron` was invoked in and
+   ;; not the directory our main.js file is in.
+   ;; Because of this we need to override the compilers `:asset-path option`
+   ;; See http://dev.clojure.org/jira/browse/CLJS-1444 for details.
+   (cljs      :ids #{"main"}
+              :compiler-options {;; :asset-path "/main.out"
+                                 :closure-defines {'app.main/dev? false}})
+   (target)))
+
+(deftask app-build
+  "Build "
+  []
+  (comp
+   (hoplon)
+   ;; Compile everything except main
+   (cljs :ids #{"renderer" "worker" "index.html"}
+         :optimizations :advanced)
+   (cljs :ids #{"main"}
+         :optimizations :simple)
+   (target)))
+
 #_(deftask dev-repl
   []
   (comp
@@ -75,7 +111,7 @@
    (cljs)))
 
 (deftask prod
-  "Build weathertest for production deployment."
+  "Build WeatherGen for production deployment."
   []
   (comp
     (hoplon)
@@ -85,13 +121,3 @@
 
 ;;; Utility functions
 
-(defn file-buf
-  "Returns a ByteBuffer wrapping the contents of the file at `path`."
-  [path]
-  (-> path
-      (clojure.string/replace " " "%20")
-      (->> (str "file://"))
-      java.net.URI.
-      java.nio.file.Paths/get
-      java.nio.file.Files/readAllBytes
-      java.nio.ByteBuffer/wrap))
