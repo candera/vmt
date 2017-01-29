@@ -25,9 +25,20 @@
   (BrowserWindow. #js {:width w :height h :frame frame? :show show?}))
 
 (defn init-browser []
-  (reset! main-window (mk-window 800 600 true true))
+  (reset! main-window (mk-window 1300 800 true true))
+  (-> @main-window
+      .-webContents
+      (.on "new-window"
+           (fn [e url]
+             (-> "electron"
+                 js/require
+                 .-shell
+                 (.openExternal url))
+             (.preventDefault e))))
   (load-page @main-window)
-  (if dev? (.openDevTools @main-window))
+  (when dev?
+    ;; TODO: Anything we want to do differently?
+    )
   (.on @main-window "closed" #(reset! main-window nil)))
 
 (defn init []
