@@ -9,7 +9,8 @@
             [taoensso.timbre :as log]
             [weathergen.dtc :as dtc]
             [weathergen.fmap :as fmap]
-            [weathergen.falcon.files :as files]
+            [weathergen.falcon.files.mission :as mission]
+            [weathergen.falcon.files.resources :as resources]
             [weathergen.filesystem :as fs]
             [weathergen.lzss :as lzss]
             [weathergen.math :as math]
@@ -88,7 +89,7 @@
 (def smpu
   (delay
    (log/debug "Reading SMPU...")
-   (let [mission (files/read-mission
+   (let [mission (mission/read-mission
                   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/SMPU-Day  3 00 41 48.cam")]
      (log/debug "Done reading.")
      mission)))

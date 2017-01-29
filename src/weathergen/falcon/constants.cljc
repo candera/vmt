@@ -2275,3 +2275,25 @@
 (with-file "vuentity.h"
   (def VU_LAST_ENTITY_TYPE 100))
 
+(with-file "pilot.cpp"
+  (def NUM_CALLSIGNS 160)
+  (def NUM_PILOTS 686)
+  (def FIRST_PILOT_ID 2300)
+  (def FIRST_CALLSIGN_ID 2000))
+
+(with-file "atm.h"
+  (def ATM_MAX_CYCLES 32))
+
+(with-file "cresmgr.h"
+  (defenum unnamed
+    _RSC_8_BIT_ = 0x00000001,
+    _RSC_16_BIT_ = 0x00000002,
+    _RSC_USECOLORKEY_ = 0x40000000,
+    _RSC_SINGLE_ = 0x00000001,
+    _RSC_MULTIPLE_ = 0x00000002,
+
+    ;; Add types as needed
+    _RSC_IS_IMAGE_ = 100,
+    _RSC_IS_SOUND_ = 101,
+    _RSC_IS_FLAT_ = 102)
+)
