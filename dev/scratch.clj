@@ -1320,7 +1320,7 @@
         dir-offset (log/spy (buf/read buf buf/uint32))
         dir-file-count (buf/read buf buf/uint32 {:offset dir-offset})
         directory (buf/read buf (buf/repeat dir-file-count
-                                            files/directory-entry)
+                                            mission/directory-entry)
                             {:offset (+ dir-offset 4)})
         ;; Entered manually
         offset 3663
@@ -1348,7 +1348,7 @@
      :files
      :units
      :data
-     ;;shuffle
+     shuffle
      (take 10)
      (map (juxt :type :name :type-id :camp-id :name-id))
      pprint)
@@ -1379,12 +1379,13 @@ u
 
 (files/unit-name u (:database smpu))
 
+;; Write out the CSVs that let me look at the database in Excel
 (do
  (->> @smpu
       :database
-      :unit-class-table
+      :unit-class-data
       csv-ize
-      (spit "/tmp/unit-class-table.csv"))
+      (spit "/tmp/unit-class-data.csv"))
 
  (->> @smpu
       :database
@@ -1396,8 +1397,7 @@ u
    (:files ?)
    (:units ?)
    (:data ?)
-   #_(take 2 ?)
-   (csv-ize ? {:initial-columns [:camp-id :name :name-id :type-id]})
+   (csv-ize ? {:initial-columns [:camp-id :type :name :name-id :type-id]})
    (spit "/tmp/units.csv" ?)))
 
 
@@ -1418,3 +1418,23 @@ u
       {:keys [class-table]} database
       {:keys [data-pointer data-type]} (nth class-table (- type-id 100))]
   (count (files/data-table database data-type)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(doseq [item (->> (resources/read-idx "/Users/candera/falcon/4.33.3/Data/Art/resource/bludark.idx")
+                  (map :id)
+                  (map-indexed vector)
+                  #_(map (juxt :id :flags :w :h :image-offset)))]
+  (println item))
+
+(->> (resources/read-idx "/Users/candera/falcon/4.33.3/Data/Art/resource/bludark.idx")
+                  (map :id)
+                  count
+                  (format "0x%x"))
+
+;; Planner.idx
+size: 0x22ec
+version: 518d5384
+
+type: 0x64 -> image
+:type: 

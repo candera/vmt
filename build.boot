@@ -61,6 +61,7 @@
   "Build and serve WeatherGen for local development."
   []
   (comp
+   (repl-server)
    (watch)
    (speak)
    (hoplon)
@@ -68,12 +69,20 @@
    ;; Tried this fix from Alan, but it's throwing an exception in the
    ;; global scope code in forecast.html. Which is weird because I
    ;; don't even have that page open.
-   #_(reload :ids #{"index.html"}
-             :only-by-re [#"^((?!worker).)*$"])
-   (cljs)
-   (serve :port 8006)))
+   (reload :ids #{"main" "renderer" "index" "forecast"}
+           ;; :only-by-re [#"^((?!worker).)*$"]
+           )
+   (cljs :ids #{"renderer" "worker" "index.html"}
+         ;; :optimizations :advanced
+         )
+   (cljs :ids #{"main"}
+         ;; :optimizations :simple
+         :compiler-options {:asset-path "target/main.out"
+                            :closure-defines {'app.main/dev? true}})
+   (target)
+   #_(serve :port 8006)))
 
-(deftask electron-build []
+#_(deftask electron-build []
   (comp
    (speak)
    (hoplon)
@@ -90,12 +99,12 @@
                                  :closure-defines {'app.main/dev? false}})
    (target)))
 
-(deftask app-build
-  "Build "
+(deftask electron
+  "Compile in a way compatible with electron packaging."
   []
   (comp
    (hoplon)
-   ;; Compile everything except main
+   ;; Compile everything except main with advanced opts
    (cljs :ids #{"renderer" "worker" "index.html"}
          :optimizations :advanced)
    (cljs :ids #{"main"}
@@ -110,7 +119,7 @@
    (cljs-repl)
    (cljs)))
 
-(deftask prod
+#_(deftask prod
   "Build WeatherGen for production deployment."
   []
   (comp

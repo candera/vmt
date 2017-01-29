@@ -1,0 +1,5 @@
+#!/bin/bash
+
+boot electron
+mkdir -p package/
+electron-packager target/ --electron-version=1.4.15 --out package/ --overwrite
