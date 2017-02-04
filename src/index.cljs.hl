@@ -1,5 +1,6 @@
 (page "index.html"
-  (:require [weathergen.ui :as ui]))
+  (:require [weathergen.ui :as ui]
+            [cljs.js]))
 
 (reset! ui/weather-params
         ui/default-weather-params)
@@ -20,6 +21,7 @@
 
 (ui/weather-page
  :serialization-controls {}
+ :flights-section {}
  :step-controls {:mode :edit}
  :display-controls {}
  :weather-parameters {}

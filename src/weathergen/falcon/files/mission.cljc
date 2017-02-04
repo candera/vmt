@@ -5,13 +5,11 @@
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
-            [weathergen.falcon.constants :refer :all]
-            [weathergen.falcon.files :refer :all]
+            [weathergen.falcon.constants :as c]
+            [weathergen.falcon.files :refer [larray fixed-string lstring bitflags constant read->]]
             [weathergen.filesystem :as fs]
             [weathergen.lzss :as lzss]
             [weathergen.util :as util]))
-
-;;; Class Table - classtbl.h
 
 ;; Ref: vuentity.h
 (def vu-entity
@@ -80,48 +78,14 @@
 
 ;;; Unit class table
 
-;; This is the one I started with. It's broken, but at least the name
-;; winds up in the right place.
-#_(def unit-class-data
-  ;; Source: entity.h
-  (buf/spec :index buf/int16
-            :num-elements (buf/repeat VEHICLE_GROUPS_PER_UNIT
-                                      buf/int32)
-            :vehicle-type  (buf/repeat VEHICLE_GROUPS_PER_UNIT
-                                       buf/int16)
-            :vehicle-class (buf/repeat VEHICLE_GROUPS_PER_UNIT
-                                       (buf/repeat 8 buf/byte))
-            :flags buf/int32
-            :name (fixed-string 20)
-            :movement-type buf/int32
-            :movement-speed buf/int16
-            :max-range buf/int16
-            :fuel buf/int32
-            :rate buf/int16
-            :pt-data-index buf/int16
-            :scores (buf/repeat MAXIMUM_ROLES buf/byte)
-            :role buf/byte
-            :hit-chance (buf/repeat MOVEMENT_TYPES buf/byte)
-            :strength (buf/repeat MOVEMENT_TYPES buf/byte)
-            :range (buf/repeat MOVEMENT_TYPES buf/byte)
-            :detection (buf/repeat MOVEMENT_TYPES buf/byte)
-            :damage-mod (buf/repeat (inc OtherDam) buf/byte)
-            :radar-vehicle buf/byte
-            :special-index buf/int16
-            :padding0 (buf/repeat 2 buf/byte)
-            :icon-index buf/int16
-            ;; This is a sign that the structure is wrong - just needed to add this to get the alignment right
-            :padding (buf/repeat 3 buf/byte)))
-
-
 (def unit-class-data
   ;; Source: entity.cpp::LoadUnitData and UcdFile.cs
   (buf/spec :index buf/int16
-            :num-elements (buf/repeat VEHICLE_GROUPS_PER_UNIT
+            :num-elements (buf/repeat c/VEHICLE_GROUPS_PER_UNIT
                                       buf/int32)
-            :vehicle-type  (buf/repeat VEHICLE_GROUPS_PER_UNIT
+            :vehicle-type  (buf/repeat c/VEHICLE_GROUPS_PER_UNIT
                                        buf/int16)
-            :vehicle-class (buf/repeat VEHICLE_GROUPS_PER_UNIT
+            :vehicle-class (buf/repeat c/VEHICLE_GROUPS_PER_UNIT
                                        (buf/repeat 8 buf/ubyte))
             :flags buf/uint32
             :name (fixed-string 20)
@@ -132,13 +96,13 @@
             :fuel buf/int32
             :rate buf/int16
             :pt-data-index buf/int16
-            :scores (buf/repeat MAXIMUM_ROLES buf/ubyte)
+            :scores (buf/repeat c/MAXIMUM_ROLES buf/ubyte)
             :role buf/ubyte
-            :hit-chance (buf/repeat MOVEMENT_TYPES buf/ubyte)
-            :strength (buf/repeat MOVEMENT_TYPES buf/ubyte)
-            :range (buf/repeat MOVEMENT_TYPES buf/ubyte)
-            :detection (buf/repeat MOVEMENT_TYPES buf/ubyte)
-            :damage-mod (buf/repeat (inc OtherDam) buf/ubyte)
+            :hit-chance (buf/repeat c/MOVEMENT_TYPES buf/ubyte)
+            :strength (buf/repeat c/MOVEMENT_TYPES buf/ubyte)
+            :range (buf/repeat c/MOVEMENT_TYPES buf/ubyte)
+            :detection (buf/repeat c/MOVEMENT_TYPES buf/ubyte)
+            :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte)
             :radar-vehicle buf/ubyte
             :padding2 buf/byte
             :special-index buf/int16
@@ -281,8 +245,9 @@
        (remove str/blank?)
        (map #(read-theater-def data-dir %))))
 
-(defn read-image-list
-  "Reads an image list file consisting of pairs of names and ids. Returns a seq of those pairs."
+(defn read-id-list-file
+  "Reads an id list file consisting of pairs of names and ids. Returns
+  a seq of those pairs."
   [installation path]
   (->> path
        (fs/path-combine (:data-dir installation))
@@ -290,24 +255,42 @@
        str/split-lines
        (map str/trim)
        (remove str/blank?)
-       (map #(str/split % #"[ \t]+"))
+       ;; The equals is because one of the files uses it, I think
+       ;; mistakenly
+       (map #(str/split % #"[ \t=]+"))
        (map (fn [[name id]]
-              [name (util/str->long id)]))))
+              [name (or (util/str->long id)
+                        (do (log/error "Error parsing image id"
+                                       :name name
+                                       :id id
+                                       :path path)
+                            nil))]))))
+
+(defn read-id-list
+  "Read in the id list file with `id`"
+  [installation id]
+  (let [pairs (->> (-> installation
+                       :art-dir
+                       (fs/path-combine (str id ".LST")))
+                   fs/file-text
+                   str/split-lines
+                   (map str/trim)
+                   (remove str/blank?)
+                   (mapcat #(read-id-list-file installation %)))]
+    {:name->id (zipmap (map first pairs) (map second pairs))
+     :id->name (zipmap (map second pairs) (map first pairs))}))
 
 (defn read-image-ids
   "Read in the image IDs in this installation. Returns a map with
   keys :id->name and :name->id mapping in each direction."
   [installation]
-  (let [pairs (->> (-> installation
-                       :art-dir
-                       (fs/path-combine "IMAGEIDS.LST"))
-                   fs/file-text
-                   str/split-lines
-                   (map str/trim)
-                   (remove str/blank?)
-                   (mapcat #(read-image-list installation %)))]
-    {:name->id (zipmap (map first pairs) (map second pairs))
-     :id->name (zipmap (map second pairs) (map first pairs))}))
+  (read-id-list installation "IMAGEIDS"))
+
+(defn read-user-ids
+  "Read in the user IDs in this installation. Returns a map with
+  keys :id->name and :name->id mapping in each direction."
+  [installation]
+  (read-id-list installation "USERIDS"))
 
 (defn load-installation
   "Return information about the installed theaters."
@@ -339,7 +322,10 @@
                       (fs/path-combine
                        (object-dir installation theater)
                        "FALCON4.UCD"))
+   ;; These next couple might need to be generalized, like to a map
+   ;; from the type to the ids in it.
    :image-ids (read-image-ids installation)
+   :user-ids (read-user-ids installation)
    :strings (read-strings (fs/path-combine
                            (campaign-dir installation theater)
                            "Strings.idx")
@@ -376,10 +362,11 @@
                      distinct
                      count
                      (= (count files))))
-        {:files (zipmap (map :type files) files)
-         :database database
+        {:path         path
+         :files        (zipmap (map :type files) files)
+         :database     database
          :installation installation
-         :theater theater}))))
+         :theater      theater}))))
 
 ;; Common structures
 (def vu-id (buf/spec :name buf/uint32
@@ -569,7 +556,7 @@
 
 (def atm-airbase
   (buf/spec :id vu-id
-            :schedule (buf/repeat ATM_MAX_CYCLES buf/ubyte)))
+            :schedule (buf/repeat c/ATM_MAX_CYCLES buf/ubyte)))
 
 (def tasking-manager-fields
   [:id vu-id
@@ -653,7 +640,7 @@
             :fuel-available buf/uint16
             :replacements-available buf/uint16
             :player-rating buf/float
-            :last-player-mission buf/uint32
+            :last-player-mission campaign-time
             :current-stats team-status
             :start-stats team-status
             :reinforcement buf/int16
@@ -958,7 +945,7 @@
   are things like domain and type) for a given unit type."
   [{:keys [class-table] :as database} type-id]
   (let [class-entry (nth class-table
-                         (- type-id VU_LAST_ENTITY_TYPE))]
+                         (- type-id c/VU_LAST_ENTITY_TYPE))]
     (-> class-entry
         :vu-class-data
         :class-info)))
@@ -986,12 +973,12 @@
                 ;;              :domain domain
                 ;;              :type type)
                 spc (condp = [domain type]
-                      [DOMAIN_AIR  TYPE_FLIGHT] flight
-                      [DOMAIN_AIR  TYPE_PACKAGE] package
-                      [DOMAIN_AIR  TYPE_SQUADRON] squadron
-                      [DOMAIN_LAND TYPE_BATTALION] battalion
-                      [DOMAIN_LAND TYPE_BRIGADE] brigade
-                      [DOMAIN_SEA  TYPE_TASKFORCE] task-force)
+                      [c/DOMAIN_AIR  c/TYPE_FLIGHT] flight
+                      [c/DOMAIN_AIR  c/TYPE_PACKAGE] package
+                      [c/DOMAIN_AIR  c/TYPE_SQUADRON] squadron
+                      [c/DOMAIN_LAND c/TYPE_BATTALION] battalion
+                      [c/DOMAIN_LAND c/TYPE_BRIGADE] brigade
+                      [c/DOMAIN_SEA  c/TYPE_TASKFORCE] task-force)
                 [datasize data] (try
                                   (buf/read* buf
                                              spc
@@ -1047,19 +1034,19 @@
     #_(log/debug "get-size-name" :domain domain :type type)
     (strings
      (condp partial= [domain type]
-       [DOMAIN_AIR TYPE_SQUADRON]   610
-       [DOMAIN_AIR TYPE_FLIGHT]     611
-       [DOMAIN_AIR TYPE_PACKAGE]    612
-       [DOMAIN_LAND TYPE_BRIGADE]   614
-       [DOMAIN_LAND TYPE_BATTALION] 615
-       [DOMAIN_SEA]               616
+       [c/DOMAIN_AIR  c/TYPE_SQUADRON]   610
+       [c/DOMAIN_AIR  c/TYPE_FLIGHT]     611
+       [c/DOMAIN_AIR  c/TYPE_PACKAGE]    612
+       [c/DOMAIN_LAND c/TYPE_BRIGADE]   614
+       [c/DOMAIN_LAND c/TYPE_BATTALION] 615
+       [c/DOMAIN_SEA]               616
        617))))
 
 (defn data-table
   "Return the appropriate data table."
   [database data-type]
   (let [k (condp = data-type
-            DTYPE_UNIT :unit-class-data
+            c/DTYPE_UNIT :unit-class-data
             nil)]
     (if k
       (get database k)
@@ -1070,7 +1057,7 @@
   "Return the class data appropriate to the type."
   [database type-id]
   (let [{:keys [class-table]} database
-        {:keys [data-pointer data-type]} (nth class-table (- type-id VU_LAST_ENTITY_TYPE))]
+        {:keys [data-pointer data-type]} (nth class-table (- type-id c/VU_LAST_ENTITY_TYPE))]
     (nth (data-table database data-type) data-pointer)))
 
 (defn unit-name
@@ -1082,22 +1069,23 @@
         {:keys [domain type] :as ci} (class-info database type-id)]
     ;; Ref: unit.cpp::GetName
     (condp = [domain type]
-      [DOMAIN_AIR TYPE_FLIGHT]
+      [c/DOMAIN_AIR c/TYPE_FLIGHT]
       (let [{:keys [callsign-id callsign-num]} unit]
-       (format "%s %s"
-               (strings (+ FIRST_CALLSIGN_ID callsign-id))
-               callsign-num))
+        (str (strings (+ c/FIRST_CALLSIGN_ID callsign-id))
+             " "
+             callsign-num))
 
-      [DOMAIN_AIR TYPE_PACKAGE]
+      [c/DOMAIN_AIR c/TYPE_PACKAGE]
       (let [{:keys [camp-id]} unit]
-        (format "Package %d" camp-id))
+        (str "Package " camp-id))
 
       (let [{:keys [name-id]} unit]
-        (format "%d%s %s %s"
-                name-id
-                (ordinal-suffix name-id database)
-                name
-                (get-size-name unit database))))))
+        (str name-id
+             (ordinal-suffix name-id database)
+             " "
+             name
+             " "
+             (get-size-name unit database))))))
 
 (defmethod read-embedded-file* :units
   ;; Ref: UniFile.cs, units.cpp
@@ -1136,4 +1124,28 @@
   [_ entry buf _]
   :not-yet-implemented)
 
+(defmulti stringify*
+  "Turns a value into something suitable for display, based on its
+  context identifier."
+  (fn [database context value] context))
 
+(defmethod stringify* :flight-mission
+  [mission _ value]
+  (let [strings (-> mission :database :strings)]
+    (strings (+ 300 value))))
+
+(defmethod stringify* :team-name
+  [mission _ value]
+  (let [teams (-> mission :files :teams :data)]
+    (-> teams (nth value) :team :name)))
+
+(defmethod stringify* :default
+  [_ _ value]
+  value)
+
+;; Always wrap a multimethod with a function so we have a single point
+;; of entry.
+(defn stringify
+  "Return a human-readable version of some coded quantity."
+  [mission context value]
+  (stringify* mission context value))

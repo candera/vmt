@@ -4,8 +4,8 @@
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
-            [weathergen.falcon.constants :refer :all]
-            [weathergen.falcon.files :refer :all]
+            [weathergen.falcon.constants :as c]
+            [weathergen.falcon.files :refer [fixed-string larray read->]]
             [weathergen.filesystem :as fs]))
 
 ;; There's an .idx and a .rsc. They are paired. The idx contains
@@ -65,9 +65,9 @@
                                                 buf/int32))
                           (fn [{:keys [type]}]
                             (condp = type
-                              _RSC_IS_IMAGE_ image-header
-                              _RSC_IS_SOUND_ sound-header
-                              _RSC_IS_FLAT_  flat-header)))]
+                              c/_RSC_IS_IMAGE_ image-header
+                              c/_RSC_IS_SOUND_ sound-header
+                              c/_RSC_IS_FLAT_  flat-header)))]
               (recur (conj entries data)
                      (+ offset datasize)))))))))
 

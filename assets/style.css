@@ -132,20 +132,20 @@ rect.inclement {
 
 /* Forecast ********************/
 
-#forecast table {
-    border-collapse: collapse;
-    border: solid 1px;
-}
+/* #forecast table { */
+/*     border-collapse: collapse; */
+/*     border: solid 1px; */
+/* } */
 
-#forecast thead tr td {
-    background: lightgray;
-    border-bottom: 1px solid black;
-    /* padding-right: 7px; */
-}
+/* #forecast thead tr td { */
+/*     background: lightgray; */
+/*     border-bottom: 1px solid black; */
+/*     /\* padding-right: 7px; *\/ */
+/* } */
 
-#forecast table tr:nth-child(even) {
-    background: #F2F0E0;
-}
+/* #forecast table tr:nth-child(even) { */
+/*     background: #F2F0E0; */
+/* } */
 
 #weather-grid-stack {
     position: relative;

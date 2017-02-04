@@ -58,10 +58,13 @@
   "Returns `s` trimmed of any trailing null characters."
   [s]
   (subs s 0
-        (->> s
-             (map int)
-             (take-while (complement zero?))
-             count)))
+        #?(:clj (->> s
+                     (map int)
+                     (take-while (complement zero?))
+                     count)
+           :cljs (->> s
+                      (take-while #(-> % .charCodeAt zero? not))
+                      count))))
 
 (defn fixed-string
   "Octet spec for a string of a fixed size. Removes trailing null

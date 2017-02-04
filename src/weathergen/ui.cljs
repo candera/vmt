@@ -35,6 +35,7 @@
             [weathergen.database :as db]
             [weathergen.dtc :as dtc]
             [weathergen.encoding :refer [encode decode] :as encoding]
+            [weathergen.falcon.files.mission :as mission]
             [weathergen.fmap :as fmap]
             [weathergen.help :as help]
             [weathergen.math :as math]
@@ -80,6 +81,9 @@
 (def safari? (and (:safari agents) (not (:chrome agents))))
 
 (def ie? (or (:msie agents) (:trident agents)))
+
+(def electron (when (= "nodejs" cljs.core/*target*)
+                 (js/require "electron")))
 
 ;;; State
 
@@ -277,6 +281,8 @@
 (defc computing true)
 
 (defc messages [])
+
+(defc mission nil)
 
 ;;; Formulas
 
@@ -649,6 +655,26 @@
                        :lines lines
                        :scale 0.5})))))
    {:extensions ".ini"}))
+
+;; TODO: probably going to need to run this on a worker.
+(defn load-mission
+  "Prompts the user for a mission file to load, and loads it."
+  []
+  (when-let [[path] (-> electron
+                      .-remote
+                      .-dialog
+                      (.showOpenDialog
+                       #js {:title "Select a campaign or tactical engagement file"
+                            :openFile true
+                            :filters #js [#js {:name "Campaign file"
+                                               :extensions #js ["cam"]}
+                                          #js {:name "Tactical engagement file"
+                                               :extensions #js ["tac"]}]
+                            #_[(js/FileFilter. #js
+                                               {:name "Campaign file"
+                                                :extensions #js [".cam"]})
+                               #_(js/FileFilter. )]}))]
+    (reset! mission (mission/read-mission path))))
 
 (def zipbuilder-worker
   (let [worker (js/Worker. "worker.js")
@@ -1184,6 +1210,7 @@
                                           :text-align "center"}
                                     args))]
         (table
+         :class "info-grid"
          (thead
           (tr (td1(with-help [:forecast :time] "Day/Time"))
               (td1 (with-help [:forecast :type] "Type"))
@@ -3353,9 +3380,7 @@
                   (image-button :src "images/file-open.png"
                                 :width "14px"
                                 :title "Load Mission File (.cam/.tac)"
-                                :click (fn [_]
-                                         (log/debug "loading file name")
-                                         (load-file-name l {:extensions ".cam,.tac,.trn"}))))]))
+                                :click load-mission))]))
          (row "From:"
               [:serialization-controls :multi-save :from]
               (time-entry display-params [:multi-save :from]))
@@ -3453,7 +3478,7 @@
 
 (defn flightpath-controls
   [_]
-  (control-section
+ (control-section
    :id "flightpath-controls"
    :title (with-help [:flight-paths :section]
             "Flight Paths")
@@ -3571,6 +3596,56 @@
                                       (remove-nth paths index)))))))))))))))
    (button :click load-dtc "Load DTC")))
 
+
+(defn unit-lookup-by-id
+  "Given a seq of units, return the one with the given id."
+  [units id]
+  (some (fn [unit]
+          (when (= id (:id unit))
+            unit))
+        units))
+
+(defn flights-section
+  [_]
+  (control-section
+   :title "Flights"
+   (formula-of [mission]
+     (log/debug "mission changed"
+                :units (-> mission :files :units :data count))
+     (if-not mission
+       "No mission loaded"
+       (let [{flights :flight
+              packages :package}
+             (->> mission
+                  :files
+                  :units
+                  :data
+                  (group-by :type))]
+         (if (-> flights count zero?)
+           "No flights in mission, or no mission loaded."
+           (let [td* (fn [& contents]
+                       (td
+                        :css {:padding-right "3px"}
+                        contents))]
+             (table
+              :class "info-grid"
+              (thead
+               (td* "Team")
+               (td* "Package")
+               (td* "Callsign")
+               (td* "Mission")
+               (td* "T/O")
+               (td* "TOT"))
+              (for [flight flights
+                    :let [package (unit-lookup-by-id packages (:package flight))]]
+                (tr
+                 (td* (->> flight :owner (mission/stringify mission :team-name)))
+                 (td* (:name-id package))
+                 (td* (:name flight))
+                 (td* (->> flight :mission (mission/stringify mission :flight-mission)))
+                 (td* (-> flight :waypoints first :depart format-time))
+                 (td* (-> flight :time-on-target format-time))))))))))))
+
 ;;; General layout
 
 (defn head
@@ -3579,7 +3654,7 @@
    (title "WeatherGen")
    (link :href "jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
-   (link :href "https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300"
+   (link :href "fonts/open-sans-condensed/open-sans-condensed.css"
          :rel "stylesheet"
          :type "text/css")
    (style
@@ -3590,7 +3665,17 @@
      [:fieldset
       {:padding-left "10px"}]
      [(css-sel/input (css-sel/attr= :type :range))
-      {:padding "5px"}]))))
+      {:padding "5px"}]
+     ;; General
+     [:.info-grid
+      {:border-collapse "collapse"
+              :border "solid 1px"}
+      [:thead
+       {:background "lightgray"
+        :border-bottom "1px solid black"}]
+      [:tr
+       [(css-sel/& (css-sel/nth-child :even))
+        {:background "#F2F0E0"}]]]))))
 
 (defelem body
   [{:keys [] :as attrs}
@@ -3658,6 +3743,7 @@
    :weather-override-parameters weather-override-parameters
    :advanced-controls advanced-controls
    :flightpath-controls flightpath-controls
+   :flights-section flights-section
    :test-section test-section})
 
 (defn weather-page

@@ -38,3 +38,29 @@
 (defmacro defformula
   [name cells & body]
   `(def ~name (formula-of ~cells ~@body)))
+
+(defmacro with-file
+  "Groups definitions by the file where the information originates"
+  [file & body]
+  `(do ~@body))
+
+(defn enum*
+  [body]
+  (loop [[name & more] body
+         counter 0
+         forms []]
+    (if-not name
+      forms
+      (let [[maybe-eq val & more2] more]
+        (if (= maybe-eq '=)
+          (recur more2
+                 (inc val)
+                 (conj forms (list 'def name val)))
+          (recur more
+                 (inc counter)
+                 (conj forms (list 'def name counter))))))))
+
+(defmacro defenum
+  [enum & body]
+  `(do ~@(enum* body)))
+
