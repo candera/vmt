@@ -1438,3 +1438,17 @@ version: 518d5384
 
 type: 0x64 -> image
 :type: 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(let [strings (-> @smpu :database :strings)]
+  (spit "/tmp/strings.csv"
+        (with-out-str
+          (dotimes [i 4100]
+            (printf "%d,%s\n"
+                    i
+                    (try
+                      (strings i)
+                      (catch Throwable t "")))))))
+
+(->> @smpu :files :teams :data csv-ize (spit "/tmp/teams.csv"))

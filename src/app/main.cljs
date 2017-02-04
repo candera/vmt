@@ -1,7 +1,12 @@
-(ns app.main)
+(ns app.main
+  #_(:require [cljs.repl]
+            [cljs.repl.node]))
+
+#_(cljs.repl/repl (cljs.repl.node/repl-env))
 
 (def electron      (js/require "electron"))
 (def app           (.-app electron))
+(def path          (js/require "path"))
 (def BrowserWindow (.-BrowserWindow electron))
 
 (goog-define dev? false)
@@ -15,9 +20,11 @@
   optimizations, for this we defined `dev?` above that we can override
   at compile time using the `:clojure-defines` compiler option."
   [window]
-  (if dev?
-      (.loadURL window (str "file://" js/__dirname "/../../index.html"))
-      (.loadURL window (str "file://" js/__dirname "/index.html"))))
+  (.loadURL window (str "file://"
+                        (.join path (.getAppPath app) "index.html")))
+  #_(if dev?
+    (.loadURL window (str "file://" js/__dirname "/../../index.html"))
+    (.loadURL window (str "file://" js/__dirname "/index.html"))))
 
 (def main-window (atom nil))
 

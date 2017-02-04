@@ -2,23 +2,28 @@
 
 (set-env!
  :dependencies '[[org.clojure/clojure       "1.9.0-alpha14"]
-                 [org.clojure/clojurescript "1.9.293"]
+                 [org.clojure/clojurescript "1.9.456"]
                  [adzerk/boot-cljs          "1.7.228-2"]
-                 [adzerk/boot-reload        "0.4.13"]
+                 [adzerk/boot-reload        "0.5.0"]
+                 [adzerk/boot-cljs-repl     "0.3.3"]
                  ;;[hoplon/javelin "3.9.0"]
                  [hoplon/hoplon             "6.0.0-alpha17"]
                  [org.clojure/core.async    "0.2.395"
                   :exclusions [org.clojure/tools.reader]]
                  [tailrecursion/boot-jetty  "0.1.3"]
-                 ;; [org.clojure/tools.nrepl "0.2.12" :scope "test"]
                  [cljsjs/jquery-ui "1.11.4-0"]
                  [org.clojure/data.csv "0.1.3"]
                  ;; TODO: Update to later version
                  [com.cognitect/transit-cljs "0.8.239"]
-                 [com.taoensso/timbre "4.7.4"]
+                 [com.taoensso/timbre "4.8.0"]
                  ;;[secretary "1.2.3"]
                  ;;[funcool/cuerdas "2.0.0"]
                  ;;[com.cemerick/url "0.1.1"]
+
+                 ;; CLJS REPL dependencies
+                 [com.cemerick/piggieback "0.2.1" :scope "test"]
+                 [weasel "0.7.0" :scope "test"]
+                 [org.clojure/tools.nrepl "0.2.12" :scope "test"]
 
                  [cljsjs/filesaverjs "1.3.3-0"]
                  ;; Had to download as the cljsjs one is pretty far out of date
@@ -39,7 +44,7 @@
 
 (require
  '[adzerk.boot-cljs         :refer [cljs]]
- #_'[adzerk.boot-cljs-repl   :refer [cljs-repl start-repl]]
+ '[adzerk.boot-cljs-repl    :refer [cljs-repl start-repl]]
  '[adzerk.boot-reload       :refer [reload]]
  '[hoplon.boot-hoplon       :refer [hoplon prerender]]
  '[tailrecursion.boot-jetty :refer [serve]]
@@ -69,16 +74,21 @@
    ;; Tried this fix from Alan, but it's throwing an exception in the
    ;; global scope code in forecast.html. Which is weird because I
    ;; don't even have that page open.
-   (reload :ids #{"main" "renderer" "index" "forecast"}
+   #_(reload :ids #{"index.html"}
            ;; :only-by-re [#"^((?!worker).)*$"]
            )
+   (cljs-repl :ids #{"index.html"})
    (cljs :ids #{"renderer" "worker" "index.html"}
-         ;; :optimizations :advanced
+         :optimizations :simple
+         :compiler-options {:target :nodejs
+                            :hashbang false}
          )
    (cljs :ids #{"main"}
          ;; :optimizations :simple
          :compiler-options {:asset-path "target/main.out"
-                            :closure-defines {'app.main/dev? true}})
+                            :closure-defines {'app.main/dev? true}
+                            :target :nodejs
+                            :hashbang false})
    (target)
    #_(serve :port 8006)))
 
@@ -106,9 +116,13 @@
    (hoplon)
    ;; Compile everything except main with advanced opts
    (cljs :ids #{"renderer" "worker" "index.html"}
-         :optimizations :advanced)
+         :optimizations :advanced
+         :compiler-options {:target :nodejs
+                            :hashbang false})
    (cljs :ids #{"main"}
-         :optimizations :simple)
+         :optimizations :simple
+         :compiler-options {:target :nodejs
+                            :hashbang false})
    (target)))
 
 #_(deftask dev-repl
