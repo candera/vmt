@@ -41,6 +41,7 @@
             [weathergen.math :as math]
             [weathergen.model :as model]
             [weathergen.twx :as twx]
+            [weathergen.ui.slickgrid :as slickgrid]
             [weathergen.wind :as wind]
             ;; [weathergen.route :as route]
             [cljs.core.async :as async
@@ -3458,23 +3459,44 @@
   [{:keys []}]
   (control-section
    :title "Test"
-   (let [c1 (cell "hi")
-         c2 (cell true)]
-     [(when-tpl c2
-        (.log js/console "Evaluated")
-        (span c1))
-      (button :click #(swap! c2 not) "toggle")
-      (button :click #(swap! c1 str "x") "x")])
+   (let [data (cell [{"a" 1 "b" 2 "c" 3}
+                     {"a" 4 "b" 5 "c" 6}
+                     {"a" "a" "b" "b" "c" "c"}])
+         columns (cell [{:id "a"
+                         :name "A"
+                         :field "a"}
+                        {:id "b"
+                         :name "B"
+                         :field "b"}
+                        {:id "c"
+                         :name "C"
+                         :field "c"}])]
+     (slickgrid/slickgrid
+      :data data
+      :columns columns
+      :options (cell {:enableColumnReorder false
+                      :autoHeight true
+                      :fullWidthRows true})
+      :css { ;;:width "600px"
+            :height "500px"}))
+   (div :id "my-test-grid")
+   #_(let [c1 (cell "hi")
+           c2 (cell true)]
+       [(when-tpl c2
+          (.log js/console "Evaluated")
+          (span c1))
+        (button :click #(swap! c2 not) "toggle")
+        (button :click #(swap! c1 str "x") "x")])
    #_(let [path (cell {:color "FFFFFF"})
-         current-color (cell= (:color path))]
-     (triple-border
-      :inner current-color
-      :outer (cell= (contrasting current-color))
-      [(span (cell= (str current-color)))
-       (color-picker
-        :value current-color
-        :change (fn [val opacity]
-                  (swap! path assoc :color @val)))]))))
+           current-color (cell= (:color path))]
+       (triple-border
+        :inner current-color
+        :outer (cell= (contrasting current-color))
+        [(span (cell= (str current-color)))
+         (color-picker
+          :value current-color
+          :change (fn [val opacity]
+                    (swap! path assoc :color @val)))]))))
 
 (defn flightpath-controls
   [_]
@@ -3652,11 +3674,14 @@
   []
   (h/head
    (title "WeatherGen")
+   (link :href "lib/slickgrid/slick.grid.css" :rel "stylesheet" :title "main" :type "text/css")
+   (link :href "lib/slickgrid/slick-default-theme.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "fonts/open-sans-condensed/open-sans-condensed.css"
          :rel "stylesheet"
          :type "text/css")
+   ;; (script :src "js/jquery/jquery.event.drag-2.3.0.js")
    (style
     :type "text/css"
     ;; TODO: Move the rest of the stylesheet stuff into here
@@ -3675,7 +3700,11 @@
         :border-bottom "1px solid black"}]
       [:tr
        [(css-sel/& (css-sel/nth-child :even))
-        {:background "#F2F0E0"}]]]))))
+        {:background "#F2F0E0"}]]]
+     ;; SlickGrid styling and overrides
+     ;; TODO: Make this a cell so the slickgrid namespace can handle it itself.
+     slickgrid/styles
+     ))))
 
 (defelem body
   [{:keys [] :as attrs}

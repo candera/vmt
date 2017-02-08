@@ -75,14 +75,29 @@
    ;; global scope code in forecast.html. Which is weird because I
    ;; don't even have that page open.
    #_(reload :ids #{"index.html"}
-           ;; :only-by-re [#"^((?!worker).)*$"]
-           )
+             ;; :only-by-re [#"^((?!worker).)*$"]
+             )
    (cljs-repl :ids #{"index.html"})
-   (cljs :ids #{"renderer" "worker" "index.html"}
+   (cljs :ids #{#_"renderer" "worker" "index.html"}
          :optimizations :simple
          :compiler-options {:target :nodejs
-                            :hashbang false}
-         )
+                            :hashbang false
+                            ;;:externs ["js/slickgrid/slickgrid.ext.js"]
+                            :foreign-libs [{:file "assets/lib/slickgrid/lib/jquery.event.drag-2.3.0.js"
+                                            :provides ["jquery.event.drag"]}
+                                           {:file "assets/lib/slickgrid/slick.core.js"
+                                            :provides ["slick.core"]
+                                            :requires ["jquery.event.drag"]}
+                                           {:file "assets/lib/slickgrid/slick.grid.js"
+                                            :provides ["slick.grid"]
+                                            :requires ["slick.core"]}]
+                            ;; For some reason this results in the following error:
+                            ;;
+                            ;; adzerk.boot_cljs.util.proxy$clojure.lang.ExceptionInfo$ff19274a:
+                            ;; /Users/candera/.boot/cache/tmp1mgm/uanrg/cljsjs/development/jszip.inc.js
+                            ;; is not a relative path
+                            ;;:source-map "index.html.js.map"
+                            })
    (cljs :ids #{"main"}
          ;; :optimizations :simple
          :compiler-options {:asset-path "target/main.out"
@@ -115,7 +130,7 @@
   (comp
    (hoplon)
    ;; Compile everything except main with advanced opts
-   (cljs :ids #{"renderer" "worker" "index.html"}
+   (cljs :ids #{#_"renderer" "worker" "index.html"}
          :optimizations :advanced
          :compiler-options {:target :nodejs
                             :hashbang false})
@@ -143,4 +158,3 @@
     (target :dir #{"target"})))
 
 ;;; Utility functions
-

@@ -1,6 +1,10 @@
+// Fixes for SVG
+
 var SVGTextElement;
 
 SVGTextElement.prototype.getBBox = function() {};
+
+// TinyColor
 
 /**
  * @constructor
@@ -10,4 +14,5 @@ SVGTextElement.prototype.getBBox = function() {};
 function tinycolor(color, options){};
 
 tinycolor.prototype.toRgb = function(){};
+
 

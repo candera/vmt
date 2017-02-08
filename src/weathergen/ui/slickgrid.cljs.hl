@@ -1,0 +1,33 @@
+(ns weathergen.ui.slickgrid
+  "Encapsulates the SlickGrid control."
+  (:require #_[jquery.event.drag]
+            #_[slick.core]
+            [slick.grid])
+  (:require-macros
+   [weathergen.cljs.macros :refer [with-time formula-of]]))
+
+;; Garden styles that will be inserted into the head of the page
+(def styles
+  [;; Prevents the header background from extending out into thin air
+   :.slick-header-columns {:background "initial"
+                           :border-bottom "initial"}])
+
+(defelem slickgrid
+  [attrs _]
+  (let [{:keys [data columns options]} attrs]
+    (with-let [elem (div (dissoc attrs :data :columns :options))]
+      (with-init!
+        (let [g (js/Slick.Grid. elem
+                                #js [] ; data
+                                #js [] ; columns
+                                ;; Enabling column reorder requires another jquery module, so turn it off for now
+                                #js {:enableColumnReorder false})]
+          (formula-of [data]
+            (.setData g (clj->js data)))
+          (formula-of [columns]
+            (.setColumns g (clj->js columns)))
+          (formula-of [options]
+            (.setOptions g (clj->js options))))))))
+
+
+

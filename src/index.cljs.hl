@@ -31,4 +31,5 @@
  :cloud-controls {}
  :wind-stability-parameters {}
  :weather-override-parameters {}
- :advanced-controls {})
+ :advanced-controls {}
+ :test-section {})
