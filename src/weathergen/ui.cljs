@@ -3702,9 +3702,7 @@
        [(css-sel/& (css-sel/nth-child :even))
         {:background "#F2F0E0"}]]]
      ;; SlickGrid styling and overrides
-     ;; TODO: Make this a cell so the slickgrid namespace can handle it itself.
-     slickgrid/styles
-     ))))
+     slickgrid/styles))))
 
 (defelem body
   [{:keys [] :as attrs}
