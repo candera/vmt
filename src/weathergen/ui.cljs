@@ -1741,13 +1741,15 @@
 (defn flight-path->path
   [size path]
   (loop [[point & more] path
+         landed? false
          s nil]
-    (if-let [{:keys [::dtc/coordinates ::dtc/alternate?]} point]
+    (if-let [{:keys [::dtc/coordinates ::dtc/action]} point]
       (let [{:keys [::dtc/x ::dtc/y]} coordinates
             [gx gy] (coords/falcon->grid size x y)]
-        (recur more
-               (if alternate?
-                 s
+        (if landed?
+          s
+          (recur more
+                 (or landed? (= action :land))
                  (str s
                       (when s " ")
                       (if s "L" "M")

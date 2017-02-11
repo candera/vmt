@@ -31,7 +31,4 @@ echo "Building"
 
 cd $(dirname $0)/..
 boot prod
-cd website
-find . | grep -v ".git" | grep -v '.' | grep -v '..' | xargs rm -rf
-cp -R ../target/ .
 
