@@ -192,3 +192,28 @@
               pos
               (constantly disc-spec)
               specf))))
+
+(defn spec-if
+  "Returns a spec that conditionally reads/write a map. It first reads
+  `flag-spec`, then passes the value to `flag-pred`. Depending on the
+  value returned, either reads `true-spec` or `false-spec`. Read
+  values are returned under keys `flag-key` and `branch-key`."
+  [flag-key flag-spec flag-pred branch-key true-spec false-spec]
+  (reify
+    octet.spec/ISpec
+    (read [_ buf pos]
+      (let [[flag-size flag-val]
+            (buf/read* buf flag-spec {:offset pos})
+
+            [branch-size branch-val]
+            (buf/read* buf
+                       (if (flag-pred flag-val)
+                         true-spec
+                         false-spec)
+                       {:offset (+ pos flag-size)})]
+        [(+ flag-size branch-size)
+         (hash-map flag-key flag-val
+                   branch-key branch-val)]))
+
+    ;; TODO: Implement write
+    ))

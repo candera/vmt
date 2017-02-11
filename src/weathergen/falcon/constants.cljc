@@ -2542,3 +2542,12 @@
      "CAMP_TEAM_RED"
      "CAMP_TEAM_GREY"]))
 
+(with-file "cmpradar.h"
+  (def NUM_RADAR_ARCS 8)                   ; How many arcs each radar
+                                        ; data will store
+  (def ALT_FOR_RANGE_DETERMINATION 2500.0) ; when we return range,
+                                        ; it'll be how far we can
+                                        ; see something at this
+                                        ; altitude
+  (def MINIMUM_RADAR_RATIO 0.022) ; Minimum ratio (about 1 deg angle)
+  )

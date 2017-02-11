@@ -6,51 +6,110 @@
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
             [weathergen.falcon.constants :as c]
-            [weathergen.falcon.files :refer [larray fixed-string lstring bitflags constant read->]]
+            [weathergen.falcon.files :refer [larray fixed-string lstring bitflags
+                                             constant read-> spec-if]]
             [weathergen.filesystem :as fs]
             [weathergen.lzss :as lzss]
             [weathergen.util :as util]))
 
-;; Ref: vuentity.h
-(def vu-entity
-  (buf/spec :id                      buf/uint16
-            :collision-type          buf/uint16
-            :collision-radius        buf/float
-            :class-info              (buf/spec :domain buf/ubyte
-                                               :class  buf/ubyte
-                                               :type   buf/ubyte
-                                               :stype  buf/ubyte
-                                               :sptype buf/ubyte
-                                               :owner  buf/ubyte
-                                               :field6 buf/ubyte
-                                               :field7 buf/ubyte)
-            :update-rate             buf/uint32
-            :update-tolerance        buf/uint32
-            :fine-update-range       buf/float
-            :fine-update-force-range buf/float
-            :fine-update-multiplier  buf/float
-            :damage-speed            buf/uint32
-            :hitpoints               buf/int32
-            :major-revision-number   buf/uint16
-            :minor-revision-number   buf/uint16
-            :create-priority         buf/uint16
-            :management-domain       buf/ubyte
-            :transferable            buf/ubyte
-            :private                 buf/ubyte
-            :tangible                buf/ubyte
-            :collidable              buf/ubyte
-            :global                  buf/ubyte
-            :persistent              buf/ubyte
-            :padding                 (buf/repeat 3 buf/byte)))
+;; There's some weirdness in these next few entries, as it looks like
+;; there might be some overlap (or even total replication) with the
+;; unit descriptions below. But there's a separation in the C++ code
+;; between the inheritance hierarchy and whether the classes let their
+;; base classes read from the input stream. So just because one class
+;; derives from another doesn't mean that instances of that class read
+;; all the base class's data, too.
 
-(def falcon4-entity
-  (buf/spec :vu-class-data      vu-entity
-            :vis-type           (buf/repeat 7 buf/int16)
-            :vehicle-data-index buf/int16
-            :data-type          buf/ubyte
-            ;; Only a pointer in the sense of indexing into the
-            ;; appropriate class table.
-            :data-pointer       buf/int32))
+;; Common structures
+(def vu-id (buf/spec :name buf/uint32
+                     :creator buf/uint32))
+
+(def campaign-time
+  (reify
+    octet.spec/ISpecSize
+    (size [_]
+      (buf/size buf/uint32))
+
+    octet.spec/ISpec
+    (read [_ buff pos]
+      (let [[size data] (buf/read* buff buf/uint32 {:offset pos})]
+        [size
+         (let [d (-> data (/ 24 60 60 1000) long)
+               h (-> data (mod (* 24 60 60 1000)) (/ 60 60 1000) long)
+               m (-> data (mod (* 60 60 1000)) (/ 60 1000) long)
+               s (-> data (mod (* 60 1000)) (/ 1000) long)
+               ms (mod data 1000)]
+           {:day (inc d)
+            :hour h
+            :minute m
+            :second s
+            :millisecond ms})]))
+
+    (write [_ buff pos {:keys [day hour minute second millisecond]}]
+      (buf/write! buff buf/int32 (-> day
+                                     (* 24)
+                                     (+ hour)
+                                     (* 60)
+                                     (+ minute)
+                                     (* 60)
+                                     (+ second)
+                                     (* 1000)
+                                     (+ millisecond))))))
+
+;; Ref: vuentity.h
+(def vu-entity-fields
+  [:id                      buf/uint16
+   :collision-type          buf/uint16
+   :collision-radius        buf/float
+   :class-info              (buf/spec :domain buf/ubyte
+                                      :class  buf/ubyte
+                                      :type   buf/ubyte
+                                      :stype  buf/ubyte
+                                      :sptype buf/ubyte
+                                      :owner  buf/ubyte
+                                      :field6 buf/ubyte
+                                      :field7 buf/ubyte)
+   :update-rate             buf/uint32
+   :update-tolerance        buf/uint32
+   :fine-update-range       buf/float
+   :fine-update-force-range buf/float
+   :fine-update-multiplier  buf/float
+   :damage-speed            buf/uint32
+   :hitpoints               buf/int32
+   :major-revision-number   buf/uint16
+   :minor-revision-number   buf/uint16
+   :create-priority         buf/uint16
+   :management-domain       buf/ubyte
+   :transferable            buf/ubyte
+   :private                 buf/ubyte
+   :tangible                buf/ubyte
+   :collidable              buf/ubyte
+   :global                  buf/ubyte
+   :persistent              buf/ubyte
+   :padding                 (buf/repeat 3 buf/byte)])
+
+;; Ref: falcent.h
+(def falcon4-entity-fields
+  [:vu-class-data      (apply buf/spec vu-entity-fields)
+   :vis-type           (buf/repeat 7 buf/int16)
+   :vehicle-data-index buf/int16
+   :data-type          buf/ubyte
+   ;; Only a pointer in the sense of indexing into the
+   ;; appropriate class table.
+   :data-pointer       buf/int32])
+
+;; Ref: campbase.cpp
+(def camp-base-fields
+  [:id          vu-id
+   :entity-type buf/uint16
+   :x           buf/int16
+   :y           buf/int16
+   :z           buf/float
+   :spot-time   campaign-time
+   :spotted     buf/int16
+   :base-flags  buf/int16
+   :owner       buf/ubyte
+   :camp-id     buf/int16])
 
 (defn read-class-table
   "Given a path to a class table (.ct) file, read,
@@ -58,14 +117,15 @@
   [path]
   (let [buf (fs/file-buf path)]
     (binding [octet.buffer/*byte-order* :little-endian]
-      (buf/read buf (larray buf/int16 falcon4-entity)))))
+      (buf/read buf (larray buf/int16 (apply buf/spec falcon4-entity-fields))))))
 
 (defn read-strings
-  "Given paths to the strings.idx and strings.wch files, return
-  a function, given an index that will yield the string at that index."
-  [idx-path wch-path]
-  (let [idx-buf (fs/file-buf idx-path)
-        wch-buf (fs/file-buf wch-path)]
+  "Given a directory with a `name`.idx and `name`.wch files, return a
+  function that given an index that will yield the string at that
+  index."
+  [dir name]
+  (let [idx-buf (fs/file-buf (fs/path-combine dir (str name ".idx")))
+        wch-buf (fs/file-buf (fs/path-combine dir (str name ".wch")))]
     (binding [octet.buffer/*byte-order* :little-endian]
       (let [n (buf/read idx-buf buf/uint16)
             indices (buf/read idx-buf
@@ -116,48 +176,40 @@
     (binding [octet.buffer/*byte-order* :little-endian]
       (buf/read buf (larray buf/uint16 unit-class-data)))))
 
-(def campaign-time
-  (reify
-    octet.spec/ISpecSize
-    (size [_]
-      (buf/size buf/uint32))
+;;; Objective class table
 
-    octet.spec/ISpec
-    (read [_ buff pos]
-      (let [[size data] (buf/read* buff buf/uint32 {:offset pos})]
-        [size
-         (let [d (-> data (/ 24 60 60 1000) long)
-               h (-> data (mod (* 24 60 60 1000)) (/ 60 60 1000) long)
-               m (-> data (mod (* 60 60 1000)) (/ 60 1000) long)
-               s (-> data (mod (* 60 1000)) (/ 1000) long)
-               ms (mod data 1000)]
-           {:day (inc d)
-            :hour h
-            :minute m
-            :second s
-            :millisecond ms})]))
+;; Ref: entity.h
+(def objective-class-data
+  (buf/spec :index buf/int16 ; Matches the index in the class table
+            :name (fixed-string 20)
+            :data-rate buf/int16 ; Sorte Rate and other cool data
+            :deag-distance buf/int16 ; Distance to deaggregate at.
+            :pt-data-index buf/int16 ; Index into pt header data table
+            :detection (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; Detection ranges
+            :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte) ; How much each type will hurt me (% of strength applied)
+            :icon-index buf/int16 ; Index to this objective's icon type
+            :features buf/ubyte ; Number of features in this objective
+            :mystery buf/ubyte  ; Not sure what this is
+            :radar-feature buf/ubyte ; ID of the radar feature for this objective
+            :first-feature buf/int16 ; Index of first feature entry
+            ))
 
-    (write [_ buff pos {:keys [day hour minute second millisecond]}]
-      (buf/write! buff buf/int32 (-> day
-                                     (* 24)
-                                     (+ hour)
-                                     (* 60)
-                                     (+ minute)
-                                     (* 60)
-                                     (+ second)
-                                     (* 1000)
-                                     (+ millisecond))))))
+(defn read-objective-class-data
+  [path]
+  (let [buf (fs/file-buf path)]
+    (binding [octet.buffer/*byte-order* :little-endian]
+      (buf/read buf (larray buf/uint16 objective-class-data)))))
 
 (defn extension
   [file-name]
   (let [i (str/last-index-of file-name ".")]
-    (str/upper-case (subs file-name i))))
+    (subs file-name i)))
 
 (defn file-type
   [file-name]
   (get {".CMP" :campaign-info
-        ".OBJ" :objectives-list
-        ".OBD" :objectives-deltas
+        ".OBJ" :objectives
+        ".OBD" :objective-deltas
         ".UNI" :units
         ".TEA" :teams
         ".EVT" :events
@@ -167,7 +219,7 @@
         ".WTH" :weather
         ".VER" :version
         ".TE"  :victory-conditions}
-       (extension file-name)
+       (str/upper-case (extension file-name))
        :unknown))
 
 (defmulti read-embedded-file*
@@ -311,37 +363,34 @@
                               path))
        first))
 
-(defn load-database
-  "Load all the files needed to process a mission in a given theater."
+(defn load-initial-database
+  "Load the files in known locations needed to process a mission in a
+  given theater."
   [installation theater]
-  {:class-table (read-class-table
-                 (fs/path-combine
-                  (object-dir installation theater)
-                  "FALCON4.ct"))
-   :unit-class-data (read-unit-class-data
-                      (fs/path-combine
-                       (object-dir installation theater)
-                       "FALCON4.UCD"))
+  {:class-table          (read-class-table
+                          (fs/path-combine
+                           (object-dir installation theater)
+                           "FALCON4.ct"))
+   :unit-class-data      (read-unit-class-data
+                          (fs/path-combine
+                           (object-dir installation theater)
+                           "FALCON4.UCD"))
+   :objective-class-data (read-objective-class-data
+                          (fs/path-combine
+                           (object-dir installation theater)
+                           "FALCON4.OCD"))
    ;; These next couple might need to be generalized, like to a map
    ;; from the type to the ids in it.
-   :image-ids (read-image-ids installation)
-   :user-ids (read-user-ids installation)
-   :strings (read-strings (fs/path-combine
-                           (campaign-dir installation theater)
-                           "Strings.idx")
-                          (fs/path-combine
-                           (campaign-dir installation theater)
-                           "Strings.wch"))})
+   :image-ids            (read-image-ids installation)
+   :user-ids             (read-user-ids installation)
+   :strings              (read-strings (campaign-dir installation theater)
+                                       "Strings")})
 
-(defn read-mission
-  "Given a path to a mission (.cam/.tac/.trn) file, read,
-  parse, and return it."
-  [path]
-  (let [install-dir  (find-install-dir path)
-        installation (load-installation install-dir)
-        theater      (find-theater installation path)
-        database     (load-database installation theater)
-        buf          (fs/file-buf path)]
+(defn read-embedded-files
+  "Reads and parses a .tac/.cmp file, returning a map from the
+  embedded file type to its contents."
+  [path database]
+  (let [buf (fs/file-buf path)]
     (binding [octet.buffer/*byte-order* :little-endian]
       ;; TODO: Make this whole thing into a spec
       (let [dir-offset (buf/read buf buf/uint32)
@@ -349,28 +398,59 @@
             directory (buf/read buf (buf/repeat dir-file-count directory-entry)
                                 {:offset (+ dir-offset 4)})
             files (for [entry directory
-                        :let [type (-> entry
-                                       :file-name
-                                       file-type)]]
+                        :let [type (-> entry :file-name file-type)]]
                     (assoc entry
                            :type type
                            :data (read-embedded-file type entry buf database)))]
-        ;; Making the assumption here that there's exactly one file
-        ;; per type
+        ;; Ensure that there's exactly one file per type
         (assert (->> files
                      (map :type)
                      distinct
                      count
                      (= (count files))))
-        {:path         path
-         :files        (zipmap (map :type files) files)
-         :database     database
-         :installation installation
-         :theater      theater}))))
+        (zipmap (map :type files) (map :data files))))))
 
-;; Common structures
-(def vu-id (buf/spec :name buf/uint32
-                     :creator buf/uint32))
+(defn merge-objective-deltas
+  "Given objectives and objective deltas, merge the deltas and return
+  an updated objectives list."
+  [objectives deltas]
+  (let [objectives-map (zipmap (map :id objectives) objectives)]
+    (->> deltas
+         (reduce (fn [objectives-map delta]
+                    (update objectives-map (:id delta) merge delta))
+                 objectives-map)
+         vals
+         vec)))
+
+;; TODO: Consider renaming this read-database, and referring to the resulting object
+;; as the database.
+(defn read-mission
+  "Given a path to a mission (.cam/.tac/.trn) file, read,
+  parse, and return it."
+  [path]
+  (let [install-dir   (find-install-dir path)
+        installation  (load-installation install-dir)
+        theater       (find-theater installation path)
+        database      (load-initial-database installation theater)
+        mission-files (read-embedded-files path database)
+        {:keys [theater-name scenario]} (->> mission-files :campaign-info)
+        names         (read-strings (campaign-dir installation theater)
+                                    theater-name)
+        scenario-path (fs/path-combine (fs/parent path)
+                                       (str scenario (extension path)))
+        scenario-files (read-embedded-files scenario-path database)]
+    (merge database
+           mission-files
+           ;; TODO: Figure out if we need to merge persistent objects
+           {:objectives     (merge-objective-deltas
+                             (:objectives scenario-files)
+                             (:objective-deltas mission-files))
+            :scenario-files scenario-files
+            :path           path
+            :names          names
+            :installation   installation
+            :theater        theater})))
+
 
 ;; Campaign details file
 (def team-basic-info
@@ -379,16 +459,16 @@
             :name (fixed-string 20)
             :motto (fixed-string 200)))
 
-(def squad-info
+(def squadron-info
   (buf/spec :x                 buf/float
             :y                 buf/float
             :id                vu-id
             :description-index buf/int16
-            :name-id           buf/int16
+            :name-id           buf/int16 ; The UI's id into name and patch data
             :airbase-icon      buf/int16
-            :squadron-path     buf/int16
+            :squadron-patch    buf/int16
             :specialty         buf/ubyte
-            :current-strength  buf/ubyte
+            :current-strength  buf/ubyte ; # of current active aircraft
             :country           buf/ubyte
             :airbase-name      (fixed-string 40)
             :padding           buf/byte))
@@ -449,7 +529,7 @@
             :priority-event-entries (larray buf/int16 event-node)
             :map                (larray buf/int16 buf/ubyte)
             :last-index-num     buf/int16
-            :squad-info         (larray buf/int16 squad-info)
+            :squadron-info      (larray buf/int16 squadron-info)
             :tempo              buf/ubyte
             :creator-ip         buf/int32
             :creation-time      buf/int32
@@ -472,32 +552,71 @@
       (into (sorted-map) (buf/read data cmp-spec)))))
 
 ;; Objectives file
-(defmethod read-embedded-file* :objectives-list
+
+;; Ref: objectiv.h
+(def objective-link
+  (buf/spec :costs (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; Cost to go here depending
+                                                           ; on movement type
+            :id    vu-id))
+
+;; Ref: objectiv.cpp
+;; TODO: Combine this with the objective delta stuff
+(def objective-fields
+  (util/concatv [:objective-type buf/uint16]
+                camp-base-fields
+                [:last-repair  campaign-time
+                 :obj-flags    buf/uint32
+                 :supply       buf/ubyte
+                 :fuel         buf/ubyte
+                 :losses       buf/ubyte
+                 ;; This gets weird - see objectiv.cpp:251
+                 :f-status      (larray buf/ubyte buf/ubyte)
+                 :priority     buf/ubyte
+                 :name-id      buf/int16
+                 :parent       vu-id
+                 :first-owner  buf/ubyte
+                 :links        (larray buf/ubyte objective-link)
+                 :radar-data   (spec-if :has-radar-data buf/byte pos?
+                                        :detect-ratio
+                                        (buf/repeat c/NUM_RADAR_ARCS buf/float)
+                                        (constant nil))]))
+
+(defmethod read-embedded-file* :objectives
   [_ {:keys [offset length] :as entry} buf _]
-  :todo
-  #_(binding [octet.buffer/*byte-order* :little-endian]
-    (let [num-objectives (buf/read buf buf/int16 {:offset offset})
-          uncompressed-size (buf/read buf buf/int32 {:offset (+ offset 2)})
-          compressed-size (buf/read buf/int32 {:offset (+ offset 6)})
-          data (lzss/expand buf (+ offset 10) compressed-size uncompressed-size)]
-      {:compressed-size compressed-size
-       :uncompressed-size uncompressed-size
-       :data (->> data .array (into []) (take 10))})))
+  (binding [octet.buffer/*byte-order* :little-endian]
+    (let [header-spec (buf/spec :num-objectives buf/int16
+                                :uncompressed-size buf/int32
+                                :compressed-size buf/int32)
+          {:keys [num-objectives
+                  compressed-size
+                  uncompressed-size]} (buf/read buf
+                                                header-spec
+                                                {:offset offset})
+          data (lzss/expand buf
+                            (+ offset (buf/size header-spec))
+                            compressed-size
+                            uncompressed-size)]
+      #_(log/debug "read objectives"
+                 :num-objectives num-objectives
+                 :compressed-size compressed-size
+                 :uncompressed-size uncompressed-size)
+      (buf/read data
+                (buf/repeat num-objectives
+                            (apply buf/spec objective-fields))))))
 
 ;; Objectives delta file
-(def objective-deltas
+(def objective-delta
   (buf/spec :id vu-id
-            :last-repair buf/uint32
+            :last-repair campaign-time
             :owner buf/ubyte
             :supply buf/ubyte
             :fuel buf/ubyte
             :losses buf/ubyte
             :f-status (larray buf/ubyte buf/ubyte)))
 
-(defmethod read-embedded-file* :objectives-deltas
+(defmethod read-embedded-file* :objective-deltas
   [_ {:keys [offset length] :as entry} buf _]
-  :todo
-  #_(binding [octet.buffer/*byte-order* :little-endian]
+  (binding [octet.buffer/*byte-order* :little-endian]
     (let [header-spec (buf/spec :compressed-size buf/int32
                                 :num-deltas buf/int16
                                 :uncompressed-size buf/int32)
@@ -506,19 +625,12 @@
                   uncompressed-size]} (buf/read buf
                                                 header-spec
                                                 {:offset offset})
-          _ (log/debug :num-deltas num-deltas
-                       :compressed-size compressed-size
-                       :uncompressed-size uncompressed-size)
           data (lzss/expand buf
                             (+ offset (buf/size header-spec))
                             compressed-size
                             uncompressed-size)]
-      {:compressed-size compressed-size
-       :uncompressed-size uncompressed-size
-       :data (->> data .array (into []) (map #(format "0x%02x" %)) (take 20))
-       #_:todo #_(buf/read data
-                       (buf/repeat num-deltas
-                                   objective-delta))})))
+      (buf/read data
+                (buf/repeat num-deltas objective-delta)))))
 
 ;; Victory conditions
 (defmethod read-embedded-file* :victory-conditions
@@ -682,18 +794,6 @@
                  :cljs (-> version-string js/Number. .valueOf long))}))
 
 ;; Units file
-(def base-fields
-  [:id         vu-id
-   :type-id    buf/int16
-   :x          buf/int16
-   :y          buf/int16
-   :z          buf/float
-   :spot-time  campaign-time
-   :spotted    buf/int16
-   :base-flags buf/int16
-   :owner      buf/ubyte
-   :camp-id    buf/int16])
-
 (def waypoint
   (reify
     octet.spec/ISpec
@@ -728,7 +828,7 @@
     ))
 
 (def unit-fields
-  (into base-fields
+  (into camp-base-fields
         [:last-check    campaign-time
          :roster        buf/int32
          :unit-flags    (bitflags buf/int32 {:dead        0x1
@@ -995,7 +1095,7 @@
             #_(log/debug "unit-record decoded"
                          :data (keys data)
                          :datasize datasize)
-            [(+ datasize 2) data]))))
+            [(+ datasize 2) (assoc data :type-id type-id)]))))
 
     ;; TODO : implement write
     ))
@@ -1110,15 +1210,15 @@
       ;; is zero. That'll return a nil unit when read, which we throw
       ;; away.
       #_(log/debug "read-embedded-file* (:units)"
-                 :num-units num-units
-                 :compressed-size compressed-size
-                 :uncompressed-size uncompressed-size)
+                   :num-units num-units
+                   :compressed-size compressed-size
+                   :uncompressed-size uncompressed-size)
       (->> (buf/read
             data
             (buf/repeat num-units (unit-record database)))
            (remove nil?)
-           (map (fn [unit]
-                  (assoc unit :name (unit-name unit database))))))))
+           (mapv (fn [unit]
+                   (assoc unit :name (unit-name unit database))))))))
 
 (defmethod read-embedded-file* :default
   [_ entry buf _]
@@ -1131,12 +1231,12 @@
 
 (defmethod stringify* :flight-mission
   [mission _ value]
-  (let [strings (-> mission :database :strings)]
+  (let [strings (-> mission :strings)]
     (strings (+ 300 value))))
 
 (defmethod stringify* :team-name
   [mission _ value]
-  (let [teams (-> mission :files :teams :data)]
+  (let [teams (-> mission :teams :data)]
     (-> teams (nth value) :team :name)))
 
 (defmethod stringify* :default
@@ -1149,3 +1249,17 @@
   "Return a human-readable version of some coded quantity."
   [mission context value]
   (stringify* mission context value))
+
+(defn squadron-airbase
+  "Returns the airbase objective for the given squadron."
+  [mission squadron]
+  (let [squadron-id (-> squadron :id :name)
+        unit (->> mission :units (util/filter= :camp-id squadron-id) util/only)
+        airbase-id (:airbase-id unit)]
+    (->> mission :objectives (util/filter= :id airbase-id) util/only)))
+
+(defn objective-name
+  "Returns the name of the given objective."
+  [mission objective]
+  (let [names (:names mission)]
+    (-> mission :name-id names)))

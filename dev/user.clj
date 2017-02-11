@@ -14,7 +14,8 @@
             [weathergen.filesystem :as fs]
             [weathergen.lzss :as lzss]
             [weathergen.math :as math]
-            [weathergen.model :as model]))
+            [weathergen.model :as model]
+            [weathergen.util :as util]))
 
 #_(defn cljs
   []
@@ -25,7 +26,10 @@
 
 (defn enquote
   [v]
-  (str "\"" v "\""))
+  ;; Lame, but there doesn't seem to be a way to get double-quotes
+  ;; into a CSV file - escaping doesn't work. For our purposes, we can
+  ;; just use a similar symbol.
+ (str "\"" (str/replace (str v) "\"" "''") "\""))
 
 (defn vectorize
   "Turn x into a vector if it isn't already."
@@ -93,3 +97,29 @@
                   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/SMPU-Day  3 00 41 48.cam")]
      (log/debug "Done reading.")
      mission)))
+
+(def save2
+  (delay
+   (log/debug "Reading save2...")
+   (let [mission (mission/read-mission
+                  "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/save2.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+(def stratus-te
+  (delay
+   (log/debug "Reading stratus.tac...")
+   (let [mission (mission/read-mission
+                  "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/stratus.tac")]
+     (log/debug "Done reading.")
+     mission)))
+
+(def te-new
+  (delay
+   (log/debug "Reading te_new.tac...")
+   (let [mission (mission/read-mission
+                  "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/te_new.tac")]
+     (log/debug "Done reading.")
+     mission)))
+
+

@@ -1452,3 +1452,340 @@ type: 0x64 -> image
                       (catch Throwable t "")))))))
 
 (->> @smpu :files :teams :data csv-ize (spit "/tmp/teams.csv"))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(->> @smpu :files :campaign-info :data vector csv-ize (spit "/tmp/campaign-info.csv"))
+(->> @smpu :files :objective-deltas :data csv-ize (spit "/tmp/deltas.csv"))
+(->> @smpu :files :objectives :data class)
+(->> @smpu :database :objective-class-data csv-ize (spit "/tmp/objective-class-data.csv"))
+
+(->> @save2 :files :objectives :data csv-ize (spit "/tmp/save2-objectives.csv"))
+(->> @save2 :files :objective-deltas :data csv-ize (spit "/tmp/save2-deltas.csv"))
+
+(->> @save2 :files :campaign-info :data vector csv-ize (spit "/tmp/save2-campaign-info.csv"))
+
+(->> @smpu :files :campaign-info :data :squad-info pprint)
+((->> @smpu :database :strings) 358)
+
+
+;; What about a TE though?
+
+(->> @stratus-te :campaign-info :theater-name)
+
+;; So it still has one too.
+
+(let [names (->> @smpu :database :names)]
+  (names 391))
+
+(->> @stratus-te :campaign-info :scenario)
+(->> @smpu :campaign-info :scenario)
+(->> @save2 :campaign-info :scenario)
+(->> @te-new :campaign-info :scenario)
+
+(map #(-> % :campaign-info (select-keys [:scenario :save-file]))
+     [@stratus-te @te-new @smpu @save2])
+
+(->> @te-new :objective-deltas count)
+
+;; What would Datalog to navigate the database look like?
+
+(:find ...
+       :where
+       [?unit :unit/name ?name]
+       [?unit :unit/entity-type ?et]
+       [(- ?et 100) ?eti]
+       [?class :class-table/index ?eti]
+       [?class :class-table/data-pointer ?dp]
+       [?unit-class-data :unit-class-table/index ?dp])
+
+;; Um, that actually looks pretty useful.
+
+(let [mission @smpu #_@stratus-te
+      contents (fn [v]
+                 (if (coll? v)
+                   (count v)
+                   (class v)))]
+  (->> (for [k (->> mission :scenario-files keys)]
+         [k {:mission (->> mission k contents)
+             :scenario (->> mission :scenario-files k contents)}])
+       (into (sorted-map))
+       pprint))
+
+;; stratus-te.tac:
+
+{:campaign-info      {:mission 49,
+                      :scenario 49},
+ :events             {:mission clojure.lang.Keyword,
+                      :scenario clojure.lang.Keyword},
+ :objective-deltas   {:mission 0,
+                      :scenario 0},
+ :objectives         {:mission nil,
+                      :scenario 2693},
+ :persistent-objects {:mission clojure.lang.Keyword,
+                      :scenario clojure.lang.Keyword},
+ :pilots             {:mission clojure.lang.Keyword,
+                      :scenario clojure.lang.Keyword},
+ :teams              {:mission 3,
+                      :scenario 3},
+ :units              {:mission 0,
+                      :scenario 0},
+ :version            {:mission 1,
+                      :scenario 1},
+ :victory-conditions {:mission java.lang.String,
+                      :scenario java.lang.String},
+ :weather            {:mission nil,
+                      :scenario clojure.lang.Keyword}}
+
+;; smpu.cmp:
+
+{:campaign-info      {:mission 49,
+                      :scenario 49},
+ :events             {:mission clojure.lang.Keyword,
+                      :scenario clojure.lang.Keyword},
+ :objective-deltas   {:mission 186,
+                      :scenario 0},
+ :objectives         {:mission nil,
+                      :scenario 2693},
+ :persistent-objects {:mission clojure.lang.Keyword,
+                      :scenario clojure.lang.Keyword},
+ :pilots             {:mission clojure.lang.Keyword,
+                      :scenario clojure.lang.Keyword},
+ :teams              {:mission 8,
+                      :scenario 8},
+ :units              {:mission 563,
+                      :scenario 523},
+ :version            {:mission 1,
+                      :scenario 1},
+ :victory-conditions {:mission nil,
+                      :scenario java.lang.String},
+ :weather            {:mission nil,
+                      :scenario clojure.lang.Keyword}}
+
+(let [mission #_@stratus-te @smpu
+      mission-units (->> mission :units (map :camp-id) set)
+      scenario-units (->> mission :scenario-files :units (map :camp-id) set)
+      [only-in-mission only-in-scenario] (clojure.data/diff mission-units
+                                                            scenario-units)]
+  (pprint {:only-in-mission only-in-mission
+           :only-in-scenario only-in-scenario}))
+
+;; Are there any IDs that get reused?
+(let [mission #_@stratus-te @smpu
+      mission-units (->> mission
+                         :units
+                         (map (juxt :camp-id :name))
+                         (into (sorted-map)))
+      scenario-units (->> mission
+                          :scenario-files
+                          :units
+                          (map (juxt :camp-id :name))
+                          (into (sorted-map)))
+      [only-in-mission only-in-scenario] (clojure.data/diff mission-units
+                                                            scenario-units)]
+  (pprint {:only-in-mission only-in-mission
+           :only-in-scenario only-in-scenario}))
+
+;; Yes. I think that means we only want to use the list from the
+;; mission, not from the scenario
+{:only-in-mission
+ {20789 "Package 20789",
+  20937 "Python 1",
+  20943 "Viper 1",
+  20935 "Eagle 3",
+  21539 "Jaguar 1",
+  20949 "Package 20949",
+  20979 "Spirit 1",
+  20944 "Package 20944",
+  20644 "Hobby 1",
+  20982 "Warhog 1",
+  4380 "2nd Towed Artillery Brigade",
+  21029 "Package 21029",
+  21247 "Zipper 2",
+  19538 "Package 19538",
+  20945 "Nighthawk 2",
+  20866 "Bison 1",
+  20790 "Jumbo 1",
+  10478 "Bull 1",
+  20978 "Package 20978",
+  21354 "Package 21354",
+  20933 "Claw 3",
+  21411 "Lion 3",
+  21485 "Hawkeye 1",
+  21456 "Doom 2",
+  21024 "Bull 2",
+  20135 "Claw 2",
+  20787 "Mako 1",
+  4004 "294th Fighter Squadron",
+  20981 "Package 20981",
+  20934 "Package 20934",
+  20997 "Package 20997",
+  21246 "Package 21246",
+  14745 "Thunder 1",
+  19541 "Rapier 3",
+  20941 "Package 20941",
+  19539 "Sentry 2",
+  20952 "Zipper 1",
+  21030 "Angel 2",
+  21409 "Package 21409",
+  20812 "Sentry 1",
+  21025 "Lion 1",
+  20950 "Angel 1",
+  20791 "Package 20791",
+  21557 "Package 21557",
+  21282 "Package 21282",
+  21023 "Package 21023",
+  20948 "Bone 1",
+  16072 "Gunhog 1",
+  20940 "Shark 1",
+  20744 "Jolly 1",
+  20938 "Package 20938",
+  20743 "Package 20743",
+  20865 "Package 20865",
+  21353 "Jolly 2",
+  20643 "Package 20643",
+  20722 "Package 20722",
+  20793 "Hog 1",
+  21286 "Nightmare 1",
+  21558 "Satan 1",
+  20792 "Blood 1",
+  21484 "Package 21484",
+  21556 "Jumbo 2",
+  21330 "Gamble 1",
+  21410 "Turkey 1",
+  21355 "Stonecat 1",
+  21285 "Package 21285",
+  20942 "Hornet 9",
+  20136 "Gauntlet 2",
+  20998 "Banshee 1",
+  20764 "Mack 1",
+  21283 "Gunhog 2",
+  20939 "Hornet 9",
+  20133 "Package 20133",
+  20804 "Chalis 1",
+  20860 "Package 20860",
+  20936 "Package 20936",
+  20932 "Package 20932",
+  20723 "Scout 1",
+  20803 "Package 20803",
+  20763 "Package 20763",
+  20947 "Package 20947",
+  21455 "Package 21455",
+  21352 "Package 21352",
+  21538 "Package 21538",
+  20951 "Package 20951",
+  21250 "Bulldog 2",
+  21244 "Package 21244",
+  20786 "Package 20786",
+  1027 "Package 1027",
+  21555 "Package 21555",
+  21284 "Mustang 3",
+  21245 "Crimson 1",
+  20805 "Package 20805",
+  4034 "401st Fighter Squadron",
+  20807 "Fury 1",
+  21093 "Package 21093",
+  20861 "Mako 2",
+  10911 "Buzzard 1",
+  21329 "Package 21329",
+  20810 "Package 20810",
+  21094 "Buckskin 1"},
+ :only-in-scenario
+ {4344 "3rd Towed Gun Battalion",
+  4539 "61st Air Defense Battalion",
+  4385 "5th Engineer Battalion",
+  4328 "5th Tank Battalion",
+  4477 "2nd Reserves Battalion",
+  4366 "4th Towed Gun Battalion",
+  4324 "1st Tank Battalion",
+  4380 "2nd Mech Brigade",
+  4423 "13th Air Defense Battalion",
+  4363 "1st Tank Battalion",
+  4360 "4th HQ Battalion",
+  4332 "3rd Rocket Battalion",
+  4217 "3rd Air Defense Battalion",
+  4382 "2nd HQ Battalion",
+  4369 "1st Mech Battalion",
+  4381 "1st Mech Battalion",
+  4334 "5th HQ Battalion",
+  4462 "9th Reserves Battalion",
+  4418 "8th Air Defense Battalion",
+  4384 "4th Supply Battalion",
+  4464 "11th AAA Battalion",
+  4004 "14th Fighter Squadron",
+  4377 "3rd Motor Rifle Battalion",
+  4356 "1st Armored Brigade",
+  4330 "1st Motor Rifle Battalion",
+  4552 "80th Air Defense Battalion",
+  4364 "2nd Tank Battalion",
+  4359 "3rd Tank Battalion",
+  4342 "1st Tank Battalion",
+  4374 "1st Armored Brigade",
+  4326 "3rd Tank Battalion",
+  4546 "68th Air Defense Battalion",
+  4216 "2nd Air Defense Battalion",
+  4414 "4th Air Defense Battalion",
+  4540 "62nd Air Defense Battalion",
+  4386 "4th Armored Brigade",
+  4327 "4th Tank Battalion",
+  4345 "4th Engineer Battalion",
+  4465 "12th Air Defense Battalion",
+  4361 "5th Supply Battalion",
+  4378 "4th Towed Gun Battalion",
+  4367 "5th Rocket Battalion",
+  4447 "36th Air Defense Battalion",
+  4362 "2nd Armored Brigade",
+  4411 "1st Air Defense Battalion",
+  4541 "63rd Air Defense Battalion",
+  4543 "65th Air Defense Battalion",
+  4323 "1st Armored Brigade",
+  4379 "5th Tank Battalion",
+  4376 "2nd Tank Battalion",
+  4375 "1st Tank Battalion",
+  4341 "4th Armored Brigade",
+  4325 "2nd Tank Battalion",
+  4424 "14th Air Defense Battalion",
+  4388 "2nd Towed Gun Battalion",
+  4346 "5th HQ Battalion",
+  4357 "1st Tank Battalion",
+  4365 "3rd Motor Rifle Battalion",
+  4034 "80th Fighter Squadron",
+  4358 "2nd Tank Battalion",
+  4343 "2nd Tank Battalion"}}
+
+
+;; How to find the squadrons at an airbase?
+
+(let [squadron (->> @smpu :campaign-info :squadron-info first)
+      squadron-id (-> squadron :id :name)
+      unit (->> @smpu :units (filter #(= (:camp-id %) squadron-id)) first)
+      squadron-name (:name unit)
+      airbase-id (:airbase-id unit)
+      airbase (->> @smpu :objectives (filter= :id airbase-id) only)
+      names (:names @smpu)
+      ;; This will blow up because we have to load the scenario and merge it
+      airbase-name (->> airbase :name-id names)
+      ]
+  {:squadron-name squadron-name
+   ;; :airbase-id airbase-id
+   :airbase-name airbase-name})
+
+(->> @smpu :objectives count)
+
+(-> @smpu :database)
+
+(let [installation (mission/load-installation "/Users/candera/falcon/4.33.3")
+      theater (->> installation :theaters (filter #(= (:name %) "Korea KTO")) first)
+      database (mission/load-database installation theater)
+      name-id 4
+      type-id 171
+      {:keys [name]} (mission/class-data database type-id)]
+  theater)
+
+;; Names gets loaded by finding the :theater-name from the campaign
+;; info embedded file, then loading the corresponding .idx/.wch file.
+;; For objectives, use the name-id to look up the name
+
+(let [names (mission/read-strings "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/korea.idx"
+                                  "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/korea.wch")]
+  (names 567))

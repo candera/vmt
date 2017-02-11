@@ -1,5 +1,3 @@
 #!/bin/bash
 
-# TODO: figure out how to get excludes to work
-ctags -e -R src/ --languages=Clojure
-echo "TAGS updated"
+find src/ dev/ | entr clojure-tags src/ dev/

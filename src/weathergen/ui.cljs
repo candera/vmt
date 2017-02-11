@@ -3632,16 +3632,12 @@
   (control-section
    :title "Flights"
    (formula-of [mission]
-     (log/debug "mission changed"
-                :units (-> mission :files :units :data count))
      (if-not mission
        "No mission loaded"
        (let [{flights :flight
               packages :package}
              (->> mission
-                  :files
                   :units
-                  :data
                   (group-by :type))]
          (if (-> flights count zero?)
            "No flights in mission, or no mission loaded."
