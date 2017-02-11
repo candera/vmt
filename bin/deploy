@@ -32,6 +32,7 @@ bin/build $*
 
 echo ${GIT_VERSION} > target/version.txt
 
+echo "Enter password for upload when prompted."
 ncftpput -R -u tyrant@firstfighterwing.com ftp.firstfighterwing.com . target/*
 
 
