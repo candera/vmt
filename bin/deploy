@@ -29,10 +29,9 @@ fi
 
 cd $(dirname $0)/..
 bin/build $*
-cd website
-git add .
-git commit -am "Deploy: ${GIT_VERSION}"
-git tag "Deploy-${GIT_VERSION}"
-git push
-git push --tags
+
+echo ${GIT_VERSION} > target/version.txt
+
+ncftpput -R -u tyrant@firstfighterwing.com ftp.firstfighterwing.com . target/*
+
 
