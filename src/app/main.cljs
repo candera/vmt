@@ -43,6 +43,11 @@
                  (.openExternal url))
              (.preventDefault e))))
   (load-page @main-window)
+  ;; Shows how to make a child window that's always on top of the main window:
+  #_(BrowserWindow. #js {:width 300 :height 200
+                       :backgroundColor "yellow"
+                       :title "detail"
+                       :show true :parent @main-window})
   (when dev?
     ;; TODO: Anything we want to do differently?
     )

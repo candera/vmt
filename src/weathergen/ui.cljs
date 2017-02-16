@@ -12,15 +12,15 @@
              :refer [a
                      br button
                      defelem div do!
-                     fieldset
+                     fieldset for-tpl
                      hr html
-                     img input
-                     label legend link loop-tpl
-                     option
+                     if-tpl img input
+                     label legend li link loop-tpl
+                     ol option
                      p progress
                      script select span style
                      table tbody td text thead title tr timeout
-                     when-dom when-tpl with-init! with-timeout]]
+                     when-dom when-tpl with-dom with-init! with-timeout]]
             [hoplon.svg :as svg]
             [garden.core :refer [css]]
             [garden.selectors :as css-sel]
@@ -41,6 +41,7 @@
             [weathergen.math :as math]
             [weathergen.model :as model]
             [weathergen.twx :as twx]
+            [weathergen.ui.grids :as grids]
             [weathergen.ui.slickgrid :as slickgrid]
             [weathergen.wind :as wind]
             ;; [weathergen.route :as route]
@@ -1026,7 +1027,15 @@
    :invalid-background "#fcc"
    :error-message "#c70505"
    :edit "rgba(128,128,255,0.5)"
-   :header-background "lightgray"})
+   :header-background "lightgray"
+   :team {:dark-text {:white "gray"
+                      :green "green"
+                      :blue "blue"
+                      :brown "#923c25"
+                      :orange "darkorange"
+                      :yellow "#caae18"
+                      :red "red"
+                      :gray "darkgray"}}})
 
 (def resize-handle-size 0.75)
 
@@ -3461,27 +3470,35 @@
   [{:keys []}]
   (control-section
    :title "Test"
-   (let [data (cell [{"a" 1 "b" 2 "c" 3}
-                     {"a" 4 "b" 5 "c" 6}
-                     {"a" "a" "b" "b" "c" "c"}])
-         columns (cell [{:id "a"
+   #_(let [data (cell [{:a 1 :b 2 :c 3
+                      :children [{:a 4 :b 5 :c 6}
+                                 {"a" "a" "b" "b" "c" "c"}]}])
+         columns (cell [{:id :a
                          :name "A"
-                         :field "a"}
-                        {:id "b"
+                         :field :a}
+                        {:id :b
                          :name "B"
-                         :field "b"}
-                        {:id "c"
+                         :field :b}
+                        {:id :c
                          :name "C"
-                         :field "c"}])]
-     (slickgrid/slickgrid
-      :data data
-      :columns columns
-      :options (cell {:enableColumnReorder false
-                      :autoHeight true
-                      :fullWidthRows true})
-      :css { ;;:width "600px"
-            :height "500px"}))
-   (div :id "my-test-grid")
+                         :field :c}])
+         clicked? (cell false)]
+     [(button :click (fn [_]
+                       (log/debug "Button clicked")
+                       (reset! clicked? true))
+              "Click me.")
+      (formula-of [clicked?]
+        (if-not clicked?
+          []
+          (do
+            (log/debug "Adding grid")
+            (grids/master-detail
+             :data data
+             :detail :children
+             :columns columns
+             :options {}
+             :css {}))))])
+   #_(div :id "my-test-grid")
    #_(let [c1 (cell "hi")
            c2 (cell true)]
        [(when-tpl c2
@@ -3621,14 +3638,6 @@
    (button :click load-dtc "Load DTC")))
 
 
-(defn unit-lookup-by-id
-  "Given a seq of units, return the one with the given id."
-  [units id]
-  (some (fn [unit]
-          (when (= id (:id unit))
-            unit))
-        units))
-
 (defn flights-section
   [_]
   (control-section
@@ -3643,28 +3652,162 @@
                   (group-by :type))]
          (if (-> flights count zero?)
            "No flights in mission, or no mission loaded."
-           (let [td* (fn [& contents]
-                       (td
-                        :css {:padding-right "3px"}
-                        contents))]
-             (table
-              :class "info-grid"
-              (thead
-               (td* "Team")
-               (td* "Package")
-               (td* "Callsign")
-               (td* "Mission")
-               (td* "T/O")
-               (td* "TOT"))
-              (for [flight flights
-                    :let [package (unit-lookup-by-id packages (:package flight))]]
-                (tr
-                 (td* (->> flight :owner (mission/stringify mission :team-name)))
-                 (td* (:name-id package))
-                 (td* (:name flight))
-                 (td* (->> flight :mission (mission/stringify mission :flight-mission)))
-                 (td* (-> flight :waypoints first :depart format-time))
-                 (td* (-> flight :time-on-target format-time))))))))))))
+           (slickgrid/slickgrid
+            :data flights
+            :columns [{:id        :team
+                       :name      "Team"
+                       :field     :owner
+                       :formatter (fn [_ _ owner _]
+                                    (mission/stringify mission :team-name owner))}
+                      {:id        :package
+                       :name      "Package"
+                       :field     :package
+                       :sortable  true
+                       :formatter (fn [_ _ package-id _]
+                                    (mission/stringify mission
+                                                       :package-name
+                                                       (js->clj package-id
+                                                                :keywordize-keys true)))}
+                      {:id       :callsign
+                       :name     "Callsign"
+                       :field    :name
+                       :sortable true}
+                      {:id        :mission
+                       :name      "Mission"
+                       :field     :mission
+                       :formatter (fn [_ _ mission-type _]
+                                    (mission/stringify mission
+                                                       :flight-mission
+                                                       mission-type))}
+                      {:id        :takeoff
+                       :name      "T/O"
+                       :field     :takeoff
+                       :sortable  true
+                       :formatter (fn [row _ _ _]
+                                    (->> (nth flights row)
+                                         :waypoints
+                                         first
+                                         :depart
+                                         format-time))}
+                      {:id        :time-on-target
+                       :name      "TOT"
+                       :field     :time-on-target
+                       :sortable  true
+                       :formatter (fn [_ _ tot _]
+                                    (-> tot
+                                        (js->clj :keywordize-keys true)
+                                        format-time))}]
+            :options {:enableColumnReorder false
+                      :autoHeight true}
+            :css { ;;:height "200px"
+                  })
+           #_(let [td* (fn [& contents]
+                         (td
+                          :css {:padding-right "3px"}
+                          contents))]
+               (table
+                :class "info-grid"
+                (thead
+                 (td* "Team")
+                 (td* "Package")
+                 (td* "Callsign")
+                 (td* "Mission")
+                 (td* "T/O")
+                 (td* "TOT"))
+                (for [flight flights
+                      :let [package (unit-lookup-by-id packages (:package flight))]]
+                  (tr
+                   (td* (->> flight :owner (mission/stringify mission :team-name)))
+                   (td* (:name-id package))
+                   (td* (:name flight))
+                   (td* (->> flight :mission (mission/stringify mission :flight-mission)))
+                   (td* (-> flight :waypoints first :depart format-time))
+                   (td* (-> flight :time-on-target format-time))))))))))))
+
+(defn squadrons-section
+  [_]
+  (control-section
+   :title "Squadrons"
+   (formula-of [mission]
+       (if-not mission
+         "No mission loaded"
+         (let [squadrons (->> mission
+                              :units
+                              (group-by :type)
+                              :squadron
+                              (group-by :airbase-id))
+               airbases (mission/airbases mission)]
+           (if (-> airbases count zero?)
+             "No airbases available."
+             (grids/master-detail
+              :data airbases
+              :detail (fn [airbase] (get squadrons (:id airbase)))
+              :formatter (fn [airbase]
+                           (div :css {:display "inline-block"}
+                                (span :css {:font-weight "bold"
+                                            :margin-right "3px"
+                                            :color (get-in colors
+                                                           [:team
+                                                            :dark-text
+                                                            (->> airbase
+                                                                 :owner
+                                                                 (mission/side mission)
+                                                                 mission/team-color)])}
+                                      (mission/stringify mission
+                                                         :airbase-name
+                                                         airbase))
+                                (span
+                                 (gstring/format "[%s] (%d squadrons) TODO%%"
+
+                                                 (mission/stringify mission
+                                                                    :team-name
+                                                                    (:owner airbase))
+                                                 (count (get squadrons (:id airbase)))))))
+              :columns [{:name "Name"
+                         :formatter :name}
+                        {:name "Airframe"
+                         :formatter (constantly "TODO")}
+                        {:name "Quantity"
+                         :formatter (constantly "TODO")}]
+              :options {})))))))
+
+(defn order-of-battle-section
+  [_]
+  (control-section
+   :title "Order of Battle"
+   (if-tpl (cell= (not mission))
+     "No mission loaded"
+     (let [side-type-units (->> mission
+                                :units
+                                (group-by #(->> % :owner (mission/side mission)))
+                                (reduce-kv (fn [m side units]
+                                             (assoc m side (group-by :type units)))
+                                           {})
+                                cell=)
+           search-text (cell "")]
+       (div
+        (span "Search:")
+        ;; TODO: Add a popup (maybe use Select2) such that, when you
+        ;; arrow down, it scrolls to the appropriate entry in the OOB.
+        ;; Because filtering the list is all sorts of weird.
+        (input :type "text"
+               :value search-text
+               :change #(reset! search-text @%))
+        (ol
+         (for-tpl [[side type-units] side-type-units]
+           (li
+            (span :css (cell= {:color (get-in colors [:team
+                                                      :dark-text
+                                                      (mission/team-color side)])})
+                  (cell= (mission/stringify mission :team-name side)))
+            (ol
+             (for-tpl [[type units] type-units]
+               (li
+                (span (cell= (name type)))
+                (ol
+                 (for-tpl [unit units]
+                   (li
+                    (span (cell= (:name unit)))))))))))))))))
 
 ;;; General layout
 
@@ -3769,6 +3912,8 @@
    :advanced-controls advanced-controls
    :flightpath-controls flightpath-controls
    :flights-section flights-section
+   :squadrons-section squadrons-section
+   :oob-section order-of-battle-section
    :test-section test-section})
 
 (defn weather-page

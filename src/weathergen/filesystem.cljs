@@ -63,7 +63,6 @@
 (defn ancestor?
   "Returns true if `descendant` is a descendant file of `ancestor`."
   [ancestor descendant]
-  (log/debug "ancestor?" :ancestor ancestor :descendant descendant)
   (let [ancestor   (normalize ancestor)
         descendant (normalize descendant)
         parent     (parent descendant)]

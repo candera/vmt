@@ -1761,7 +1761,7 @@ type: 0x64 -> image
       unit (->> @smpu :units (filter #(= (:camp-id %) squadron-id)) first)
       squadron-name (:name unit)
       airbase-id (:airbase-id unit)
-      airbase (->> @smpu :objectives (filter= :id airbase-id) only)
+      airbase (->> @smpu :objectives (util/filter= :id airbase-id) util/only)
       names (:names @smpu)
       ;; This will blow up because we have to load the scenario and merge it
       airbase-name (->> airbase :name-id names)
@@ -1769,6 +1769,42 @@ type: 0x64 -> image
   {:squadron-name squadron-name
    ;; :airbase-id airbase-id
    :airbase-name airbase-name})
+
+;; That gives me airbase for each squadron. How do I start with all airbases?
+(let [airbase-classes (->> @smpu
+                            :class-table
+                            (map-indexed (fn [i d]
+                                           (assoc d :index i)))
+                            (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                                          c/DOMAIN_LAND)
+                            (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                          c/CLASS_OBJECTIVE)
+                            (util/filter= #(get-in % [:vu-class-data :class-info :type])
+                                          c/TYPE_AIRBASE)
+                            (map :index)
+                            set)
+      airbases (->> @smpu
+                    :objectives
+                    (filter (fn [objective]
+                              (airbase-classes (- (:entity-type objective) 100)))))
+      names (:names @smpu)]
+  (map #(-> % :name-id names) airbases))
+
+(->> @smpu
+     :class-table
+     (map-indexed (fn [i d]
+                    (assoc d :index i)))
+     (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                     c/DOMAIN_LAND)
+     #_(util/filter= #(get-in % [:vu-class-data :class-info :class])
+                     c/CLASS_OBJECTIVE)
+     #_(util/filter= #(get-in % [:vu-class-data :class-info :type])
+                     c/TYPE_AIRBASE)
+     #_(map :index)
+     (map :vu-class-data)
+     (map :class-info)
+     (map :domain)
+     (take 100))
 
 (->> @smpu :objectives count)
 
@@ -1789,3 +1825,56 @@ type: 0x64 -> image
 (let [names (mission/read-strings "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/korea.idx"
                                   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/korea.wch")]
   (names 567))
+
+(mission/stringify @smpu :team-name 3)
+
+
+
+(mission/stringify @smpu :package-name (->> @smpu :units (util/filter= :type :flight) first :package))
+
+
+(count (mission/airbases @smpu))
+
+(let [mission @smpu
+      airbase-classes (->> mission
+                           :class-table
+                           (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                                         c/DOMAIN_LAND)
+                           (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                         c/CLASS_OBJECTIVE)
+                           (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
+                                     (get-in % [:vu-class-data :class-info :type])))
+                           (map :index)
+                           set)]
+  (count (->> mission
+              :objectives
+              (filterv (fn [objective]
+                         (airbase-classes (- (:entity-type objective) 100)))))))
+
+;; A nice gradient for header rows
+;; linear-gradient(to bottom, white, white 33%, #eee 66%)
+
+(->> @smpu :installation mission/read-image-ids (spit "/tmp/imageids.txt"))
+
+(->> @smpu
+     :units
+     (group-by #(->> % :owner (mission/side @smpu)))
+     (reduce-kv (fn [m side units]
+                  (assoc m side (group-by :type units)))
+                {})
+     pprint)
+
+
+(->> @smpu :vehicle-class-data csv-ize (spit "/tmp/vechicle-class-data.csv"))
+
+;; How do we find out how many aircraft and of what type are in a squadron?
+
+(let [mission @smpu
+]
+  (format "%d %s"
+          
+          vehicle-type))
+
+(->> @smpu :unit-class-data csv-ize (spit "/tmp/unit-class-data.csv"))
+
+(->> @smpu :objective-class-data csv-ize (spit "/tmp/objective-class-data.csv"))

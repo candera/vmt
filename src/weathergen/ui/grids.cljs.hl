@@ -1,0 +1,98 @@
+(ns weathergen.ui.grids
+  "Homegrown grid controls."
+  (:require-macros
+   [weathergen.cljs.macros :refer [with-time formula-of]]))
+
+(defelem master-detail
+  "Creates a master-detail grid view. TODO: explain options."
+  [attrs _]
+  (let [{:keys [data detail columns formatter options]} attrs]
+    (div
+     (dissoc attrs :data :detail :columns :formatter :options)
+     (let [data* (cell= data)
+           columns* (cell= columns)
+           options* (cell= options)
+           ;; TODO: Should detail be permitted to be a cell?
+           td* (fn [& args]
+                 (apply td :css {:border "solid 1px #eee"
+                                 :padding "0 2px 0 2px"} args))]
+       (table
+        :css {:background "white"
+              :border-collapse "collapse"
+              :outline "solid 1px #ccc"}
+        (thead
+         (tr
+          :css {:background "linear-gradient(to bottom, white, white 33%, #eee 66%)"}
+          (formula-of [columns*]
+            (for [column columns*]
+              (td (:name column))))
+          #_(for-tpl [column columns*]
+              (td (-> column :name cell=)))))
+        (formula-of [data* columns*]
+          (for [item data*]
+            (let [expanded? (cell true)
+                  subitems (detail item)
+                  spacer-width "12px"
+                  spacer-margin "3px"
+                  spacing {:width spacer-width
+                           :margin-right spacer-margin
+                           :display "inline-block"}
+                  spacer (fn [] (span :css spacing))]
+              [(tbody
+                (tr
+                 (td*
+                  :colspan (count columns*)
+                  (if (-> subitems count zero?)
+                    (spacer)
+                    (div :css {:width spacer-width
+                               :margin-right spacer-margin
+                               :display "inline-block"
+                               :text-align "center"
+                               :vertical-align "middle"
+                               :height "12px"
+                               :border-radius "50%"
+                               :border-color "black"
+                               :border-style "solid"
+                               :border-width "1px"
+                               :text-anchor "6px"
+                               :font-size "120%"
+                               :line-height "12px"
+                               :font-weight "bold"}
+                         :click #(swap! expanded? not)
+                         (if-tpl expanded? "-" "+")))
+                  (formatter item))))
+               (tbody
+                (for [subitem subitems]
+                  (tr
+                   :fade-toggle expanded?
+                   (let [formatter (:formatter (first columns*))]
+                     (td*
+                      (spacer)
+                      (spacer)
+                      (formatter subitem)))
+                   (for [column (drop 1 columns*)]
+                     (td*
+                      (let [formatter (:formatter column)]
+                        (formatter subitem)))))))])))
+        #_(for-tpl [item data*]
+            (let [expanded? (cell true)
+                  subitems (formula-of [item] (detail item))]
+              [(tbody
+                (tr
+                 (for-tpl [column columns*]
+                   [(if-tpl (-> subitems count zero? cell=)
+                      ""
+                      (button :click #(swap! expanded? not) (if-tpl expanded? "-" "+")))
+                    (cell=
+                     (td* (formula-of [column item]
+                            (let [fmt (:formatter column)]
+                              (fmt :master item)))))])))
+               (tbody
+                :fade-toggle expanded?
+                (for-tpl [subitem subitems]
+                  (tr
+                   (for-tpl [column columns*]
+                     (td* (formula-of [column subitem]
+                            (let [fmt (:formatter column)]
+                              (fmt :detail subitem))))))))])))))))
+

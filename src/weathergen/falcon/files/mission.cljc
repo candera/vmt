@@ -115,9 +115,11 @@
   "Given a path to a class table (.ct) file, read,
   parse, and return it."
   [path]
-  (let [buf (fs/file-buf path)]
-    (binding [octet.buffer/*byte-order* :little-endian]
-      (buf/read buf (larray buf/int16 (apply buf/spec falcon4-entity-fields))))))
+  (->> (let [buf (fs/file-buf path)]
+         (binding [octet.buffer/*byte-order* :little-endian]
+           (buf/read buf (larray buf/int16 (apply buf/spec falcon4-entity-fields)))))
+       (map-indexed (fn [i m]
+                      (assoc m :index i)))))
 
 (defn read-strings
   "Given a directory with a `name`.idx and `name`.wch files, return a
@@ -140,14 +142,14 @@
 
 (def unit-class-data
   ;; Source: entity.cpp::LoadUnitData and UcdFile.cs
-  (buf/spec :index buf/int16
+  (buf/spec :index buf/int32
             :num-elements (buf/repeat c/VEHICLE_GROUPS_PER_UNIT
                                       buf/int32)
             :vehicle-type  (buf/repeat c/VEHICLE_GROUPS_PER_UNIT
                                        buf/int16)
             :vehicle-class (buf/repeat c/VEHICLE_GROUPS_PER_UNIT
                                        (buf/repeat 8 buf/ubyte))
-            :flags buf/uint32
+            :flags buf/uint16
             :name (fixed-string 20)
             :padding buf/int16
             :movement-type buf/int32
@@ -188,8 +190,8 @@
             :detection (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; Detection ranges
             :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte) ; How much each type will hurt me (% of strength applied)
             :icon-index buf/int16 ; Index to this objective's icon type
+            :mystery buf/ubyte    ; Not sure what this is
             :features buf/ubyte ; Number of features in this objective
-            :mystery buf/ubyte  ; Not sure what this is
             :radar-feature buf/ubyte ; ID of the radar feature for this objective
             :first-feature buf/int16 ; Index of first feature entry
             ))
@@ -199,6 +201,46 @@
   (let [buf (fs/file-buf path)]
     (binding [octet.buffer/*byte-order* :little-endian]
       (buf/read buf (larray buf/uint16 objective-class-data)))))
+
+;;; Vehicle class data
+;; Ref: entity.h
+(def vehicle-class-data
+  (buf/spec     :index buf/int16      ; descriptionIndex pointing here
+                :hit-points buf/int16 ; Damage this thing can take
+                :flags buf/uint32     ; see VEH_ flags in vehicle.h
+                :name (fixed-string 15)
+                :nctr (fixed-string 5)
+                :rcs-factor buf/float ; log2( 1 + RCS relative to an F16 )
+                :max-wt buf/int32     ; Max loaded weight in lbs.
+                :empty-wt buf/int32   ; Empty weight in lbs.
+                :fuel-wt buf/int32    ; Weight of max fuel in lbs.
+                :fuel-econ buf/int16  ; Fuel usage in lbs./min.
+                :engine-sound buf/int16 ; SoundFX sample index of corresponding engine sound
+                :high-alt buf/int16     ; in hundreds of feet
+                :low-alt buf/int16      ; in hundreds of feet
+                :cruise-alt buf/int16   ; in hundreds of feet
+                :max-speed buf/int16   ; Maximum vehicle speed, in kph
+                :radar-type buf/int16 ; Index into RadarDataTable
+                :number-of-pilots buf/int16 ; # of pilots (for eject)
+                :rack-flags buf/uint16 ; 0x01 means hardpoint 0 needs a rack, 0x02 -> hdpt 1, etc
+                :visible-flags buf/uint16 ; 0x01 means hardpoint 0 is visible, 0x02 -> hdpt 1, etc
+                :callsign-index buf/ubyte
+                :callsign-slots buf/ubyte
+                :hit-chance (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; // Vehicle hit chances (best hitchance bitand bonus)
+                :strength (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; // Combat strengths (full strength only) (calculated)
+                :range (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; // Firing ranges (full strength only) (calculated)
+                :detection (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; // Electronic detection ranges
+                :weapon (buf/repeat c/HARDPOINT_MAX buf/int16); // Weapon id of weapons (or weapon list)
+                :weapons (buf/repeat c/HARDPOINT_MAX buf/ubyte); // Number of shots each (fully supplied)
+                :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte) ; // How much each type will hurt me (% of strength applied
+                :mystery (buf/repeat 3 buf/ubyte)
+                ))
+
+(defn read-vehicle-class-data
+  [path]
+  (let [buf (fs/file-buf path)]
+    (binding [octet.buffer/*byte-order* :little-endian]
+      (buf/read buf (larray buf/uint16 vehicle-class-data)))))
 
 (defn extension
   [file-name]
@@ -379,6 +421,10 @@
                           (fs/path-combine
                            (object-dir installation theater)
                            "FALCON4.OCD"))
+   :vehicle-class-data (read-vehicle-class-data
+                        (fs/path-combine
+                         (object-dir installation theater)
+                         "FALCON4.VCD"))
    ;; These next couple might need to be generalized, like to a map
    ;; from the type to the ids in it.
    :image-ids            (read-image-ids installation)
@@ -1187,6 +1233,14 @@
              " "
              (get-size-name unit database))))))
 
+(defn unit-lookup-by-id
+  "Given a seq of units, return the one with the given id."
+  [units id]
+  (some (fn [unit]
+          (when (= id (:id unit))
+            unit))
+        units))
+
 (defmethod read-embedded-file* :units
   ;; Ref: UniFile.cs, units.cpp
   [_
@@ -1236,8 +1290,22 @@
 
 (defmethod stringify* :team-name
   [mission _ value]
-  (let [teams (-> mission :teams :data)]
-    (-> teams (nth value) :team :name)))
+  (-> mission :teams (nth value) :team :name))
+
+(defmethod stringify* :package-name
+  [mission _ package-id]
+  (let [packages (->> mission
+                      :units
+                      (util/filter= :type :package))]
+    (->> package-id
+         (unit-lookup-by-id packages)
+         :name-id
+         str)))
+
+(defmethod stringify* :airbase-name
+  [mission _ airbase]
+  (let [names (:names mission)]
+    (-> airbase :name-id names)))
 
 (defmethod stringify* :default
   [_ _ value]
@@ -1263,3 +1331,107 @@
   [mission objective]
   (let [names (:names mission)]
     (-> mission :name-id names)))
+
+(defn airbases
+  "Returns all the airbase and airstrip objectives."
+  [mission]
+  (let [airbase-classes (->> mission
+                             :class-table
+                             (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                                           c/DOMAIN_LAND)
+                             (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                           c/CLASS_OBJECTIVE)
+                             (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
+                                       (get-in % [:vu-class-data :class-info :type])))
+                             (map :index)
+                             set)]
+    (->> mission
+         :objectives
+         (filterv (fn [objective]
+                    (airbase-classes (- (:entity-type objective) 100)))))))
+(defn side
+  "Returns the side given a team. Team indicates the individual
+  combatant, side denots the alliance."
+  [mission team]
+  (-> mission :teams (nth team) :team :c-team))
+
+;; These are abstract, not particular RGB colors
+(def team-color
+  {0 :white
+   1 :green
+   2 :blue
+   3 :brown
+   4 :orange
+   5 :yellow
+   6 :red
+   7 :grey})
+
+(defn squadron-aircraft
+  "Returns a map of `:airframe` and `:quantity` for a squadron."
+  [mission squadron]
+  {:airframe (-> squadron
+                     :type-id
+                     (- 100)
+                     (->> (nth (:class-table mission)))
+                     :data-pointer
+                     (->> (nth (:unit-class-data mission)))
+                     :vehicle-type
+                     first
+                     (->> (nth (:class-table mission)))
+                     :data-pointer
+                     (->> (nth (:vehicle-class-data mission)))
+                     :name)
+   :quantity (reduce +
+                     (for [i (range 16)]
+                       (-> squadron
+                           :roster
+                           (bit-shift-right (* i 2))
+                           (bit-and 0x03))))})
+
+;; Status algorithm at objectiv.cpp(2455)
+(defn airbase-status
+  "Return the status of an airbase as a number from 0 to 100."
+  [mission airbase]
+  42)
+
+(defn oob-air
+  "Returns a seq of airbases."
+  [mission]
+  (let [squadrons (->> mission
+                       :units
+                       (group-by :type)
+                       :squadron
+                       (map (fn [squadron]
+                              (assoc squadron
+                                     :aircraft (squadron-aircraft mission squadron))))
+                       (group-by :airbase-id))]
+
+    (->> mission
+         airbases
+         (map (fn [airbase]
+                (assoc airbase
+                       :squadrons (get squadrons (:id airbase))
+                       :status (airbase-status mission airbase)))))))
+
+(defn order-of-battle
+  "Returns the order of battle, a map from side to category (air,
+  army, naval, objective) to entries (specific to category)."
+  [mission]
+  ;; TODO: Group by side, category
+  ;; TODO: Add army, navy, objective
+  (oob-air mission))
+
+
+;; Bunch of ideas:
+;;
+;; Things like having a name or being able to be turned into a string
+;; should be protocols. The read functions should therefore return
+;; records for something like airbases, squadarons, etc.
+;;
+;; Looks like the way we know how many of each aircraft are in a
+
+;; squadron is to check the vehicle types of the squadron class but
+;; DON'T subtract 100 like usual when indexing into the class table.
+;; Then you use the roster on the unit instance somehow - it looks
+;; like maybe there are two bits per vehicle group showing the count.
+;; This implies that we should deserialize that field as a vector.
