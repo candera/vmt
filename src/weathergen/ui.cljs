@@ -2,6 +2,7 @@
   (:require [cljsjs.jquery.minicolors]
             [cljsjs.jszip]
             [cljsjs.filesaverjs]
+            [cljsjs.select2]
             [cljsjs.tinycolor]
             [clojure.string :as str]
             [javelin.core
@@ -16,7 +17,7 @@
                      hr html
                      if-tpl img input
                      label legend li link loop-tpl
-                     ol option
+                     ol optgroup option
                      p progress
                      script select span style
                      table tbody td text thead title tr timeout
@@ -3724,22 +3725,161 @@
                    (td* (-> flight :waypoints first :depart format-time))
                    (td* (-> flight :time-on-target format-time))))))))))))
 
-(defn squadrons-section
+(defelem inl
+  [attrs content]
+  (div (assoc-in attrs
+                 [:css :display]
+                 "inline-block")
+       content))
+
+(defn tree
+  "Returns a collapable tree with hierarchy defined by `levels`, a seq
+  of maps with `:formatter` and `:children` keys, each a function of a
+  single item in the hierarchy. The formatter returns UI for that
+  item, and children (if present) returns items that will be rendered
+  as children."
+  [levels items]
+  (let [[level & more-levels] levels
+        {:keys [formatter children attrs]} level]
+    (ol
+     :css {:list-style-type "none"}
+     (for [item items]
+       (let [kids (when children (children item))
+             expanded? (cell true)]
+         (li
+          (if attrs
+            (attrs item)
+            {})
+          (inl
+           (inl :css {:width "15px"
+                      :font-size "120%"}
+                (if kids
+                  (inl :css {:cursor "pointer"
+                             :position "relative"
+                             :left "-6px"
+                             :background "white"}
+                       :click #(swap! expanded? not)
+                     (if-tpl expanded?  "-" "+"))
+                  ""))
+           (formatter item))
+          (when-tpl expanded?
+            (if-not kids
+              []
+              (tree more-levels kids)))))))))
+
+(defelem select2
+  [attrs kids]
+  (with-let [elem (select attrs kids)]
+    (when-dom elem
+      #(-> elem js/jQuery .select2))))
+
+(defn air-forces-section
   [_]
   (control-section
-   :title "Squadrons"
+   :title "Air Forces"
    (formula-of [mission]
-       (if-not mission
-         "No mission loaded"
-         (let [squadrons (->> mission
-                              :units
-                              (group-by :type)
-                              :squadron
-                              (group-by :airbase-id))
-               airbases (mission/airbases mission)]
-           (if (-> airbases count zero?)
-             "No airbases available."
-             (grids/master-detail
+     (if-not mission
+       "No mission loaded"
+       (let [airbases (->> mission mission/order-of-battle :air)
+             hide-empty-airbases? (cell false)]
+         (if (-> airbases count zero?)
+           "No airbases present in the mission."
+           (div
+            (div
+             (input :type "checkbox"
+                    :value hide-empty-airbases?
+                    :change #(swap! hide-empty-airbases? not))
+             (label "Hide airbases with no squadrons"))
+            (div
+             :css {:margin-bottom "3px"}
+             (select2
+              (for [[side airbases] (group-by :owner airbases)]
+                (optgroup
+                 :label (mission/stringify mission :team-name side)
+                 (for [airbase airbases]
+                   (option (mission/stringify mission :airbase-name airbase)))))))
+            (div
+             :css {:max-height "300px"
+                   :overflow "scroll"
+                   :font-family "monospace"
+                   :font-size "120%"
+                   :background "white"
+                   :border "inset 1px lightgray"}
+             (->> airbases
+                  (group-by (fn [airbase]
+                              (->> airbase :owner (mission/side mission))))
+                  (tree [ ;; Sides
+                         {:attrs (constantly {:css {:margin-left "-28px"
+                                                    :border-left "dotted 1px black"}})
+                          :formatter (fn [[side airbase]]
+                                       (inl
+                                        :id (gstring/format "air-forces-side-%d" side)
+                                        :css {:font-weight "bold"
+                                              :margin-right "3px"
+                                              :color (get-in colors
+                                                             [:team
+                                                              :dark-text
+                                                              (mission/team-color side)])}
+                                        (mission/stringify mission :team-name side)))
+                          :children (fn [[side airbases]]
+                                      (sort-by (fn [airbase]
+                                                 (mission/stringify mission :airbase-name airbase))
+                                               airbases))}
+                         ;; Airbases
+                         {:attrs (fn [airbase]
+                                   ;; TODO: Seems like the borders
+                                   ;; should be drawn by the tree
+                                   ;; control itself.
+                                   {:css (merge {:margin-left "-28px"}
+                                                (when (->> airbase
+                                                           ::mission/squadrons
+                                                           count
+                                                           pos?)
+                                                  {:border-left "dotted 1px black"}))
+                                    :toggle (cell= (not (and hide-empty-airbases?
+                                                             (-> airbase ::mission/squadrons count zero?))))})
+                          :formatter (fn [airbase]
+                                       (inl
+                                        :id (gstring/format "air-forces-airbase-%d"
+                                                            (:camp-id airbase))
+                                        (inl
+                                         :css {:font-weight "bold"
+                                               :color (get-in colors
+                                                              [:team
+                                                               :dark-text
+                                                               (->> airbase
+                                                                    :owner
+                                                                    mission/team-color)])
+                                               :margin-right "10px"}
+                                         (mission/stringify mission :airbase-name airbase))
+                                        (inl
+                                         (gstring/format "[%d%%]"
+                                                         (->> airbase
+                                                              ::mission/status)))
+                                        (inl
+                                         :css {:margin-right "5px"}
+                                         (gstring/format "(%d sqd)"
+                                                         (->> airbase
+                                                              ::mission/squadrons
+                                                              count)))))
+                          :children (fn [airbase]
+                                      (::mission/squadrons airbase))}
+                         ;; Squadrons
+                         {:attrs (constantly {:css {:margin-left "-28px"}})
+                          :formatter (fn [squadron]
+                                       (inl
+                                        :id (gstring/format "air-forces-squadron-%d"
+                                                            (:camp-id squadron))
+                                        (div :css { ;;:background "#eee"
+                                                   :padding "2px 4px 0 5px"
+                                                   :margin-bottom "3px"
+                                                   :margin-top "3px"}
+                                             (div :css {:font-weight "bold"}
+                                                  (inl :css {:margin-right "7px"}
+                                                       (str (-> squadron ::mission/aircraft :quantity)))
+                                                  (inl (-> squadron ::mission/aircraft :airframe)))
+                                             (div (:name squadron)))))}]))))
+           #_(grids/master-detail
               :data airbases
               :detail (fn [airbase] (get squadrons (:id airbase)))
               :formatter (fn [airbase]
@@ -3757,12 +3897,13 @@
                                                          :airbase-name
                                                          airbase))
                                 (span
-                                 (gstring/format "[%s] (%d squadrons) TODO%%"
+                                 (gstring/format "[%s] (%d squadrons) %d%%"
 
                                                  (mission/stringify mission
                                                                     :team-name
                                                                     (:owner airbase))
-                                                 (count (get squadrons (:id airbase)))))))
+                                                 (count (get squadrons (:id airbase)))
+                                                 (:status airbase)))))
               :columns [{:name "Name"
                          :formatter :name}
                         {:name "Airframe"
@@ -3815,9 +3956,10 @@
   []
   (h/head
    (title "WeatherGen")
-   (link :href "lib/slickgrid/slick.grid.css" :rel "stylesheet" :title "main" :type "text/css")
-   (link :href "lib/slickgrid/slick-default-theme.css" :rel "stylesheet" :title "main" :type "text/css")
+   ;; (link :href "lib/slickgrid/slick.grid.css" :rel "stylesheet" :title "main" :type "text/css")
+   ;; (link :href "lib/slickgrid/slick-default-theme.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
+   (link :href "select2.css" :rel "stylesheet" :type "text/css")
    (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "fonts/open-sans-condensed/open-sans-condensed.css"
          :rel "stylesheet"
@@ -3912,7 +4054,7 @@
    :advanced-controls advanced-controls
    :flightpath-controls flightpath-controls
    :flights-section flights-section
-   :squadrons-section squadrons-section
+   :air-forces-section air-forces-section
    :oob-section order-of-battle-section
    :test-section test-section})
 

@@ -30,6 +30,7 @@
                  ;;[cljsjs/jszip "2.5.0-0"]
                  [cljsjs/pako "0.2.7-0"]
                  [cljsjs/tinycolor "1.3.0-0"]
+                 [cljsjs/select2 "4.0.3-0"]
                  [garden "1.3.2"]
                  [funcool/octet "1.0.1"]
                  [org.clojure/core.match "0.3.0-alpha4"]

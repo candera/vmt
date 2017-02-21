@@ -21,9 +21,9 @@
 
 (ui/weather-page
  :serialization-controls {}
+ :air-forces-section {}
  :oob-section {}
  :flights-section {}
- :squadrons-section {}
  :step-controls {:mode :edit}
  :display-controls {}
  :weather-parameters {}
