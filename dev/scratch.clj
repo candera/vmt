@@ -1437,7 +1437,7 @@ size: 0x22ec
 version: 518d5384
 
 type: 0x64 -> image
-:type: 
+:type:
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -1872,9 +1872,23 @@ type: 0x64 -> image
 (let [mission @smpu
 ]
   (format "%d %s"
-          
+
           vehicle-type))
 
 (->> @smpu :unit-class-data csv-ize (spit "/tmp/unit-class-data.csv"))
 
 (->> @smpu :objective-class-data csv-ize (spit "/tmp/objective-class-data.csv"))
+
+(->> @smpu :feature-class-data csv-ize (spit "/tmp/feature-class-data.csv"))
+
+(->> @smpu :feature-entry-data csv-ize (spit "/tmp/feature-entry-data.csv"))
+
+(->> @smpu :point-header-data csv-ize (spit "/tmp/point-header-data.csv"))
+
+(->> @smpu :units csv-ize (spit "/tmp/units.csv"))
+
+(let [mission @smpu]
+  (doseq [airbase (mission/airbases mission)]
+    (printf "%30s %3d\n"
+            (mission/stringify mission :airbase-name airbase)
+            (mission/airbase-status mission airbase))))

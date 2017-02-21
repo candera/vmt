@@ -36,6 +36,23 @@
   ;; Number of hardpoints in the weapon table
   (def HARDPOINT_MAX 16))
 
+(with-file "f4vu.h"
+  (def VU_DOMAIN 0)
+  (def VU_CLASS 1)
+  (def VU_TYPE 2)
+  (def VU_STYPE 3)
+  (def VU_SPTYPE 4)
+  (def VU_OWNER 5)
+
+  ;; Vis type defines
+  (def VIS_NORMAL 0)
+  (def VIS_REPAIRED 1)
+  (def VIS_DAMAGED 2)
+  (def VIS_DESTROYED 3)
+  (def VIS_LEFT_DEST 4)
+  (def VIS_RIGHT_DEST 5)
+  (def VIS_BOTH_DEST 6))
+
 (with-file "classtbl.h"
   (defenum Classtable_Domains
     DOMAIN_ABSTRACT             = 1,
@@ -2754,3 +2771,28 @@
                                         ; altitude
   (def MINIMUM_RADAR_RATIO 0.022) ; Minimum ratio (about 1 deg angle)
   )
+
+(with-file "ptdata.h"
+  (defenum PointTypes
+    NoPt = 0,
+    RunwayPt,
+    TakeoffPt,
+    TaxiPt,
+    SAMPt,
+    ArtilleryPt,
+    AAAPt,
+    RadarPt,
+    RunwayDimPt,
+    SupportPt,
+    StaticRadarPt,
+    SmallParkPt,
+    LargeParkPt,
+    SmallDockPt,
+    LargeDockPt,
+    TakeRunwayPt,
+    HelicopterPt,
+    FollowMePt,
+    TrackPt,
+    CritTaxiPt
+    )
+)

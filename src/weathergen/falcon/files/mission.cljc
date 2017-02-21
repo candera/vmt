@@ -56,6 +56,12 @@
                                      (* 1000)
                                      (+ millisecond))))))
 
+;; Ref: f4vu.h
+(def vector3
+  (buf/spec :x buf/float
+            :y buf/float
+            :z buf/float))
+
 ;; Ref: vuentity.h
 (def vu-entity-fields
   [:id                      buf/uint16
@@ -111,16 +117,6 @@
    :owner       buf/ubyte
    :camp-id     buf/int16])
 
-(defn read-class-table
-  "Given a path to a class table (.ct) file, read,
-  parse, and return it."
-  [path]
-  (->> (let [buf (fs/file-buf path)]
-         (binding [octet.buffer/*byte-order* :little-endian]
-           (buf/read buf (larray buf/int16 (apply buf/spec falcon4-entity-fields)))))
-       (map-indexed (fn [i m]
-                      (assoc m :index i)))))
-
 (defn read-strings
   "Given a directory with a `name`.idx and `name`.wch files, return a
   function that given an index that will yield the string at that
@@ -137,8 +133,6 @@
                               (fixed-string (nth indices (dec n))))]
         (fn [n]
           (subs strings (nth indices n) (nth indices (inc n))))))))
-
-;;; Unit class table
 
 (def unit-class-data
   ;; Source: entity.cpp::LoadUnitData and UcdFile.cs
@@ -171,15 +165,6 @@
             :icon-index buf/uint16
             :padding3 (buf/repeat 2 buf/byte)))
 
-(defn read-unit-class-data
-  "Given a path to the falcon4.ucd file, read, parse, and return it."
-  [path]
-  (let [buf (fs/file-buf path)]
-    (binding [octet.buffer/*byte-order* :little-endian]
-      (buf/read buf (larray buf/uint16 unit-class-data)))))
-
-;;; Objective class table
-
 ;; Ref: entity.h
 (def objective-class-data
   (buf/spec :index buf/int16 ; Matches the index in the class table
@@ -196,13 +181,6 @@
             :first-feature buf/int16 ; Index of first feature entry
             ))
 
-(defn read-objective-class-data
-  [path]
-  (let [buf (fs/file-buf path)]
-    (binding [octet.buffer/*byte-order* :little-endian]
-      (buf/read buf (larray buf/uint16 objective-class-data)))))
-
-;;; Vehicle class data
 ;; Ref: entity.h
 (def vehicle-class-data
   (buf/spec     :index buf/int16      ; descriptionIndex pointing here
@@ -236,11 +214,52 @@
                 :mystery (buf/repeat 3 buf/ubyte)
                 ))
 
-(defn read-vehicle-class-data
-  [path]
-  (let [buf (fs/file-buf path)]
-    (binding [octet.buffer/*byte-order* :little-endian]
-      (buf/read buf (larray buf/uint16 vehicle-class-data)))))
+;; Ref: entity.h
+(def feature-class-data
+  (buf/spec :index buf/int16 ; descriptionIndex pointing here
+            :repair-time buf/int16 ; How long it takes to repair
+            :priority buf/byte    ; Display priority
+            :padding1 buf/byte
+            :flags buf/uint16     ; See FEAT_ flags in feature.h
+            :name (fixed-string 20)    ; 'Control Tower'
+            :hit-points buf/int16      ; Damage this thing can take
+            :height buf/int16       ; Height of vehicle ramp, if any
+            :angle buf/float            ; Angle of vehicle ramp, if any
+            :radar-type buf/int16   ; Index into RadarDataTable
+            :detection (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; Electronic detection ranges
+            :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte) ; How much each type will hurt me (% of strength appl
+            :padding2 (buf/repeat 3 buf/ubyte)))
+
+;; Ref: entity.h
+(def feature-entry-data
+  (buf/spec :index buf/int16        ; Entity class index of feature
+            :flags buf/uint16
+            :entity-class (buf/repeat 8 buf/ubyte) ; Entity class array of feature
+            :value buf/ubyte ; % loss in operational status for destruction
+            :padding1 (buf/repeat 3 buf/byte)
+            :offset vector3
+            :facing buf/int16
+            :padding2 (buf/repeat 2 buf/byte)))
+
+(def point-header-data
+  (buf/spec :obj-id buf/int16 ; ID of the objective this belongs to
+            :type buf/ubyte    ; The type of pt data this contains
+            :count buf/ubyte ; Number of points
+            :features (buf/repeat c/MAX_FEAT_DEPEND buf/ubyte) ; Features this list
+                                                               ; depends on (# in
+                                                               ; objective's feature
+                                        ; list)
+            :padding buf/byte
+            :data buf/int16             ; Other data (runway heading, for example)
+            :sin-heading buf/float
+            :cos-heading buf/float
+            :first buf/int16            ; Index of first point
+            :tex-idx buf/int16          ; texture to apply to this runway
+            :runway-num buf/byte ; -1 if not a runway, indicates which runway this list
+                                 ; applies to
+            :ltrt buf/byte       ; put base pt to rt or left
+            :next-header buf/int16 ; Index of next header, if any
+            ))
 
 (defn extension
   [file-name]
@@ -409,28 +428,32 @@
   "Load the files in known locations needed to process a mission in a
   given theater."
   [installation theater]
-  {:class-table          (read-class-table
-                          (fs/path-combine
-                           (object-dir installation theater)
-                           "FALCON4.ct"))
-   :unit-class-data      (read-unit-class-data
-                          (fs/path-combine
-                           (object-dir installation theater)
-                           "FALCON4.UCD"))
-   :objective-class-data (read-objective-class-data
-                          (fs/path-combine
-                           (object-dir installation theater)
-                           "FALCON4.OCD"))
-   :vehicle-class-data (read-vehicle-class-data
-                        (fs/path-combine
-                         (object-dir installation theater)
-                         "FALCON4.VCD"))
-   ;; These next couple might need to be generalized, like to a map
-   ;; from the type to the ids in it.
-   :image-ids            (read-image-ids installation)
-   :user-ids             (read-user-ids installation)
-   :strings              (read-strings (campaign-dir installation theater)
-                                       "Strings")})
+  (->> (for [[file k spec] [["FALCON4.ct" :class-table (apply buf/spec falcon4-entity-fields)]
+                            ["FALCON4.UCD" :unit-class-data unit-class-data]
+                            ["FALCON4.OCD" :objective-class-data objective-class-data]
+                            ["FALCON4.VCD" :vehicle-class-data vehicle-class-data]
+                            ["FALCON4.FCD" :feature-class-data feature-class-data]
+                            ["falcon4.fed" :feature-entry-data feature-entry-data]
+                            ["FALCON4.PHD" :point-header-data point-header-data]]]
+         (let [path (fs/path-combine
+                     (object-dir installation theater)
+                     file)
+               buf  (fs/file-buf path)]
+           [k
+            (binding [octet.buffer/*byte-order* :little-endian]
+              (map-indexed (fn [i v]
+                             (assoc v ::index i))
+                           (buf/read (->> file
+                                          (fs/path-combine (object-dir installation theater))
+                                          fs/file-buf)
+                                     (larray buf/uint16 spec))))]))
+       (into {})
+       (merge { ;; These next couple might need to be generalized, like to a map
+               ;; from the type to the ids in it.
+               :image-ids            (read-image-ids installation)
+               :user-ids             (read-user-ids installation)
+               :strings              (read-strings (campaign-dir installation theater)
+                                                   "Strings")})))
 
 (defn read-embedded-files
   "Reads and parses a .tac/.cmp file, returning a map from the
@@ -1302,6 +1325,11 @@
          :name-id
          str)))
 
+;; This doesn't do well with carrier airbase names. For that, we need
+;; to somehow figure out how to chase our way into the vehicle info
+;; and get the carrier vehicle name, which is where we get things
+;; like "CVN70 Vinson". Airbase unit names for carrier are things
+;; like "Carrier 7"
 (defmethod stringify* :airbase-name
   [mission _ airbase]
   (let [names (:names mission)]
@@ -1332,6 +1360,9 @@
   (let [names (:names mission)]
     (-> mission :name-id names)))
 
+;; Note that the below will also return carriers, which might be what
+;; we want, but might not be. Carrier airbases have subtype 7 and
+;; specific type 7.
 (defn airbases
   "Returns all the airbase and airstrip objectives."
   [mission]
@@ -1343,7 +1374,7 @@
                                            c/CLASS_OBJECTIVE)
                              (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
                                        (get-in % [:vu-class-data :class-info :type])))
-                             (map :index)
+                             (map ::index)
                              set)]
     (->> mission
          :objectives
@@ -1392,7 +1423,116 @@
 (defn airbase-status
   "Return the status of an airbase as a number from 0 to 100."
   [mission airbase]
-  42)
+  ;; For each non-runway feature
+  ;; - Start with 100.
+  ;; - Subtract half the feature value [objective.cpp(2396)] if it's
+  ;;   damaged, and the full value if it's destroyed.
+  ;; - This number is the status
+  ;; For each runway feature
+  ;; - For each entry in the point data
+  ;;   - If it is a runway point, increment the runway count. If it's
+  ;;     also destroyed, increment the inactive account.
+  ;; Use the lower of the status and the percentage of active runways
+  (let [{:keys [class-table
+                objective-class-data
+                feature-class-data
+                feature-entry-data
+                point-header-data]} mission
+        airbase-class (-> airbase
+                          :entity-type
+                          (- 100)
+                          (->> (nth class-table))
+                          :data-pointer
+                          (->> (nth objective-class-data)))
+        {:keys [features first-feature]} airbase-class
+        feature-info (map #(nth feature-entry-data %)
+                          (range first-feature (+ first-feature features)))
+        feature-status (for [f (range features)]
+                         (let [i (-> f (/ 4) long)
+                               f* (- f (* i 4))]
+                           (if (or (neg? f*) (< 255 f*))
+                             0
+                             (-> airbase
+                                 :f-status
+                                 (nth i)
+                                 (bit-shift-right (* f* 2))
+                                 (bit-and 0x03)))))
+        feature-class-info (map (fn [feature]
+                                  (let [ci (-> feature
+                                               :index
+                                               (->> (nth class-table)))]
+                                    (assoc ci
+                                           :feature-class-info
+                                           (-> ci
+                                               :data-pointer
+                                               (->> (nth feature-class-data))))))
+                                feature-info)
+        feature-info (map (fn [fi fs fci]
+                            (assoc fi
+                                   :status fs
+                                   :class-info fci
+                                   ))
+                          feature-info
+                          feature-status
+                          feature-class-info)
+        runway? (fn [feature]
+                  (-> feature
+                      :class-info
+                      :vu-class-data
+                      :class-info
+                      :type
+                      (= c/TYPE_RUNWAY)))
+        nonrunway-statuses (->> feature-info
+                                (remove runway?)
+                                (reduce (fn [score feature]
+                                          (+ score
+                                             (condp = (:status feature)
+                                               c/VIS_DAMAGED (-> feature
+                                                                 :value
+                                                                 (/ 2)
+                                                                 long)
+                                               c/VIS_DESTROYED (:value feature)
+                                               0)))
+                                        0)
+                                (- 100)
+                                (max 0))
+        ;; The point header data contains information about a "logical
+        ;; runway". That is, what we would think of as a runway. These
+        ;; reference runway features. Status of a runway is the worst status
+        ;; of any of its features. Overall status is the worse of nonrunway
+        ;; and runway status.
+        runway-statuses (loop [index (:pt-data-index airbase-class)
+                               runway-stats {:total 0
+                                             :destroyed 0}]
+                          (let [point-header (nth point-header-data index)]
+                            (cond
+                              (zero? index)
+                              runway-stats
+
+                              :else
+                              (recur (:next-header point-header)
+                                     (if-not (= c/RunwayPt (:type point-header))
+                                       runway-stats
+                                       (-> runway-stats
+                                           (update :total inc)
+                                           (update :destroyed
+                                                   +
+                                                   (if (->> point-header
+                                                            :features
+                                                            (take-while #(< % 255))
+                                                            (map #(nth feature-info %))
+                                                            (map :status)
+                                                            (some #{c/VIS_DESTROYED}))
+                                                     1
+                                                     0))))))))
+        {:keys [total destroyed]} runway-statuses
+        runway-score (if (zero? total)
+                       100
+                       (->> (/ destroyed total)
+                            (* 100)
+                            long
+                            (- 100)))]
+    (min runway-score nonrunway-statuses)))
 
 (defn oob-air
   "Returns a seq of airbases."
@@ -1403,23 +1543,32 @@
                        :squadron
                        (map (fn [squadron]
                               (assoc squadron
-                                     :aircraft (squadron-aircraft mission squadron))))
+                                     ::aircraft (squadron-aircraft mission squadron))))
                        (group-by :airbase-id))]
 
     (->> mission
          airbases
          (map (fn [airbase]
                 (assoc airbase
-                       :squadrons (get squadrons (:id airbase))
-                       :status (airbase-status mission airbase)))))))
+                       ::squadrons (get squadrons (:id airbase))
+                       ::status (airbase-status mission airbase)))))))
 
 (defn order-of-battle
-  "Returns the order of battle, a map from side to category (air,
+  "Returns the order of battle, a map from category (air,
   army, naval, objective) to entries (specific to category)."
   [mission]
   ;; TODO: Group by side, category
   ;; TODO: Add army, navy, objective
-  (oob-air mission))
+  {:air (oob-air mission)})
+
+(defn objective-class
+  [mission objective]
+  (-> objective
+      :entity-type
+      (- 100)
+      (->> (nth (:class-table mission)))
+      :data-pointer
+      (->> (nth (:objective-class-data mission)))))
 
 
 ;; Bunch of ideas:
