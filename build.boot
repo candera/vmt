@@ -80,31 +80,26 @@
              )
    (cljs-repl :ids #{"index.html"})
    (cljs :ids #{#_"renderer" "worker" "index.html"}
-         :optimizations :simple
-         :compiler-options {:target :nodejs
+         :optimizations :whitespace
+         :compiler-options {;;:target :nodejs
                             :hashbang false
+                            :parallel-build false
                             ;;:externs ["js/slickgrid/slickgrid.ext.js"]
-                            :foreign-libs [{:file "assets/lib/slickgrid/lib/jquery.event.drag-2.3.0.js"
-                                            :provides ["jquery.event.drag"]}
-                                           {:file "assets/lib/slickgrid/slick.core.js"
-                                            :provides ["slick.core"]
-                                            :requires ["jquery.event.drag"]}
-                                           {:file "assets/lib/slickgrid/slick.grid.js"
-                                            :provides ["slick.grid"]
-                                            :requires ["slick.core"]}]
-                            ;; For some reason this results in the following error:
-                            ;;
-                            ;; adzerk.boot_cljs.util.proxy$clojure.lang.ExceptionInfo$ff19274a:
-                            ;; /Users/candera/.boot/cache/tmp1mgm/uanrg/cljsjs/development/jszip.inc.js
-                            ;; is not a relative path
-                            ;;:source-map "index.html.js.map"
-                            })
+                            }
+         ;; For some reason this results in the following error:
+         ;;
+         ;; adzerk.boot_cljs.util.proxy$clojure.lang.ExceptionInfo$ff19274a:
+         ;; /Users/candera/.boot/cache/tmp1mgm/uanrg/cljsjs/development/jszip.inc.js
+         ;; is not a relative path
+         ;;:source-map true #_"index.html.js.map"
+         :source-map false)
    (cljs :ids #{"main"}
          ;; :optimizations :simple
          :compiler-options {:asset-path "target/main.out"
                             :closure-defines {'app.main/dev? true}
                             :target :nodejs
-                            :hashbang false})
+                            :hashbang false
+                            :parallel-build true})
    (target)
    #_(serve :port 8006)))
 

@@ -45,6 +45,11 @@
     (when-not (= p path)
       p)))
 
+(defn basename
+  "Given a path, return its basename."
+  [path]
+  (.basename pathlib path))
+
 (defn file-buf
   "Returns a Buffer wrapping the contents of the file at `path`."
   [path]

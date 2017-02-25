@@ -1363,7 +1363,10 @@
 ;; Note that the below will also return carriers, which might be what
 ;; we want, but might not be. Carrier airbases have subtype 7 and
 ;; specific type 7.
-(defn airbases
+;;
+;; Made this private because it's confusing that it doens't return
+;; squadrons etc. Should prefer the OOB functions, which do.
+(defn- airbases
   "Returns all the airbase and airstrip objectives."
   [mission]
   (let [airbase-classes (->> mission

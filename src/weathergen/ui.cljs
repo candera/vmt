@@ -4,10 +4,11 @@
             [cljsjs.filesaverjs]
             [cljsjs.select2]
             [cljsjs.tinycolor]
+            [clojure.data]
             [clojure.string :as str]
             [javelin.core
              :as j
-             :refer [defc defc= cell cell= dosync lens with-let]]
+             :refer [defc defc= cell cell= cell-let dosync lens with-let]]
             [hoplon.core
              :as h
              :refer [a
@@ -37,13 +38,14 @@
             [weathergen.dtc :as dtc]
             [weathergen.encoding :refer [encode decode] :as encoding]
             [weathergen.falcon.files.mission :as mission]
+            [weathergen.filesystem :as fs]
             [weathergen.fmap :as fmap]
             [weathergen.help :as help]
             [weathergen.math :as math]
             [weathergen.model :as model]
             [weathergen.twx :as twx]
             [weathergen.ui.grids :as grids]
-            [weathergen.ui.slickgrid :as slickgrid]
+            ;;[weathergen.ui.slickgrid :as slickgrid]
             [weathergen.wind :as wind]
             ;; [weathergen.route :as route]
             [cljs.core.async :as async
@@ -85,8 +87,16 @@
 
 (def ie? (or (:msie agents) (:trident agents)))
 
-(def electron (when (= "nodejs" cljs.core/*target*)
-                 (js/require "electron")))
+(def electron (js/require "electron")
+  #_(when (= "nodejs" cljs.core/*target*)
+      (js/require "electron")))
+
+;; This is a massive hack, and I have no idea what we're going to do if some other library decides to
+;; say `module.exports` in its code.
+(def tinycolor (.-exports js/module)
+  #_(if (= "nodejs" cljs.core/*target*)
+    (.-exports js/module)
+    js/tinycolor))
 
 ;;; State
 
@@ -252,10 +262,10 @@
 
 (defc display-params {:dimensions [initial-size initial-size]
                       :opacity    0.75
-                      :display    :type
+                      :display    nil #_:type
                       :map        :korea
                       :mouse-mode :select
-                      :overlay    :wind
+                      :overlay    nil #_:wind
                       :pressure-unit :inhg
                       :flight-paths nil
                       :multi-save {:mission-name nil
@@ -286,6 +296,18 @@
 (defc messages [])
 
 (defc mission nil)
+
+(defc object-data {})
+
+(add-watch mission
+           :reset-object-data-on-mission-change
+           (fn [_ _ _ _]
+             (reset! object-data {})))
+
+#_(add-watch object-data
+           :debug
+           (fn [k r o n]
+             (log/debug "object-data changing" :old o :new n :diff (clojure.data/diff o n))))
 
 ;;; Formulas
 
@@ -672,12 +694,12 @@
                             :filters #js [#js {:name "Campaign file"
                                                :extensions #js ["cam"]}
                                           #js {:name "Tactical engagement file"
-                                               :extensions #js ["tac"]}]
-                            #_[(js/FileFilter. #js
-                                               {:name "Campaign file"
-                                                :extensions #js [".cam"]})
-                               #_(js/FileFilter. )]}))]
-    (reset! mission (mission/read-mission path))))
+                                               :extensions #js ["tac"]}]}))]
+    (dosync
+     ;; TODO: We'll have to keep this information elsewhere when we
+     ;; refactor away from being WeatherGen
+     (swap! display-params assoc-in [:multi-save :mission-name] (fs/basename path))
+     (reset! mission (mission/read-mission path)))))
 
 (def zipbuilder-worker
   (let [worker (js/Worker. "worker.js")
@@ -748,6 +770,23 @@
           (if @cancel
             (reset! progress nil)
             (recur (+ t step) true)))))))
+
+;;; Styled
+(defelem styled
+  "Creates an element which is a scope for a set of CSS rules,
+  provided via a `:garden` attribute, by adding an element with a
+  unique ID and new <style> element to the <head> of the document."
+  [attrs content]
+  (let [{:keys [garden]} attrs
+        attrs (dissoc attrs :garden)
+        head (aget (.getElementsByTagName js/document "head") 0)
+        id (str (gensym))
+        styles (cell= (css [(keyword (str "#" id))
+                            garden]))]
+    (.appendChild head (style :type "text/css" styles))
+    (div
+     (merge attrs {:id id})
+     content)))
 
 ;;; Help
 
@@ -984,17 +1023,20 @@
   Returns coordinates as an [x y] pair, where x and y can be
   fractional."
   [e]
-  (let [px             (.-pageX e)
-        py             (.-pageY e)
-        offset         (-> "#grid" js/$ .offset)
-        top            (.-top offset)
-        left           (.-left offset)
-        x              (- px left)
-        y              (- py top)
-        [nx ny]        (:cell-count @weather-params)
-        [width height] (:dimensions @display-params)]
-    [(-> x (* nx) (/ width))
-     (-> y (* ny) (/ height))]))
+  (try
+    (let [px             (.-pageX e)
+          py             (.-pageY e)
+          offset         (-> "#grid" js/$ .offset)
+          top            (.-top offset)
+          left           (.-left offset)
+          x              (- px left)
+          y              (- py top)
+          [nx ny]        (:cell-count @weather-params)
+          [width height] (:dimensions @display-params)]
+      [(-> x (* nx) (/ width))
+       (-> y (* ny) (/ height))])
+    (catch :default err
+      (log/error err "grid-coords error" :e e))))
 
 (defn retry
   "Perform `f` asynchronously every `interval` milliseconds until it
@@ -1067,7 +1109,7 @@
   "Returns a color that contrasts well with the specified color."
   [color]
   ;; http://stackoverflow.com/questions/3942878/how-to-decide-font-color-in-white-or-black-depending-on-background-color
-  (let [rgb (-> color js/tinycolor .toRgb)
+  (let [rgb (-> color tinycolor .toRgb)
         ;; Advanced compilation is somehow screwing up direct field
         ;; access, so we have to go in by name.
         r (aget rgb "r")
@@ -1748,6 +1790,92 @@
                                     [:weather-overrides index :falloff]
                                     #(math/clamp 0 (long r) %))))]))])))))
 
+(defn objective-coordinates
+  "Returns a map of :x and :y coordinates (in weather space) given an objective."
+  [mission objective]
+  {:x (-> objective
+          :x
+          (/ (-> mission :campaign-info :theater-size-x))
+          (* 59))
+   :y (->
+       objective
+       :y
+       (/ (-> mission :campaign-info :theater-size-y))
+       (->> (- 1))
+       (* 59))})
+
+(defn airbase-info-overlay
+  "Renders the airbase portion of the info overlay."
+  [mission airbase object-data]
+  (let [{:keys [x y]}     (objective-coordinates mission airbase)
+        label             (mission/stringify mission :airbase-name airbase)
+        {:keys [camp-id]} airbase
+        visible?          (cell= (get-in object-data [camp-id :visible?]))
+        highlighted?      (cell= (get-in object-data [camp-id :highlighted?]))
+        color             (cell= (if highlighted? "yellow" "white"))]
+    (svg/g
+     :airbase label
+     :toggle (cell= (or visible? highlighted?))
+     :transform (when (and x y)
+                  (gstring/format "translate(%f,%f)"
+                                  x
+                                  y))
+     (svg/g
+      (let [[x y w h] (repeatedly 4 #(cell 0))
+            x* (-> w (/ 2) - cell=)
+            ;; TODO: This is really similar to code below: refactor.
+            t (svg/text
+               :font-size "4%"
+               :font-family "Share Tech Mono"
+               ;; :text-anchor "middle"
+               :x x*
+               :y 0.75
+               :stroke color
+               :stroke-width 0.03
+               :fill color
+               (svg/tspan label)
+               (for [[i squadron] (map-indexed vector (::mission/squadrons airbase))]
+                 (svg/tspan
+                  :y (* (+ 2 i) 0.75)
+                  :text-anchor "start"
+                  :x x*
+                  :dx "0.75em"
+                  (gstring/format "%d %s"
+                                  (->> squadron ::mission/aircraft :quantity)
+                                  (->> squadron ::mission/aircraft :airframe)))))
+            r (svg/rect
+               :x (cell= (- x (/ w 2)))
+               :y y
+               :width w
+               :height h
+               :opacity 0.4
+               :fill (cell= (contrasting color)))]
+        (when-dom t
+          #(dosync
+            (let [bb (.getBBox t)]
+              (when (.-x bb)
+                (reset! x (.-x bb))
+                (reset! y (.-y bb))
+                (reset! w (.-width bb))
+                (reset! h (.-height bb))))))
+        [r t]))
+     (svg/circle
+      :cx 0
+      :cy 0
+      :r 0.15
+      :fill "none"
+      :stroke color
+      :stroke-width 0.1))))
+
+(defn object-info-overlay
+  "Draws information about objects on the map."
+  [mission object-data]
+  (svg/g
+   :section "airbase-info"
+   (formula-of [mission]
+     (for [airbase (->> mission mission/order-of-battle :air)]
+       (airbase-info-overlay mission airbase object-data)))))
+
 (defn flight-path->path
   [size path]
   (loop [[point & more] path
@@ -2134,6 +2262,7 @@
                      (weather-overrides-overlay weather-params register-drag-handler)
                      (flight-paths-overlay [nx ny] display-params)
                      selected-cell-overlay
+                     (object-info-overlay mission object-data)
                      info-overlay)]
       ;; TODO: We're capturing the value of the number of cells, but it
       ;; never changes. One of these days I should probably factor this
@@ -3653,7 +3782,8 @@
                   (group-by :type))]
          (if (-> flights count zero?)
            "No flights in mission, or no mission loaded."
-           (slickgrid/slickgrid
+           (div "TODO")
+           #_(slickgrid/slickgrid
             :data flights
             :columns [{:id        :team
                        :name      "Team"
@@ -3738,40 +3868,73 @@
   single item in the hierarchy. The formatter returns UI for that
   item, and children (if present) returns items that will be rendered
   as children."
-  [levels items]
+  [expand-state levels items]
   (let [[level & more-levels] levels
         {:keys [formatter children attrs]} level]
-    (ol
-     :css {:list-style-type "none"}
-     (for [item items]
-       (let [kids (when children (children item))
-             expanded? (cell true)]
-         (li
-          (if attrs
-            (attrs item)
-            {})
-          (inl
-           (inl :css {:width "15px"
-                      :font-size "120%"}
-                (if kids
-                  (inl :css {:cursor "pointer"
-                             :position "relative"
-                             :left "-6px"
-                             :background "white"}
-                       :click #(swap! expanded? not)
-                     (if-tpl expanded?  "-" "+"))
-                  ""))
-           (formatter item))
-          (when-tpl expanded?
-            (if-not kids
-              []
-              (tree more-levels kids)))))))))
+    (styled
+     :garden [:li {:margin-left "-28px"}]
+     (ol
+      :css {:list-style-type "none"}
+      (for [item items]
+        (let [kids (when children (children item))
+              expanded? (cell true)]
+          (add-watch expand-state
+                     (-> (gensym) str keyword)
+                     (fn [_ _ _ n]
+                       (condp = n
+                         :all-expanded (reset! expanded? true)
+                         :all-collapsed (reset! expanded? false)
+                         nil)))
+          (li
+           (if attrs
+             (attrs item)
+             {})
+           (inl
+            (inl :css {:width "15px"
+                       :font-size "120%"}
+                 (if kids
+                   (inl :css {:cursor "pointer"
+                              :position "relative"
+                              :background "white"}
+                        :click (fn []
+                                 (dosync
+                                  (swap! expanded? not)
+                                  (reset! expand-state nil)))
+                        (div
+                         :css (formula-of [expanded?]
+                                {:display "inline-block"
+                                 :width 0
+                                 :height 0
+                                 :border-left "5px solid transparent"
+                                 :border-right "5px solid transparent"
+                                 :border-top "7px solid black"
+                                 :vertical-align "middle"
+                                 :transform (str "rotate("
+                                                 (if expanded?
+                                                   0
+                                                   -90)
+                                                 "deg)")})))
+                   ""))
+            (formatter item))
+           (when-tpl expanded?
+             (if-not kids
+               []
+               (tree expand-state more-levels kids))))))))))
 
 (defelem select2
   [attrs kids]
   (with-let [elem (select attrs kids)]
     (when-dom elem
       #(-> elem js/jQuery .select2))))
+
+(defn display-airbase?
+  "Return true if an airbase be shown in the list of airbases."
+  [airbase hide-empty? hide-inoperable?]
+  (let [is-empty? (-> airbase ::mission/squadrons count zero?)
+        is-inoperable? (-> airbase ::mission/status zero?)
+        hide? (or (and is-empty? hide-empty?)
+                  (and is-inoperable? hide-inoperable?))]
+    (not hide?)))
 
 (defn air-forces-section
   [_]
@@ -3781,24 +3944,72 @@
      (if-not mission
        "No mission loaded"
        (let [airbases (->> mission mission/order-of-battle :air)
-             hide-empty-airbases? (cell false)]
+             hide-empty-airbases? (cell false)
+             hide-inoperable-airbases? (cell false)
+             expand-state (cell :all-expanded)
+             row (fn [& args] (apply div :class "row" args))
+             displayed-airbases (cell= (->> airbases
+                                            (filter #(display-airbase? %
+                                                                       hide-empty-airbases?
+                                                                       hide-inoperable-airbases?))
+                                            set))]
+         (add-watch displayed-airbases
+                    :turn-off-when-hidden
+                    (fn [_ _ _ n]
+                      (dosync
+                       (doseq [airbase airbases]
+                         (when-not (display-airbase? airbase
+                                                     @hide-empty-airbases?
+                                                     @hide-inoperable-airbases?)
+                           (swap! object-data
+                                  assoc-in
+                                  [(:camp-id airbase) :visible?]
+                                  false))))))
          (if (-> airbases count zero?)
            "No airbases present in the mission."
-           (div
-            (div
+           (styled
+            :garden [:div.row {:margin-bottom "3px"}]
+            (row
              (input :type "checkbox"
                     :value hide-empty-airbases?
                     :change #(swap! hide-empty-airbases? not))
              (label "Hide airbases with no squadrons"))
-            (div
-             :css {:margin-bottom "3px"}
+            (row
+             (input :type "checkbox"
+                    :value hide-inoperable-airbases?
+                    :change #(swap! hide-inoperable-airbases? not))
+             (label "Hide airbases at 0% status"))
+            (row
+             (styled
+              :garden [:button {:margin-right "3px"}]
+              (button :click #(reset! expand-state :all-expanded)
+                      "Expand all")
+              (button :click #(reset! expand-state :all-collapsed)
+                      "Collapse all")
+              (button :click #(dosync
+                               (doseq [airbase @displayed-airbases]
+                                 (swap! object-data
+                                        assoc-in
+                                        [(:camp-id airbase) :visible?]
+                                        true)))
+                      "Check all")
+              ;; Bit of an asymmetry here, but to me, it seems less surprising that uncheck all should
+              ;; clear the map, even if some of the checked airbases are not currently displayed.
+              (button :click #(dosync
+                               (doseq [airbase airbases]
+                                 (swap! object-data
+                                        assoc-in
+                                        [(:camp-id airbase) :visible?]
+                                        false)))
+                      "Uncheck all")))
+            (row
              (select2
-              (for [[side airbases] (group-by :owner airbases)]
+              (for-tpl [[side airbases] (cell= (group-by :owner airbases))]
                 (optgroup
-                 :label (mission/stringify mission :team-name side)
-                 (for [airbase airbases]
-                   (option (mission/stringify mission :airbase-name airbase)))))))
-            (div
+                 :label (cell= (mission/stringify mission :team-name side))
+                 (for-tpl [airbase airbases]
+                   (option (cell= (mission/stringify mission :airbase-name airbase))))))))
+            (row
              :css {:max-height "300px"
                    :overflow "scroll"
                    :font-family "monospace"
@@ -3808,10 +4019,9 @@
              (->> airbases
                   (group-by (fn [airbase]
                               (->> airbase :owner (mission/side mission))))
-                  (tree [ ;; Sides
-                         {:attrs (constantly {:css {:margin-left "-28px"
-                                                    :border-left "dotted 1px black"}})
-                          :formatter (fn [[side airbase]]
+                  (tree expand-state
+                        [ ;; Sides
+                         {:formatter (fn [[side airbase]]
                                        (inl
                                         :id (gstring/format "air-forces-side-%d" side)
                                         :css {:font-weight "bold"
@@ -3827,46 +4037,57 @@
                                                airbases))}
                          ;; Airbases
                          {:attrs (fn [airbase]
-                                   ;; TODO: Seems like the borders
-                                   ;; should be drawn by the tree
-                                   ;; control itself.
-                                   {:css (merge {:margin-left "-28px"}
-                                                (when (->> airbase
-                                                           ::mission/squadrons
-                                                           count
-                                                           pos?)
-                                                  {:border-left "dotted 1px black"}))
-                                    :toggle (cell= (not (and hide-empty-airbases?
-                                                             (-> airbase ::mission/squadrons count zero?))))})
+                                   {:toggle (cell= (displayed-airbases airbase))})
                           :formatter (fn [airbase]
-                                       (inl
-                                        :id (gstring/format "air-forces-airbase-%d"
-                                                            (:camp-id airbase))
-                                        (inl
-                                         :css {:font-weight "bold"
-                                               :color (get-in colors
-                                                              [:team
-                                                               :dark-text
-                                                               (->> airbase
-                                                                    :owner
-                                                                    mission/team-color)])
-                                               :margin-right "10px"}
-                                         (mission/stringify mission :airbase-name airbase))
-                                        (inl
-                                         (gstring/format "[%d%%]"
-                                                         (->> airbase
-                                                              ::mission/status)))
-                                        (inl
-                                         :css {:margin-right "5px"}
-                                         (gstring/format "(%d sqd)"
-                                                         (->> airbase
-                                                              ::mission/squadrons
-                                                              count)))))
+                                       (let [visible? (path-lens object-data [(:camp-id airbase) :visible?])
+                                             highlighted? (path-lens object-data [(:camp-id airbase) :highlighted?])
+                                             ab-name (mission/stringify mission
+                                                                        :airbase-name
+                                                                        airbase)]
+                                         (inl
+                                          :id (gstring/format "air-forces-airbase-%d"
+                                                              (:camp-id airbase))
+                                          (input :type "checkbox"
+                                                 :css {:margin-right "7px"}
+                                                 :value visible?
+                                                 :change #(swap! visible? not))
+                                          (inl
+                                           :css {:font-weight "bold"
+                                                 :color (get-in colors
+                                                                [:team
+                                                                 :dark-text
+                                                                 (->> airbase
+                                                                      :owner
+                                                                      mission/team-color)])
+                                                 :cursor "pointer"
+                                                 :margin-right "10px"}
+                                           :click #(dosync
+                                                    ;; It's confusing if we click something to
+                                                    ;; hide it, but it stays visible due to
+                                                    ;; highlighting. We could consider using
+                                                    ;; some other, independent visualization
+                                                    ;; for highlighting, like an arrow pointing
+                                                    ;; at it or something
+                                                    (->> (swap! visible? not)
+                                                         not
+                                                         (reset! highlighted?)))
+                                           :mouseenter #(reset! highlighted? true)
+                                           :mouseleave #(reset! highlighted? false)
+                                           ab-name)
+                                          (inl
+                                           (gstring/format "[%d%%]"
+                                                           (->> airbase
+                                                                ::mission/status)))
+                                          (inl
+                                           :css {:margin-right "5px"}
+                                           (gstring/format "(%d sqd)"
+                                                           (->> airbase
+                                                                ::mission/squadrons
+                                                                count))))))
                           :children (fn [airbase]
                                       (::mission/squadrons airbase))}
                          ;; Squadrons
-                         {:attrs (constantly {:css {:margin-left "-28px"}})
-                          :formatter (fn [squadron]
+                         {:formatter (fn [squadron]
                                        (inl
                                         :id (gstring/format "air-forces-squadron-%d"
                                                             (:camp-id squadron))
@@ -3878,39 +4099,7 @@
                                                   (inl :css {:margin-right "7px"}
                                                        (str (-> squadron ::mission/aircraft :quantity)))
                                                   (inl (-> squadron ::mission/aircraft :airframe)))
-                                             (div (:name squadron)))))}]))))
-           #_(grids/master-detail
-              :data airbases
-              :detail (fn [airbase] (get squadrons (:id airbase)))
-              :formatter (fn [airbase]
-                           (div :css {:display "inline-block"}
-                                (span :css {:font-weight "bold"
-                                            :margin-right "3px"
-                                            :color (get-in colors
-                                                           [:team
-                                                            :dark-text
-                                                            (->> airbase
-                                                                 :owner
-                                                                 (mission/side mission)
-                                                                 mission/team-color)])}
-                                      (mission/stringify mission
-                                                         :airbase-name
-                                                         airbase))
-                                (span
-                                 (gstring/format "[%s] (%d squadrons) %d%%"
-
-                                                 (mission/stringify mission
-                                                                    :team-name
-                                                                    (:owner airbase))
-                                                 (count (get squadrons (:id airbase)))
-                                                 (:status airbase)))))
-              :columns [{:name "Name"
-                         :formatter :name}
-                        {:name "Airframe"
-                         :formatter (constantly "TODO")}
-                        {:name "Quantity"
-                         :formatter (constantly "TODO")}]
-              :options {})))))))
+                                             (div (:name squadron)))))}]))))))))))
 
 (defn order-of-battle-section
   [_]
@@ -3964,6 +4153,9 @@
    (link :href "fonts/open-sans-condensed/open-sans-condensed.css"
          :rel "stylesheet"
          :type "text/css")
+   (link :href "fonts/share-tech-mono/share-tech-mono.css"
+         :rel "stylesheet"
+         :type "text/css")
    ;; (script :src "js/jquery/jquery.event.drag-2.3.0.js")
    (style
     :type "text/css"
@@ -3985,7 +4177,8 @@
        [(css-sel/& (css-sel/nth-child :even))
         {:background "#F2F0E0"}]]]
      ;; SlickGrid styling and overrides
-     slickgrid/styles))))
+     ;;slickgrid/styles
+     ))))
 
 (defelem body
   [{:keys [] :as attrs}
