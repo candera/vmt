@@ -14,3 +14,5 @@ pom.xml
 /website/
 /.nrepl-history
 
+/node_modules/
+/package/
