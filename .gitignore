@@ -13,7 +13,7 @@ pom.xml
 /resources/public/js/compiled/
 /website/
 /.nrepl-history
-
 /TAGS
-package/
+/package/
 /node_modules/
+

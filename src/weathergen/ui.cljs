@@ -513,7 +513,8 @@
   ;; https://github.com/Stuk/jszip/issues/279
   (if safari?
     (js/Blob. #js [blob]
-              #js {:type "application/octet-stream"})))
+              #js {:type "application/octet-stream"})
+    blob))
 
 (defn save-data
   [blob filename]
