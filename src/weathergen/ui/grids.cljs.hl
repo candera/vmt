@@ -1,5 +1,9 @@
 (ns weathergen.ui.grids
   "Homegrown grid controls."
+  (:require [garden.core :refer [css]]
+            [garden.selectors :as css-sel]
+            [hoplon.svg :as svg]
+            [weathergen.ui.common :as comm :refer [inl register-styles! triangle]])
   (:require-macros
    [weathergen.cljs.macros :refer [with-time formula-of]]))
 
@@ -96,3 +100,94 @@
                             (let [fmt (:formatter column)]
                               (fmt :detail subitem))))))))])))))))
 
+(defn- sorters
+  "Returns UI for the sort handles at the top of a column.
+  `sort-state` is a tuple of column index and direction for the
+  current sort. `column-index` is the index of the column we're
+  rendering."
+  [sort-criteria column-index]
+  (inl
+   :class "sorters"
+   (svg/svg
+    :width "20px"
+    :viewBox "-100 -100 200 200"
+    (comm/triangle :transform "rotate(180) translate(0 -50)"
+                   :r 50
+                   :stroke "black"
+                   :stroke-width "2"
+                   :fill (cell= (if (= sort-criteria [column-index :ascending])
+                                  "black"
+                                  "none")))
+    (comm/triangle :transform "translate(0 -50)"
+                   :r 50
+                   :stroke "black"
+                   :stroke-width "2"
+                   :fill (cell= (if (= sort-criteria [column-index :descending])
+                                  "black"
+                                  "none"))))))
+
+(defelem table-grid
+  [attrs _]
+  (register-styles!
+   ::table-grid
+   [[:table.table-grid {:border-collapse "collapse"}
+     [(css-sel/tr (css-sel/nth-child :even))
+      {:background "#eee"}]
+     [(css-sel/tr (css-sel/nth-child :odd))
+      {:background "white"}]
+     [:thead
+      [:td {:background "#ddd"
+            :border "solid 1px grey"
+            :padding "2px 4px 4px 4px"}]
+      [:.sorters {:float "right"}
+       [:svg {:vertical-align "bottom"}]]]
+     [:tbody [:td {:padding "2px 3px 2px 3px"
+                   :border "solid 1px lightgray"
+                   :border-bottom "none"
+                   :border-top "none"}]]]])
+  (let [{:keys [data columns row-attrs]} attrs
+        attrs (dissoc attrs :data :columns :row-attrs)
+        ;; TODO: Cell-ify
+        ;; data* (cell= data)
+        ;; columns* (cell= columns)
+        sort-criteria (cell nil)]
+    (table
+     :class "table-grid"
+     (thead
+      (tr (for [[column-index {:keys [title disable-sort]}] (map-indexed vector columns)]
+            (td
+             :click #(when-not disable-sort
+                       (swap! sort-criteria
+                              (fn [[old-index direction]]
+                                [column-index
+                                 (cond
+                                   (not= old-index column-index)
+                                   :ascending
+
+                                   (= direction :ascending)
+                                   :descending
+
+                                   :else
+                                   :ascending)]))
+                       false)
+             title
+             (if disable-sort
+               []
+               (sorters sort-criteria column-index))))))
+     (tbody
+      (formula-of [sort-criteria]
+        (for [item (if-not sort-criteria
+                     data
+                     (let [[sort-column sort-direction] sort-criteria
+                           {:keys [sort-key formatter]} (nth columns sort-column)
+                           sort-key (or sort-key formatter)]
+                       (sort-by sort-key
+                                (if (= sort-direction :ascending)
+                                  compare
+                                  (fn [a b]
+                                    (- (compare a b))))
+                                data)))]
+          (tr
+           (row-attrs item)
+           (for [{:keys [formatter]} columns]
+             (td (formatter item))))))))))

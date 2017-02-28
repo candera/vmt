@@ -1579,11 +1579,4 @@
 ;; Things like having a name or being able to be turned into a string
 ;; should be protocols. The read functions should therefore return
 ;; records for something like airbases, squadarons, etc.
-;;
-;; Looks like the way we know how many of each aircraft are in a
 
-;; squadron is to check the vehicle types of the squadron class but
-;; DON'T subtract 100 like usual when indexing into the class table.
-;; Then you use the roster on the unit instance somehow - it looks
-;; like maybe there are two bits per vehicle group showing the count.
-;; This implies that we should deserialize that field as a vector.

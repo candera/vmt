@@ -1,5 +1,6 @@
 (ns weathergen.cljs.macros
-  "Macros to support the ClojureScript side of things")
+  "Macros to support the ClojureScript side of things"
+  (:require [clojure.spec :as s]))
 
 (defmacro with-time
   [timer & body]
@@ -64,3 +65,55 @@
   [enum & body]
   `(do ~@(enum* body)))
 
+(def with-bbox-args
+  (s/cat :bounds-bindings (s/* (s/cat :binding-dim keyword?
+                                      :binding-name symbol?))
+         :elem-binding (s/spec (s/cat :elem-name symbol?
+                                      :elem-form some?))
+         :body (s/* some?)))
+
+(s/fdef with-bbox
+        :args with-bbox-args)
+
+(defmacro with-bbox
+  "Binds width, height, x, and y to names whose values are cells for
+  the bounding box of an elem. The bounding box will update when the
+  element is added to the DOM. Bindings are specified via zero or more
+  key-value pairs, and are optional.
+
+  Dimension bindings are available both in the body and in the
+  elem-form, so an element can react to its own boundaries.
+
+  Example usage:
+
+  (with-bbox :x x :h h
+    [e (span \"hi there\")]
+    (div :toggle (cell= (< 42 (+ x h)))
+       e))"
+  [& args]
+  (let [{:keys [bounds-bindings
+                elem-binding
+                body]}
+        (s/conform with-bbox-args args)
+        {:keys [elem-name elem-form]} elem-binding
+        bounds-map        (zipmap (map :binding-dim bounds-bindings)
+                                  (map :binding-name bounds-bindings))
+        {:keys [x y w h]} bounds-map
+        x* (or x (gensym))
+        y* (or y (gensym))
+        w* (or w (gensym))
+        h* (or h (gensym))]
+    `(let [~x* (javelin.core/cell 0)
+           ~y* (javelin.core/cell 0)
+           ~w* (javelin.core/cell 0)
+           ~h* (javelin.core/cell 0)
+           ~elem-name ~elem-form]
+       (hoplon.core/when-dom ~elem-name
+         #(javelin.core/dosync
+           (let [bb# (.getBBox ~elem-name)]
+             (when (.-x bb#)
+               (reset! ~x* (.-x bb#))
+               (reset! ~y* (.-y bb#))
+               (reset! ~w* (.-width bb#))
+               (reset! ~h* (.-height bb#))))))
+       ~@body)))

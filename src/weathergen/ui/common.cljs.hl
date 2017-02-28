@@ -1,0 +1,40 @@
+(ns weathergen.ui.common
+  "Things used across various UI libraries."
+  (:require [garden.core :refer [css]]
+            [goog.string :as gstring]
+            [goog.string.format]
+            [hoplon.svg :as svg]))
+
+(def registered-styles (atom #{}))
+
+(defn register-styles!
+  "Adds styles to the head of the document. If already registered under `key`, does nothing."
+  [key garden]
+  (when-not (contains? @registered-styles key)
+    (let [head (aget (.getElementsByTagName js/document "head") 0)
+          styles (cell= (css garden))]
+      (.appendChild head (style :type "text/css" styles))
+      (swap! registered-styles conj key))))
+
+(defelem inl
+  [attrs content]
+  (div (assoc-in attrs
+                 [:css :display]
+                 "inline-block")
+       content))
+
+(defelem triangle
+  [attrs _]
+  (let [{:keys [r]} attrs
+        attrs (dissoc attrs :r)
+        alpha 0.8660254037844387 ; sin 60deg
+        beta 0.5 ; sin 30deg
+        x (* r alpha)
+        y (* r alpha)]
+    (svg/path
+     :d (gstring/format "M%f,%f L%f,%f L%f,%f Z"
+                        0 (- y)
+                        x y
+                        (- x) y)
+     attrs)))
+

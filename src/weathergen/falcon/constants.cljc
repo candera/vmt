@@ -2793,6 +2793,94 @@
     HelicopterPt,
     FollowMePt,
     TrackPt,
-    CritTaxiPt
-    )
-)
+    CritTaxiPt))
+
+(with-file "campwp.h"
+  ;; Waypoint actions
+  (def WP_NOTHING 0)
+  (def WP_TAKEOFF 1)
+  (def WP_ASSEMBLE 2)
+  (def WP_POSTASSEMBLE 3)
+  (def WP_REFUEL       4)
+  (def WP_REARM        5)
+  (def WP_PICKUP 6) ;; Pick up a unit
+  (def WP_LAND 7)
+  (def WP_TIMING 8) ;; Just cruise around wasting time
+  (def WP_CASCP 9)  ;; CAS contact point
+
+  (def WP_ESCORT 10)       ;; Engage engaging fighters
+  (def WP_CA 11)           ;; Engage all enemy aircraft
+  (def WP_CAP 12)          ;; Patrol area for enemy aircraft
+  (def WP_INTERCEPT    13) ;; Engage specific enemy aircraft
+  (def WP_GNDSTRIKE 14)    ;; Engage enemy units at target
+  (def WP_NAVSTRIKE 15)    ;; Engage enemy shits at target
+  (def WP_SAD 16)          ;; Engage any enemy at target
+  (def WP_STRIKE 17)       ;; Destroy enemy installation at target
+  (def WP_BOMB 18)   ;; Strategic bomb enemy installation at target 
+  (def WP_SEAD 19)   ;; Suppress enemy air defense at target
+  (def WP_ELINT 20)  ;; Electronic intellicence (AWACS, JSTAR, ECM)
+  (def WP_RECON 21)  ;; Photograph target location
+  (def WP_RESCUE 22) ;; Rescue a pilot at location
+  (def WP_ASW 23)
+  (def WP_TANKER 24) ;; Respond to tanker requests
+  (def WP_AIRDROP 25)
+  (def WP_JAM 26)
+
+  ;; M.N. fix for Airlift missions
+  ;;(def WP_LAND2 27 ;; this is our 2nd landing waypoint for Airlift missions
+  ;; supply will be given at WP_LAND MNLOOK -> Change in string.txt 377
+
+  (def WP_B5)
+  (def WP_B6)
+  (def WP_B7)
+  (def WP_FAC 30)
+
+  (def WP_MOVEOPPOSED 40) ;; These are movement wps
+  (def WP_MOVEUNOPPOSED 41)
+  (def WP_AIRBORNE 42)
+  (def WP_AMPHIBIOUS 43)
+  (def WP_DEFEND 44) ;; These are action wps
+  (def WP_REPAIR 45)
+  (def WP_RESERVE 46)
+  (def WP_AIRDEFENSE 47)
+  (def WP_FIRESUPPORT 48)
+  (def WP_SECURE 49)
+
+  (def WP_LAST 50)
+
+  (def WPF_TARGET 0x0001)     ;; This is a target wp
+  (def WPF_ASSEMBLE 0x0002) ;; Wait for other elements here
+  (def WPF_BREAKPOINT 0x0004) ;; Break point
+  (def WPF_IP 0x0008)         ;; IP waypoint
+  (def WPF_TURNPOINT 0x0010)  ;; Turn point
+  (def WPF_CP 0x0020)         ;; Contact point
+  (def WPF_REPEAT 0x0040) ;; Return to previous WP until time is
+                          ;; exceeded
+  (def WPF_TAKEOFF 0x0080)
+  (def WPF_LAND 0x0100) ;; Suck aircraft back into squadron
+  (def WPF_DIVERT 0x0200) ;; This is a divert WP (deleted upon
+                          ;; completion of divert)
+  (def WPF_ALTERNATE 0x0400) ;; Alternate landing site
+
+  ;; Climb profile flags
+  (def WPF_HOLDCURRENT 0x0800) ;; Stay at current altitude until last minute
+
+  ;; Other stuff
+  (def WPF_REPEAT_CONTINUOUS 0x1000) ;; Do this until the end of time
+  (def WPF_IN_PACKAGE 0x2000) ;; This is a package-coordinated wp
+
+  ;; Even better "Other Stuff"
+  (def WPF_TIME_LOCKED 0x4000) ;; This waypoint will have an arrive
+                               ;; time as given, and will not be
+                               ;; changed
+  (def WPF_SPEED_LOCKED 0x8000) ;; This waypoint will have a speed as
+                                ;; given, and will not be changed.
+  (def WPF_REFUEL_INFORMATION  0x10000) ;; This waypoint is only an
+                                        ;; informational waypoint, no
+                                        ;; mission waypoint
+  (def WPF_REQHELP 0x20000) ;; This divert waypoint is one from a
+                            ;; request help call
+
+  (def WPF_CRITICAL_MASK 0x07FF) ;; If it's one of these, we can't
+                                 ;; skip this waypoint
+  )

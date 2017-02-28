@@ -30,3 +30,12 @@
                           {:reason :not-singular
                            :coll coll}))))
 
+(defn take-until
+  "Like take-while, but also includes the first item where `pred`
+  returns true."
+  [pred coll]
+  (cond
+    (empty? coll) coll
+    (pred (first coll)) (take 1 coll)
+    :else (let [[head next] (partition-by pred coll)]
+            (concat head (take 1 next)))))

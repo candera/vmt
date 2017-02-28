@@ -1892,3 +1892,21 @@ type: 0x64 -> image
     (printf "%30s %3d\n"
             (mission/stringify mission :airbase-name airbase)
             (mission/airbase-status mission airbase))))
+
+(chunked-ui
+ (div (ol (chunked-ui (li ..) (li (span ...)))))
+ (input :type "checkbox"))
+
+(defn frag
+  [& content]
+  (with-let [frag (.createDocumentFragment js/document)]
+    (doseq [item content]
+      (.appendChild frag content))))
+
+{:adformatid :media
+ :imagename ...}
+
+{:adformatid :html
+ :content "foo"
+ ;;:imagename nil
+ }

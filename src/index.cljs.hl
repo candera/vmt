@@ -22,13 +22,13 @@
 (ui/weather-page
  :serialization-controls {}
  :air-forces-section {}
- :oob-section {}
+ ;;:oob-section {}
  :flights-section {}
  :step-controls {:mode :edit}
  :display-controls {}
  :weather-parameters {}
  :forecast-section {:forecast-link? true}
- :flightpath-controls {}
+ ;;:flightpath-controls {}
  :weather-type-configuration {}
  :cloud-controls {}
  :wind-stability-parameters {}
