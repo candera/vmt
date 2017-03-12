@@ -1108,7 +1108,15 @@
                       :orange "darkorange"
                       :yellow "#caae18"
                       :red "red"
-                      :gray "darkgray"}}})
+                      :gray "darkgray"}
+          :light-text {:white "white"
+                       :green "lightgreen"
+                       :blue "#8ddbf5"
+                       :brown "#e27e43"
+                       :orange "orange"
+                       :yellow "yellow"
+                       :red "pink"
+                       :gray "lightgray"}}})
 
 (def resize-handle-size 0.75)
 
@@ -1889,7 +1897,15 @@
         {:keys [camp-id]} airbase
         visible?          (cell= (get-in object-data [camp-id :visible?]))
         highlighted?      (cell= (get-in object-data [camp-id :highlighted?]))
-        color             (cell= (if highlighted? "yellow" "white"))]
+        color             (cell= (if highlighted?
+                                   "yellow"
+                                   (get-in colors
+                                           [:team
+                                            :light-text
+                                            (->> airbase
+                                                 :owner
+                                                 (mission/side mission)
+                                                 mission/team-color)])))]
     (svg/g
      :airbase label
      :toggle (cell= (or visible? highlighted?))
