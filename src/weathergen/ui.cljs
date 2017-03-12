@@ -37,6 +37,7 @@
             [weathergen.database :as db]
             [weathergen.dtc :as dtc]
             [weathergen.encoding :refer [encode decode] :as encoding]
+            [weathergen.falcon.files.images :as im]
             [weathergen.falcon.files.mission :as mission]
             [weathergen.falcon.constants :as c]
             [weathergen.filesystem :as fs]
@@ -866,13 +867,38 @@
 (def map-key->name
   (invert-map map-name->key))
 
-(def map-image
+(defn get-image
+  "Returns a data URL containing the PNG-encoded image identified by
+  `image-descriptor`."
+  [mission image-descriptor]
+  (let [canvas (.createElement js/document "canvas")]
+    (with-time
+      (str "Loading image " (:image-id image-descriptor))
+      (im/read-image
+       mission
+       image-descriptor
+       (fn [width height]
+         (-> canvas .-width (set! width))
+         (-> canvas .-height (set! height))
+         (let [context (.getContext canvas "2d")
+               image-data (.getImageData context 0 0 width height)
+               buf (-> image-data .-data .-length js/ArrayBuffer.)
+               buf8 (js/Uint8ClampedArray. buf)
+               data (js/Uint32Array. buf)]
+           {:set-pixel! (fn [^long x ^long y ^long argb]
+                          (aset data (+ x (* y width)) argb))
+            :finalize (fn []
+                        (-> image-data .-data (.set buf8))
+                        (-> context (.putImageData image-data 0 0)))}))))
+    (.toDataURL canvas)))
+
+#_(def map-image
   {:korea "images/kto.jpg"
    :balkans "images/balkans.png"
    :israel "images/ito.jpg"
    :kuriles "images/kuriles.png"})
 
-(defn map-image-id
+#_(defn map-image-id
   [map]
   (str "map-image-" (name map)))
 
@@ -2283,8 +2309,10 @@
                      wind-vector-defs
                      (svg/image
                       :id "map-image"
-                      :toggle (cell= (-> display-params :map #{:none nil} not))
-                      :xlink-href (cell= (or (-> display-params :map map-image) ""))
+                      :toggle (cell= (some? mission))
+                      :xlink-href (cell= (if-not mission
+                                           ""
+                                           (get-image mission mission/map-image-descriptor)))
                       :x 0
                       :y 0
                       :width nx
@@ -3609,7 +3637,26 @@
 
 (defn debug-info
   []
-  #_(div "Route" route))
+  ;; var canvasWidth  = canvas.width;
+  ;;   var canvasHeight = canvas.height;
+  ;;   var ctx = canvas.getContext('2d');
+  ;;   var imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+  ;;   var buf = new ArrayBuffer(imageData.data.length);
+  ;;   var buf8 = new Uint8ClampedArray(buf);
+  ;;   var data = new Uint32Array(buf);
+  ;;   for (var y = 0; y < canvasHeight; ++y) {
+  ;;       for (var x = 0; x < canvasWidth; ++x) {
+  ;;           var value = dataset[y][x];
+  ;;           data[y * canvasWidth + x] =
+  ;;               (255   << 24) |    // alpha
+  ;;               (value/2 << 16) |    // blue
+  ;;               (value <<  8) |    // green
+  ;;               255;            // red
+  ;;       }
+  ;;   }
+  ;;   imageData.data.set(buf8);
+  ;;   ctx.putImageData(imageData, 0, 0);
+)
 
 (defmethod do! :viewBox
   [elem _ value]
@@ -4070,8 +4117,7 @@
                  (for-tpl [airbase airbases]
                    (option (cell= (mission/stringify mission :airbase-name airbase))))))))
             (row
-             :css {:max-height "300px"
-                   :overflow "scroll"
+             :css {:overflow "scroll"
                    :font-family "monospace"
                    :font-size "120%"
                    :background "white"

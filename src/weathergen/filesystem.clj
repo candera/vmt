@@ -9,6 +9,38 @@
 
 (def filesystem (java.nio.file.FileSystems/getDefault))
 
+(def win32? (-> "os.name"
+                System/getProperty
+                str/lower-case
+                (str/index-of "win")
+                some?))
+
+(defn- get-path
+  "Convenience wrapper around .getPath"
+  [path]
+  (.getPath filesystem path (into-array String [])))
+
+(defn- case-desensitize
+  "If on a case-sensitive filesystem, try to convert to an existing
+  path, ignoring case."
+  [path]
+  (if win32?
+    path
+    ;; This is written stupidly, what with all the conversion back and
+    ;; forth between paths, but it's really just here for dev support,
+    ;; since in prod the app runs on Windows. Still: TODO: Fix.
+    (reduce (fn [existing child]
+              (let [p (some->> existing
+                               io/file
+                               .list
+                               (filter #(= (str/lower-case %)
+                                           (str/lower-case child)))
+                               first
+                               get-path)]
+                (.toString (.resolve (get-path existing) p))))
+            "/"
+            (remove empty? (str/split path #"/")))))
+
 (defn- normalize
   "Deal with the fact that Windows likes backslashes and everyone else
   is sane."
@@ -21,7 +53,7 @@
 (defn- ->path
   "Converts the path to a NIO Path object."
   [path]
-  (.getPath filesystem (normalize path) (into-array String [])))
+  (-> path normalize get-path))
 
 (defn exists?
   "Returns true if the specified file exists."
@@ -34,7 +66,6 @@
 (defn path-combine
   "Given two path components, combine them. If the second is absolute, return it."
   ([path1 path2]
-   #_(log/debug "path-combine" :path1 path1 :path2 path2)
    (-> path1
        ->path
        (.resolve (normalize path2))
@@ -67,9 +98,12 @@
 (defn ancestor?
   "Returns true if `descendant` is a descendant file of `ancestor`."
   [ancestor descendant]
-  (let [ancestor   (normalize ancestor)
-        descendant (normalize descendant)
-        parent     (parent descendant)]
-    (when descendant
-      (or (= parent ancestor)
-          (ancestor? ancestor parent)))))
+  (if-not win32?
+    ;; This is probably not as robust, but win32 is the primary platform anyway.
+    (str/starts-with? (str/lower-case descendant) (str/lower-case ancestor))
+    (let [ancestor   (normalize ancestor)
+          descendant (normalize descendant)
+          parent     (parent descendant)]
+      (when descendant
+        (or (= parent ancestor)
+            (ancestor? ancestor parent))))))

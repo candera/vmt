@@ -1,5 +1,6 @@
 (ns weathergen.falcon.files.mission
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [octet.core :as buf]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
@@ -314,7 +315,7 @@
   "Return the path to the campaign directory."
   [installation theater]
   (fs/path-combine (:data-dir installation)
-                   (:campaigndir theater)))
+                   (:campaign-dir theater)))
 
 (defn object-dir
   "Return the path to the objects directory."
@@ -323,7 +324,8 @@
              :installation installation
              :theater theater)
   (fs/path-combine (:data-dir installation)
-                   (:objectdir theater)))
+                   (or (:object-dir theater)
+                       (:object-dir installation))))
 
 (defn parse-theater-def-line
   "Parse a line from the theater.tdf file."
@@ -332,18 +334,38 @@
     [(-> line (subs 0 idx) keyword)
      (-> line (subs (inc idx)))]))
 
+(defn adjust-art-dir
+  "Fix up the art directory, since KTO is special - all other theaters
+  don't include the Art subdirectory in the path. Which is nonsense.
+  So we add it."
+  [theater]
+  (cond-> theater
+    (-> theater :art-dir str/lower-case (not= "art"))
+    (update :art-dir fs/path-combine "Art")))
+
 (defn read-theater-def
   "Reads the theater TDF from the given path, relative to `data-dir`."
   [data-dir path]
-  (->> path
-       (fs/path-combine data-dir)
-       fs/file-text
-       str/split-lines
-       (map str/trim)
-       (remove str/blank?)
-       (remove #(.startsWith % "#"))
-       (map parse-theater-def-line)
-       (into {})))
+  (let [d (->> path
+               (fs/path-combine data-dir)
+               fs/file-text
+               str/split-lines
+               (map str/trim)
+               (remove str/blank?)
+               (remove #(.startsWith % "#"))
+               (map parse-theater-def-line)
+               (into {:path path}))]
+    (-> d
+        (set/rename-keys {:artdir :art-dir
+                          :misctexdir :misc-tex-dir
+                          :objectdir :object-dir
+                          :terraindir :terrain-dir
+                          :campaigndir :campaign-dir
+                          :simdatadir :sim-data-dir
+                          :mintact :min-tacan
+                          :3ddatadir :3d-data-dir
+                          :sounddir :sound-dir})
+        adjust-art-dir)))
 
 (defn read-theater-defs
   "Read, parse, and return information about the installled theaters
@@ -409,10 +431,12 @@
   "Return information about the installed theaters."
   [install-dir]
   (let [data-dir (fs/path-combine install-dir "Data")
-        art-dir (fs/path-combine data-dir "Art")]
+        art-dir (fs/path-combine data-dir "Art")
+        object-dir (fs/path-combine data-dir "Terrdata/objects")]
     {:install-dir install-dir
      :data-dir data-dir
      :art-dir art-dir
+     :object-dir object-dir
      :theaters (read-theater-defs data-dir)}))
 
 (defn find-theater
@@ -639,7 +663,7 @@
                  :fuel         buf/ubyte
                  :losses       buf/ubyte
                  ;; This gets weird - see objectiv.cpp:251
-                 :f-status      (larray buf/ubyte buf/ubyte)
+                 :f-status     (larray buf/ubyte buf/ubyte)
                  :priority     buf/ubyte
                  :name-id      buf/int16
                  :parent       vu-id
@@ -1453,11 +1477,18 @@
         feature-status (for [f (range features)]
                          (let [i (-> f (/ 4) long)
                                f* (- f (* i 4))]
-                           (if (or (neg? f*) (< 255 f*))
+                           (if (or (neg? f*)
+                                   (< 255 f*)
+                                   ;; For some weird
+                                   ;; reason (objectiv.cpp[259], there
+                                   ;; can be more features than status
+                                   ;; slots in the objective, in which
+                                   ;; case they zero.
+                                   (<= (count (:f-status airbase)) i))
                              0
                              (-> airbase
                                  :f-status
-                                 (nth i)
+                                 (nth i 0)
                                  (bit-shift-right (* f* 2))
                                  (bit-and 0x03)))))
         feature-class-info (map (fn [feature]
@@ -1572,6 +1603,11 @@
       (->> (nth (:class-table mission)))
       :data-pointer
       (->> (nth (:objective-class-data mission)))))
+
+(def map-image-descriptor
+  "Returns an image descriptor for the campaign map."
+  {:resource "resource/campmap"
+   :image-id "BIG_MAP_ID"})
 
 
 ;; Bunch of ideas:

@@ -34,7 +34,8 @@
                  [garden "1.3.2"]
                  [funcool/octet "1.0.1"]
                  [org.clojure/core.match "0.3.0-alpha4"]
-                 [org.clojure/tools.namespace "0.2.11" :scope "test"]]
+                 [org.clojure/tools.namespace "0.2.11" :scope "test"]
+                 [quil "2.6.0"]]
  ;; TODO: Really need a way to hook into the repl-server so that dev
  ;; doesn't wind up in the source path for released code.
  :source-paths #{"src" "dev"}

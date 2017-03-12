@@ -1903,10 +1903,348 @@ type: 0x64 -> image
     (doseq [item content]
       (.appendChild frag content))))
 
-{:adformatid :media
- :imagename ...}
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-{:adformatid :html
- :content "foo"
- ;;:imagename nil
- }
+(require '[quil.core :as q])
+(require '[weathergen.falcon.files :refer [spec-if]])
+(require '[weathergen.falcon.constants :as c])
+
+(defn read-index
+  [path]
+  ;; (log/debug "read-index" :path path)
+  (let [common-header (buf/spec
+                       :type buf/int32
+                       :id (buf/string 32))
+        image-header (buf/spec
+                      :flags buf/int32
+                      :center (buf/repeat 2 buf/int16)
+                      :size (buf/repeat 2 buf/int16)
+                      :image-offset buf/int32
+                      :palette-size buf/int32
+                      :palette-offset buf/int32)
+        sound-header (buf/spec
+                      :flags buf/int32
+                      :channels buf/int16
+                      :sound-type buf/int16
+                      :offset buf/int32
+                      :header-size buf/int32)
+        flat-header  (buf/spec
+                      :offset buf/int32
+                      :size   buf/int32)
+        file-header  (buf/spec :size buf/int32
+                               :version buf/int32)
+        idx-buf (fs/file-buf path)]
+    (binding [octet.buffer/*byte-order* :little-endian]
+      (let [{:keys [size]} (buf/read idx-buf file-header)]
+        (loop [offset (buf/size file-header)
+               items []]
+          (if-not (-> size (- offset) pos?)
+            items
+            (let [[size common]    (buf/read* idx-buf common-header
+                                              {:offset offset})
+                  offset           (+ offset size)
+                  [size specifics] (buf/read* idx-buf
+                                              (condp = (:type common)
+                                                c/_RSC_IS_IMAGE_  image-header
+                                                c/_RSC_IS_SOUND_ sound-header
+                                                c/_RSC_IS_FLAT_  flat-header)
+                                              {:offset offset})]
+              (recur (+ offset size)
+                     (conj items (into common specifics))))))))))
+
+(defn palette
+  [image-buf image-data]
+  (let [{:keys [palette-size palette-offset]} image-data]
+    (binding [octet.buffer/*byte-order* :little-endian]
+      (buf/read image-buf
+                (buf/repeat palette-size buf/uint16)
+                ;; Eight bytes accounts for the size and
+                ;; version longs at the beginning of the
+                ;; file.
+                {:offset (+ palette-offset 8)}))))
+
+;; The fact that we're packing argb into a single arg is a hack due to
+;; the limitations of Clojure passing primitives - functions can't
+;; have more than four primitive args
+(defn read-image
+  [resource image-id allocator]
+  (let [index (read-index (str resource ".idx"))
+        image-buf (fs/file-buf (str resource ".rsc"))
+        image-data  (->> index (filter #(= image-id (:id %))) first)
+        _ (assert image-data (with-out-str (print "Couldn't find an image with that ID" :resource resource :image-id image-id)))
+        {:keys [palette-size palette-offset center image-offset size]} image-data
+        palette (palette image-buf image-data)
+        [width height] size
+        is-8-bit? (-> image-data :flags (bit-and c/_RSC_8_BIT_) pos?)
+        use-transparency? (-> image-data :flags (bit-and c/_RSC_USECOLORKEY_) pos?)]
+    (when-not (-> image-data :type (= c/_RSC_IS_IMAGE_))
+      (throw (ex-info "Not an image" {:reason ::not-an-image})))
+    (when (and (not is-8-bit?) (not (-> image-data :flags (bit-and c/_RSC_16_BIT_) pos?)))
+      (throw (ex-info "Image is neither 8-bit nor 16-bit" {:reason ::bit-size-unknown})))
+    (let [image (allocate width height)
+          pixel-bytes (if is-8-bit? 1 2)
+          read-pixel (if is-8-bit?
+                       octet.buffer/read-ubyte
+                       octet.buffer/read-ushort)]
+      (binding [octet.buffer/*byte-order* :little-endian]
+        ;; TODO: Take out the limits
+        (doseq [y (range (min height 1000))
+                x (range (min width 1000))]
+          (let [offset (+ 8 image-offset (* pixel-bytes (+ x (* y width))))
+                c (read-pixel image-buf offset)
+                raw ^long (if is-8-bit? (nth palette c) c)
+                r ^long (-> raw (bit-shift-right 10) (bit-and 0x1f))
+                g ^long (-> raw (bit-shift-right 5)  (bit-and 0x1f))
+                b ^long (-> raw                      (bit-and 0x1f))
+                transparent? (and use-transparency?
+                                  (if is-8-bit?
+                                    (zero? c)
+                                    (= [31 0 31] [r g b])))
+                argb ^long (-> (if transparent? 0 31)
+                               (bit-shift-left 8)
+                               (+ r)
+                               (bit-shift-left 8)
+                               (+ g)
+                               (bit-shift-left 8)
+                               (+ b))]
+            (image x y argb))))
+      image)))
+
+(defn setup []
+  (q/frame-rate 1)                    ;; Set framerate to 1 FPS
+  (q/background 200))                 ;; Set the background colour to
+                                      ;; a nice shade of grey.
+
+(do
+  (let [{:keys [width height pixels]} (read-image "/Users/candera/falcon/4.33.3/Data/Art/resource/campmap"
+                                                  "BIG_MAP_ID")]
+    (defn draw []
+      (q/color-mode :rgb 1.0 1.0 1.0 1.0)
+      (let [im (q/create-image width height :argb)]
+        (doseq [x (range (min width 100))
+                y (range (min height 100))]
+          (let [pixel (aget pixels x y)]
+            (when-not (zero? (.-a pixel))
+              (q/set-pixel im
+                           x y
+                           (q/color (.-r pixel)
+                                    (.-g pixel)
+                                    (.-b pixel)
+                                    (.-a pixel))))))
+        (q/image im 0 0))))
+
+  (q/defsketch example ;; Define a new sketch named example
+    :title "Oh so many grey circles" ;; Set the title of the sketch
+    :settings #(q/smooth 2)          ;; Turn on anti-aliasing
+    :setup setup                     ;; Specify the setup fn
+    :draw draw                       ;; Specify the draw fn
+    :size [500 500])) ;; You struggle to beat the golden ratio
+
+
+(let [index (read-index "/Users/candera/falcon/4.33.3/Data/Art/resource/campmap.idx")
+      image-data (-> index :data first)
+      image-buf (fs/file-buf "/Users/candera/falcon/4.33.3/Data/Art/resource/campmap.rsc")
+      {:keys [size image-offset]}  image-data
+      [width height] size
+      x 4096
+      y 4095]
+  #_(get-pixel image-buf image-data (palette image-buf image-data) 4095 4095)
+  image-data
+  #_(.position image-buf (+ 8 (+ image-offset x (* y width))))
+  #_(.getShort image-buf))
+
+(let [index (read-index "/Users/candera/falcon/4.33.3/Data/Art/resource/campmap.idx")
+      image-data (-> index :data first)
+      image-buf (fs/file-buf "/Users/candera/falcon/4.33.3/Data/Art/resource/campmap.rsc")]
+  (get-pixel image-buf image-data 20 20 ))
+
+
+(let [index-files (->> "/Users/candera/falcon/4.33.3/Data/Art/resource/"
+                       clojure.java.io/file
+                       file-seq
+                       (filter #(-> % .getName .toUpperCase (.endsWith ".IDX"))))
+      indexes (zipmap index-files (map read-index index-files))]
+  (doseq [f (->> indexes
+                 (filter (fn [[file index]]
+                           (->> index
+                                (map :id)
+                                (some #{"ICON_SU25"}))))
+                 (map (fn [[file index]]
+                        (.getAbsolutePath file))))]
+    (println f)))
+
+(-> @smpu :image-ids :id->name (get 10092))
+
+(let [index (read-index "/Users/candera/falcon/4.33.3/Data/Art/resource/acicons.idx")
+      image-buf (fs/file-buf "/Users/candera/falcon/4.33.3/Data/Art/resource/acicons.rsc")]
+  (->> index (filter #(= "ICON_SU25" (:id %))) first))
+
+(let [index-files (->> "/Users/candera/falcon/4.33.3/Data/Art/resource/"
+                       clojure.java.io/file
+                       file-seq
+                       (filter #(-> % .getName .toUpperCase (.endsWith ".IDX"))))]
+  (doseq [index-file index-files]
+    (println "* "(.getAbsolutePath index-file))
+    (let [index (read-index index-file)]
+      (doseq [entry index]
+        (println "** " (:id entry))))))
+
+(time
+ (let [resource "/Users/candera/falcon/4.33.3/Data/Art/resource/campmap"
+       image-id "BIG_MAP_ID"
+       index    (read-index (str resource ".idx"))
+       image-buf ^java.nio.ByteBuffer (fs/file-buf (str resource ".rsc"))
+       image-data  (->> index (filter #(= image-id (:id %))) first)
+       _ (assert image-data (with-out-str (print "Couldn't find an image with that ID" :resource resource :image-id image-id)))
+       {:keys [palette-size palette-offset center image-offset size]} image-data
+       palette (palette image-buf image-data)
+       [width height] size
+       is-8-bit? (-> image-data :flags (bit-and c/_RSC_8_BIT_) pos?)
+       pixels (make-array Pixel width height)
+       pixel-bytes (if is-8-bit? 1 2)
+       pixel-spec (if is-8-bit? buf/ubyte buf/short)
+       output ^java.nio.ByteBuffer (buf/allocate (* 4 width height))]
+   (.position image-buf (+ 8 image-offset))
+   (log/debug :is-8-bit? is-8-bit?)
+   (binding [octet.buffer/*byte-order* :little-endian]
+     (doseq [^long y (range (min height 10000))
+             ^long x (range (min width 10000))]
+       (let [#_offset #_(+ 8 image-offset (* pixel-bytes (+ x (* y width))))
+             c (if is-8-bit?
+                 (let [b (.get image-buf)]
+                   (if (neg? b)
+                     (+ b 128)
+                     b))
+                 (let [s (.getShort image-buf)]
+                   (if (neg? s)
+                     (+ s 32768)
+                     s)))
+             #_(buf/read image-buf
+                         pixel-spec
+                         {:offset offset})
+             raw (if is-8-bit? (nth palette c) c)
+             r (-> raw (bit-shift-right 10) (bit-and 0x1f))
+             g (-> raw (bit-shift-right 5)  (bit-and 0x1f))
+             b (-> raw                      (bit-and 0x1f))
+             transparent? (if is-8-bit?
+                            (zero? c)
+                            (= [31 0 31] [r g b]))
+             ]
+         (.put output (byte (if transparent? 0 31)))
+         (.put output (byte r))
+         (.put output (byte g))
+         (.put output (byte b))
+         #_(aset pixels ^long x ^long y
+               ^Pixel (Pixel. (if transparent? 0 1)
+                       (/ r 32.0)
+                       (/ g 32.0)
+                       (/ b 32.0)))
+         )))
+   {:width width :height height}))
+
+
+(time
+ (let [resource "/Users/candera/falcon/4.33.3/Data/Art/resource/campmap"
+       image-id "BIG_MAP_ID"
+       allocator (reify ImageAllocator
+                   (allocate [this width height]
+                     (println "Allocating" :width width :height height)
+                     (fn [^long x ^long y ^long argb]
+                       ;; Do nothing
+                       )))]
+   #_(image 5 5 20)
+   (read-image resource image-id allocator)
+   3))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Below this line is after I moved things into the project proper
+
+(require '[weathergen.falcon.files.images :as im])
+
+(time
+ (let [resource "/Users/candera/falcon/4.33.3/Data/Art/resource/campmap"
+       image-id "BIG_MAP_ID"
+       allocator (fn [width height]
+                   (println "Allocating" :width width :height height)
+                   (fn [^long x ^long y ^long argb]
+                     ;; Do nothing
+                     ))]
+   #_(image 5 5 20)
+   (im/read-image nil resource image-id allocator)))
+
+(require '[weathergen.falcon.files.images :as im])
+(let [resource "/Users/candera/falcon/4.33.3/Data/Art/resource/campmap"
+      image-id "BIG_MAP_ID"
+      allocator (fn [width height]
+                  (println "Allocating" :width width :height height)
+                  (fn [^long x ^long y ^long argb]
+                    ;; Do nothing
+                    ))]
+  (im/read-index "/Users/candera/falcon/4.33.3/Data/Art/resource/campmap.idx"))
+
+(-> @smpu :theater :artdir)
+
+(-> @smpu :installation :data-dir)
+
+(->> @smpu :installation :theaters (map (juxt :name :objectdir)))
+
+(->> @smpu :theater keys)
+
+(let [installation  (->> "/Users/candera/falcon/4.33.3/"
+                         mission/load-installation)]
+  (map #(mission/campaign-dir installation %) (:theaters installation)))
+
+
+(let [installation  (->> "/Users/candera/falcon/4.33.3/"
+                         mission/load-installation)]
+  (mission/find-theater installation "/Users/candera/falcon/4.33.3/Data/Add-On Korea Strong DPRK/Campaign/WNPU-Day  1 21 07 12.cam"))
+
+(def m (delay (mission/read-mission "/Users/candera/falcon/4.33.3/Data/Add-On Korea Strong DPRK/Campaign/WNPU-Day  1 21 07 12.cam")))
+
+(let [oob (mission/order-of-battle @wnpu)]
+  (->> oob :air (into []) class))
+
+(->> @wnpu :objectives :data csv-ize (spit "/tmp/wnpu-objectives.csv"))
+
+(let [mission @wnpu
+      airbases @#'mission/airbases
+
+      {:keys [class-table
+              objective-class-data
+              feature-class-data
+              feature-entry-data
+              point-header-data]}
+      mission
+
+      airbase   (->> mission
+                     airbases
+                     (filter #(= 1212 (:camp-id %)))
+                     first)
+      airbase-class (-> airbase
+                        :entity-type
+                        (- 100)
+                        (->> (nth class-table))
+                        :data-pointer
+                        (->> (nth objective-class-data)))
+      {:keys [features first-feature]} airbase-class
+      feature-info (map #(nth feature-entry-data %)
+                        (range first-feature (+ first-feature features)))
+      feature-status (for [f (range features)]
+                         (let [i (-> f (/ 4) long)
+                               f* (- f (* i 4))]
+                           (if (or (neg? f*) (< 255 f*))
+                             0
+                             (-> airbase
+                                 :f-status
+                                 (nth i)
+                                 (bit-shift-right (* f* 2))
+                                 (bit-and 0x03)))))]
+  feature-status
+  ;;(mission/stringify mission :airbase-name airbase)
+  ;; (:links airbase)
+  )
+
+(let [oob (mission/order-of-battle @wnpu)]
+  (->> oob :air (into []) class))
+

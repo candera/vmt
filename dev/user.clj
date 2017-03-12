@@ -125,4 +125,10 @@
      (log/debug "Done reading.")
      mission)))
 
-
+(def wnpu
+  (delay
+   (log/debug "Reading WNPU...")
+   (let [mission (mission/read-mission
+                  "/Users/candera/falcon/4.33.3/Data/Add-On Korea Strong DPRK/Campaign/WNPU-Day  1 21 07 12.cam")]
+     (log/debug "Done reading.")
+     mission)))

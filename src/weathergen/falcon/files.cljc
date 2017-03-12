@@ -66,7 +66,7 @@
                       (take-while #(-> % .charCodeAt zero? not))
                       count))))
 
-(defn fixed-string
+#_(defn fixed-string
   "Octet spec for a string of a fixed size. Removes trailing null
   characters, if any."
   [size]
@@ -83,6 +83,8 @@
 
       (write [_ buff pos value]
         (buf/write! buff spc value {:offset pos})))))
+
+(def fixed-string buf/string)
 
 (defn larray
   "Octet spec for a length prefixed array."
