@@ -2884,3 +2884,34 @@
   (def WPF_CRITICAL_MASK 0x07FF) ;; If it's one of these, we can't
                                  ;; skip this waypoint
   )
+
+(with-file "team.h"
+  ;; Country defines
+  (defenum CountryListEnum
+    COUN_NONE = 0,
+    COUN_US,
+    COUN_SOUTH_KOREA,
+    COUN_JAPAN,
+    COUN_RUSSIA,
+    COUN_CHINA,
+    COUN_NORTH_KOREA,
+    COUN_GORN,
+    NUM_COUNS,
+    )
+
+  ;; Team data defines
+  (defenum TeamDataEnum
+    TEAM_NEUTRAL = 0,
+    TEAM_1,
+    TEAM_2,
+    TEAM_3,
+    TEAM_4,
+    TEAM_5,
+    TEAM_6,
+    TEAM_7,
+    NUM_TEAMS,
+    )
+  )
+
+(with-file "campstr.h"
+  (def NUM_CAMERA_LABELS 16))

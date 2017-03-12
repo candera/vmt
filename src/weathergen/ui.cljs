@@ -1885,7 +1885,7 @@
   "Renders the airbase portion of the info overlay."
   [mission airbase object-data]
   (let [{:keys [x y]}     (grid-coordinates mission (:x airbase) (:y airbase))
-        label             (mission/stringify mission :airbase-name airbase)
+        label             (mission/objective-name mission airbase)
         {:keys [camp-id]} airbase
         visible?          (cell= (get-in object-data [camp-id :visible?]))
         highlighted?      (cell= (get-in object-data [camp-id :highlighted?]))
@@ -3901,7 +3901,7 @@
                         :sort-key #(->> %
                                         :owner
                                         (mission/side mission)
-                                        (mission/stringify mission :team-name))
+                                        (mission/team-name mission))
                         :formatter #(let [side (->> %
                                                     :owner
                                                     (mission/side mission))]
@@ -3910,11 +3910,11 @@
                                                             [:team
                                                              :dark-text
                                                              (mission/team-color side)])}
-                                       (mission/stringify mission :team-name side)))}
+                                       (mission/team-name mission side)))}
                        {:title "Package"
                         :formatter #(->> %
                                          :package
-                                         (mission/stringify mission :package-name))}
+                                         (mission/package-name mission))}
                        ;; Not enough space for these
                        ;; {:title "Squadron"
                        ;;  :formatter (constantly "TODO")}
@@ -3925,7 +3925,7 @@
                        {:title "Mission"
                         :formatter #(->> %
                                          :mission
-                                         (mission/stringify mission :flight-mission))}
+                                         (mission/flight-mission mission))}
                        {:title "T/O"
                         :formatter #(->> %
                                          :waypoints
@@ -4113,9 +4113,9 @@
              (select2
               (for-tpl [[side airbases] (cell= (group-by :owner airbases))]
                 (optgroup
-                 :label (cell= (mission/stringify mission :team-name side))
+                 :label (cell= (mission/team-name mission side))
                  (for-tpl [airbase airbases]
-                   (option (cell= (mission/stringify mission :airbase-name airbase))))))))
+                   (option (cell= (mission/objective-name mission airbase))))))))
             (row
              :css {:overflow "scroll"
                    :font-family "monospace"
@@ -4136,10 +4136,10 @@
                                                              [:team
                                                               :dark-text
                                                               (mission/team-color side)])}
-                                        (mission/stringify mission :team-name side)))
+                                        (mission/team-name mission side)))
                           :children (fn [[side airbases]]
                                       (sort-by (fn [airbase]
-                                                 (mission/stringify mission :airbase-name airbase))
+                                                 (mission/objective-name mission airbase))
                                                airbases))}
                          ;; Airbases
                          {:attrs (fn [airbase]
@@ -4147,9 +4147,7 @@
                           :formatter (fn [airbase]
                                        (let [visible? (path-lens object-data [(:camp-id airbase) :visible?])
                                              highlighted? (path-lens object-data [(:camp-id airbase) :highlighted?])
-                                             ab-name (mission/stringify mission
-                                                                        :airbase-name
-                                                                        airbase)]
+                                             ab-name (mission/objective-name mission airbase)]
                                          (inl
                                           :id (gstring/format "air-forces-airbase-%d"
                                                               (:camp-id airbase))
@@ -4235,7 +4233,7 @@
             (span :css (cell= {:color (get-in colors [:team
                                                       :dark-text
                                                       (mission/team-color side)])})
-                  (cell= (mission/stringify mission :team-name side)))
+                  (cell= (mission/team-name mission side)))
             (ol
              (for-tpl [[type units] type-units]
                (li

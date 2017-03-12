@@ -13,6 +13,166 @@
             [weathergen.lzss :as lzss]
             [weathergen.util :as util]))
 
+;;; Database accessors
+
+;; TODO: This file probably needs to be broken up
+
+;; TODO: Make sure this works with entities other than objectives
+(defn class-table-entry
+  "Given an entity, return its entry in the class table."
+  [mission entity]
+  (-> entity
+      :entity-type
+      (- c/VU_LAST_ENTITY_TYPE)
+      (->> (nth (:class-table mission)))))
+
+(defn class-info
+  "Retrieves the unit class info (the most important elements of which
+  are things like domain and type) for a given unit type."
+  [{:keys [class-table] :as mission} type-id]
+  (let [class-entry (nth class-table
+                         (- type-id c/VU_LAST_ENTITY_TYPE))]
+    (-> class-entry
+        :vu-class-data
+        :class-info)))
+
+(defn objective-class-entry
+  "Returns an objective's entry from the objectives class table."
+  [mission objective]
+  (->> objective
+       (class-table-entry mission)
+       :data-pointer
+       (nth (:objective-class-data mission))))
+
+(defn objective-type
+  "Given an objective, return its numeric type."
+  [mission objective]
+  (->> objective (class-table-entry mission) :vu-class-data :class-info :type))
+
+(defn objective-type-name
+  "Given an objective, returns the name of its type. E.g. 'Bridge'."
+  [mission objective]
+  (get-in mission [:strings :objective-type-names (objective-type mission objective)]))
+
+(defn find-objective
+  "Find an objective by the criteria given, or nil if the item can't be found."
+  [mission criteria value]
+  (condp = criteria
+    :id (->> mission :objectives (filter #(= (:id %) value)) first)))
+
+;; This doesn't do well with carrier airbase names. For that, we need
+;; to somehow figure out how to chase our way into the vehicle info
+;; and get the carrier vehicle name, which is where we get things
+;; like "CVN70 Vinson". Airbase unit names for carrier are things
+;; like "Carrier 7". There's a section in the BMS Manual PDF about how
+;; carrier squadrons are associated with carrier airbases that might
+;; be helpful.
+(defn objective-name
+  "Returns the name of the given objective."
+  [mission objective]
+  (let [{:keys [class-table
+                objective-class-data
+                names
+                strings]} mission
+        name-id (-> objective :name-id)]
+    (if (not (zero? name-id))
+      (names name-id)
+      (if-let [parent (->> objective :parent (find-objective mission :id))]
+        (str (-> parent :name-id names)
+             " "
+             (objective-type-name mission objective))
+        (names 0)))))
+
+(defn ordinal-suffix
+  "Returns the appropriate ordinal suffix for a given number. I.e. \"st\" for 1, to give \"1st\"."
+  [mission n]
+  (let [strings (-> mission :strings :fn)]
+    (cond
+      (and (= 1 (mod n 10))
+           (not= n 11))
+      (strings 15)
+
+      (and (= 2 (mod n 10))
+           (not= n 12))
+      (strings 16)
+
+      (and (= 3 (mod n 10))
+           (not= n 13))
+      (strings 17)
+
+      :else
+      (strings 18))))
+
+(defn- partial=
+  "Returns true if the coll1 and coll2 have corresponding elements
+  equal, ignoring any excess."
+  [coll1 coll2]
+  (every? identity (map = coll1 coll2)))
+
+(defn get-size-name
+  "Returns the size portion of a unit name"
+  [mission unit]
+  (let [{:keys [type-id]} unit
+        {:keys [type domain]} (class-info mission type-id)
+        strings (-> mission :strings :fn)]
+    #_(log/debug "get-size-name" :domain domain :type type)
+    (strings
+     (condp partial= [domain type]
+       [c/DOMAIN_AIR  c/TYPE_SQUADRON]   610
+       [c/DOMAIN_AIR  c/TYPE_FLIGHT]     611
+       [c/DOMAIN_AIR  c/TYPE_PACKAGE]    612
+       [c/DOMAIN_LAND c/TYPE_BRIGADE]   614
+       [c/DOMAIN_LAND c/TYPE_BATTALION] 615
+       [c/DOMAIN_SEA]               616
+       617))))
+
+(defn data-table
+  "Return the appropriate data table."
+  [database data-type]
+  (let [k (condp = data-type
+            c/DTYPE_UNIT :unit-class-data
+            nil)]
+    (if k
+      (get database k)
+      ;; This is a TODO
+      (vec (repeat 10000 {})))))
+
+(defn class-data
+  "Return the class data appropriate to the type."
+  [database type-id]
+  (let [{:keys [class-table]} database
+        {:keys [data-pointer data-type]} (nth class-table (- type-id c/VU_LAST_ENTITY_TYPE))]
+    (nth (data-table database data-type) data-pointer)))
+
+(defn unit-name
+  "Returns a human-readable name for the given unit"
+  [mission unit]
+  (let [{:keys [name-id type-id]} unit
+        {:keys [name]} (class-data mission type-id)
+        {:keys [domain type] :as ci} (class-info mission type-id)
+        strings (-> mission :strings :fn)]
+    ;; Ref: unit.cpp::GetName
+    (condp = [domain type]
+      [c/DOMAIN_AIR c/TYPE_FLIGHT]
+      (let [{:keys [callsign-id callsign-num]} unit]
+        (str (strings (+ c/FIRST_CALLSIGN_ID callsign-id))
+             " "
+             callsign-num))
+
+      [c/DOMAIN_AIR c/TYPE_PACKAGE]
+      (let [{:keys [camp-id]} unit]
+        (str "Package " camp-id))
+
+      (let [{:keys [name-id]} unit]
+        (str name-id
+             (ordinal-suffix mission name-id)
+             " "
+             name
+             " "
+             (get-size-name mission unit))))))
+
+;;; File parsing
+
 ;; There's some weirdness in these next few entries, as it looks like
 ;; there might be some overlap (or even total replication) with the
 ;; unit descriptions below. But there's a separation in the C++ code
@@ -134,6 +294,30 @@
                               (fixed-string (nth indices (dec n))))]
         (fn [n]
           (subs strings (nth indices n) (nth indices (inc n))))))))
+
+;; Ref campstr.cpp(129)
+(defn read-strings-file
+  "Reads the strings.idx/wch file from the campaign directory and
+  returns a map with the strings data. Also returns, under the `:fn`
+  key, a function that will read any string given its index ."
+  [campaign-dir]
+  (let [strings (read-strings campaign-dir "strings")
+        indexed (fn [start count]
+                  (->> (range start (+ start count))
+                       (map strings)
+                       (map-indexed vector)
+                       (into (sorted-map))))]
+    {:fn strings
+     :objective-type-names (indexed 500 c/MAXIMUM_OBJTYPES)
+     :mission-type-names (indexed 300 c/AMIS_OTHER)
+     :waypoint-type-names (indexed 350 c/WP_LAST)
+     :air-stype-names (indexed 540 20)
+     :ground-stype-names (indexed 560 20)
+     :naval-stype-names (indexed 580 20)
+     :country-names (indexed 40 c/NUM_COUNS)
+     :time-compression-names (indexed 75 5)
+     :camera-label-names (indexed 60 c/NUM_CAMERA_LABELS)
+     :unit-name-format (strings 58)}))
 
 (def unit-class-data
   ;; Source: entity.cpp::LoadUnitData and UcdFile.cs
@@ -475,9 +659,7 @@
        (merge { ;; These next couple might need to be generalized, like to a map
                ;; from the type to the ids in it.
                :image-ids            (read-image-ids installation)
-               :user-ids             (read-user-ids installation)
-               :strings              (read-strings (campaign-dir installation theater)
-                                                   "Strings")})))
+               :user-ids             (read-user-ids installation)})))
 
 (defn read-embedded-files
   "Reads and parses a .tac/.cmp file, returning a map from the
@@ -524,11 +706,15 @@
   (let [install-dir   (find-install-dir path)
         installation  (load-installation install-dir)
         theater       (find-theater installation path)
-        database      (load-initial-database installation theater)
+        strings       (read-strings-file (campaign-dir installation theater))
+        database      (assoc (load-initial-database installation theater)
+                             :strings strings)
         mission-files (read-embedded-files path database)
         {:keys [theater-name scenario]} (->> mission-files :campaign-info)
         names         (read-strings (campaign-dir installation theater)
                                     theater-name)
+        database      (assoc (load-initial-database installation theater)
+                             :strings strings)
         scenario-path (fs/path-combine (fs/parent path)
                                        (str scenario (extension path)))
         scenario-files (read-embedded-files scenario-path database)]
@@ -1133,16 +1319,6 @@
 
 ;; unit-record
 
-(defn class-info
-  "Retrieves the unit class info (the most important elements of which
-  are things like domain and type) for a given unit type."
-  [{:keys [class-table] :as database} type-id]
-  (let [class-entry (nth class-table
-                         (- type-id c/VU_LAST_ENTITY_TYPE))]
-    (-> class-entry
-        :vu-class-data
-        :class-info)))
-
 (defn unit-record
   "Returns an octet spec for unit records against the given
   class table."
@@ -1193,93 +1369,6 @@
     ;; TODO : implement write
     ))
 
-(defn ordinal-suffix
-  "Returns the appropriate ordinal suffix for a given number. I.e. \"st\" for 1, to give \"1st\"."
-  [n {:keys [strings] :as database}]
-  (cond
-    (and (= 1 (mod n 10))
-         (not= n 11))
-    (strings 15)
-
-    (and (= 2 (mod n 10))
-         (not= n 12))
-    (strings 16)
-
-    (and (= 3 (mod n 10))
-         (not= n 13))
-    (strings 17)
-
-    :else
-    (strings 18)))
-
-(defn partial=
-  "Returns true if the coll1 and coll2 have corresponding elements
-  equal, ignoring any excess."
-  [coll1 coll2]
-  (every? identity (map = coll1 coll2)))
-
-(defn get-size-name
-  "Returns the size portion of a unit name"
-  [unit database]
-  (let [{:keys [type-id]} unit
-        {:keys [type domain]} (class-info database type-id)
-        {:keys [strings]} database]
-    #_(log/debug "get-size-name" :domain domain :type type)
-    (strings
-     (condp partial= [domain type]
-       [c/DOMAIN_AIR  c/TYPE_SQUADRON]   610
-       [c/DOMAIN_AIR  c/TYPE_FLIGHT]     611
-       [c/DOMAIN_AIR  c/TYPE_PACKAGE]    612
-       [c/DOMAIN_LAND c/TYPE_BRIGADE]   614
-       [c/DOMAIN_LAND c/TYPE_BATTALION] 615
-       [c/DOMAIN_SEA]               616
-       617))))
-
-(defn data-table
-  "Return the appropriate data table."
-  [database data-type]
-  (let [k (condp = data-type
-            c/DTYPE_UNIT :unit-class-data
-            nil)]
-    (if k
-      (get database k)
-      ;; This is a TODO
-      (vec (repeat 10000 {})))))
-
-(defn class-data
-  "Return the class data appropriate to the type."
-  [database type-id]
-  (let [{:keys [class-table]} database
-        {:keys [data-pointer data-type]} (nth class-table (- type-id c/VU_LAST_ENTITY_TYPE))]
-    (nth (data-table database data-type) data-pointer)))
-
-(defn unit-name
-  "Returns a human-readable name for the given unit"
-  [unit database]
-  (let [{:keys [strings]} database
-        {:keys [name-id type-id]} unit
-        {:keys [name]} (class-data database type-id)
-        {:keys [domain type] :as ci} (class-info database type-id)]
-    ;; Ref: unit.cpp::GetName
-    (condp = [domain type]
-      [c/DOMAIN_AIR c/TYPE_FLIGHT]
-      (let [{:keys [callsign-id callsign-num]} unit]
-        (str (strings (+ c/FIRST_CALLSIGN_ID callsign-id))
-             " "
-             callsign-num))
-
-      [c/DOMAIN_AIR c/TYPE_PACKAGE]
-      (let [{:keys [camp-id]} unit]
-        (str "Package " camp-id))
-
-      (let [{:keys [name-id]} unit]
-        (str name-id
-             (ordinal-suffix name-id database)
-             " "
-             name
-             " "
-             (get-size-name unit database))))))
-
 (defn unit-lookup-by-id
   "Given a seq of units, return the one with the given id."
   [units id]
@@ -1319,56 +1408,32 @@
             (buf/repeat num-units (unit-record database)))
            (remove nil?)
            (mapv (fn [unit]
-                   (assoc unit :name (unit-name unit database))))))))
+                   (assoc unit :name (unit-name database unit))))))))
 
 (defmethod read-embedded-file* :default
   [_ entry buf _]
   :not-yet-implemented)
 
-(defmulti stringify*
-  "Turns a value into something suitable for display, based on its
-  context identifier."
-  (fn [database context value] context))
+(defn flight-mission
+  "Given its numeric code, returns the name of a flight mission type, e.g. BARCAP."
+  [mission mission-type-number]
+  (get-in mission [:strings :mission-type-names mission-type-number]))
 
-(defmethod stringify* :flight-mission
-  [mission _ value]
-  (let [strings (-> mission :strings)]
-    (strings (+ 300 value))))
+(defn team-name
+  "Given a team's number, return its name, e.g. 'DPRK'."
+  [mission team-number]
+  (-> mission :teams (nth team-number) :team :name))
 
-(defmethod stringify* :team-name
-  [mission _ value]
-  (-> mission :teams (nth value) :team :name))
-
-(defmethod stringify* :package-name
-  [mission _ package-id]
-  (let [packages (->> mission
+(defn package-name
+  "Given a package ID, return its string name, e.g. Package 12345."
+  [mission package-id]
+   (let [packages (->> mission
                       :units
                       (util/filter= :type :package))]
     (->> package-id
          (unit-lookup-by-id packages)
          :name-id
          str)))
-
-;; This doesn't do well with carrier airbase names. For that, we need
-;; to somehow figure out how to chase our way into the vehicle info
-;; and get the carrier vehicle name, which is where we get things
-;; like "CVN70 Vinson". Airbase unit names for carrier are things
-;; like "Carrier 7"
-(defmethod stringify* :airbase-name
-  [mission _ airbase]
-  (let [names (:names mission)]
-    (-> airbase :name-id names)))
-
-(defmethod stringify* :default
-  [_ _ value]
-  value)
-
-;; Always wrap a multimethod with a function so we have a single point
-;; of entry.
-(defn stringify
-  "Return a human-readable version of some coded quantity."
-  [mission context value]
-  (stringify* mission context value))
 
 (defn squadron-airbase
   "Returns the airbase objective for the given squadron."
@@ -1377,12 +1442,6 @@
         unit (->> mission :units (util/filter= :camp-id squadron-id) util/only)
         airbase-id (:airbase-id unit)]
     (->> mission :objectives (util/filter= :id airbase-id) util/only)))
-
-(defn objective-name
-  "Returns the name of the given objective."
-  [mission objective]
-  (let [names (:names mission)]
-    (-> mission :name-id names)))
 
 ;; Note that the below will also return carriers, which might be what
 ;; we want, but might not be. Carrier airbases have subtype 7 and
@@ -1465,12 +1524,10 @@
                 feature-class-data
                 feature-entry-data
                 point-header-data]} mission
-        airbase-class (-> airbase
-                          :entity-type
-                          (- 100)
-                          (->> (nth class-table))
-                          :data-pointer
-                          (->> (nth objective-class-data)))
+        airbase-class (->> airbase
+                           (class-table-entry mission)
+                           :data-pointer
+                           (nth objective-class-data))
         {:keys [features first-feature]} airbase-class
         feature-info (map #(nth feature-entry-data %)
                           (range first-feature (+ first-feature features)))
@@ -1594,15 +1651,6 @@
   ;; TODO: Group by side, category
   ;; TODO: Add army, navy, objective
   {:air (oob-air mission)})
-
-(defn objective-class
-  [mission objective]
-  (-> objective
-      :entity-type
-      (- 100)
-      (->> (nth (:class-table mission)))
-      :data-pointer
-      (->> (nth (:objective-class-data mission)))))
 
 (def map-image-descriptor
   "Returns an image descriptor for the campaign map."

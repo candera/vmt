@@ -2248,3 +2248,60 @@ type: 0x64 -> image
 (let [oob (mission/order-of-battle @wnpu)]
   (->> oob :air (into []) class))
 
+;; Why is Suwon named "Nowhere" ?
+(let [mission @wnpu
+      airbases @#'mission/airbases
+
+      {:keys [class-table
+              objective-class-data
+              feature-class-data
+              feature-entry-data
+              point-header-data]} mission
+      airbase (->> mission
+                   airbases
+                   (filter #(= 817 (:camp-id %)))
+                   first)
+      airbase-class (-> airbase
+                        :entity-type
+                        (- 100)
+                        (->> (nth class-table))
+                        :data-pointer
+                        (->> (nth objective-class-data)))
+      airbase-parent (->> mission
+                          :objectives
+                          (filter #(= (:parent airbase) (:id %)))
+                          first)
+      names (:names mission)
+      parent-name (-> airbase-parent :name-id names)
+      class-table-entry (nth class-table (- (:entity-type airbase) 100))
+      class-type (-> class-table-entry :vu-class-data :class-info :type)]
+  (names 502)
+  )
+
+(let [names (-> @wnpu :names)]
+  (doseq [i (range 2000)]
+    (let [n (try
+              (names i)
+              (catch Exception _ ""))]
+      (printf "%03d %s\n" i n))))
+
+;; Sunch'on Airbase name id = 344. What has that name?
+
+(->> @wnpu
+     :objectives
+     (filter #(= 344 (:name-id %)))
+     )
+
+;; So, nothing does. Tons of zeros, though.
+
+;; The rule appears to be: if the thing has a name ID of zero, and it
+;; has a parent, then you look at the name of the parent and append to
+;; that the name of the objective type, which comes from the
+;; strings.wch file. See objectiv.cpp(2083).
+
+(let [strings (mission/read-strings "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE" "strings")]
+  (doseq [i (range 58 59)]
+    (println (strings i))))
+
+
+(-> @smpu class)
