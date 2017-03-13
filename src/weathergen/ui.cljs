@@ -1115,7 +1115,7 @@
                        :brown "#e27e43"
                        :orange "orange"
                        :yellow "yellow"
-                       :red "pink"
+                       :red "#f58e8e"
                        :gray "lightgray"}}})
 
 (def resize-handle-size 0.75)
