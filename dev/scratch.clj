@@ -2305,3 +2305,16 @@ type: 0x64 -> image
 
 
 (-> @smpu class)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(let [mission @smpu
+      x 20.1
+      y 50.2]
+  (->> (coords/fgrid->weather mission x y)
+       (coords/weather->fgrid mission)))
+
+(let [mission @smpu
+      {:keys [campaign-info]} mission
+      {:keys [bullseye-x bullseye-y]} campaign-info]
+  (coords/fgrid->weather mission bullseye-x bullseye-y))

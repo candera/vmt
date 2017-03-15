@@ -9,6 +9,7 @@
             [garden.selectors :as css-sel]
             [octet.core :as buf]
             [taoensso.timbre :as log]
+            [weathergen.coordinates :as coords]
             [weathergen.dtc :as dtc]
             [weathergen.fmap :as fmap]
             [weathergen.falcon.constants :as c]

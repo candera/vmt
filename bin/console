@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/bin/bash -i
+
+background 000033
+title weathergen
 
 # Sets up a tmux window
 
@@ -6,5 +9,5 @@ tmux new-session -s wgen   -n repl -d 'bash -i'
 tmux new-window  -t wgen:1 -n tags    'bash -i -c "watch-clojure-tags src dev"'
 tmux new-window  -t wgen:2 -n electron 'bash -i -c "electron target/"'
 
-tmux select-window -t wgen
+tmux select-window -t wgen:0
 tmux -2 attach-session -t wgen
