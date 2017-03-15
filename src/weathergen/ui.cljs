@@ -28,6 +28,8 @@
             [garden.selectors :as css-sel]
             [goog.dom :as gdom]
             [goog.crypt.base64 :as base64]
+            [goog.events :as gevents]
+            [goog.events.MouseWheelHandler]
             [goog.string :as gstring]
             [goog.string.format]
             [goog.style :as gstyle]
@@ -281,6 +283,9 @@
 
 (defc hover-cell nil)
 
+;; Records the mouse location in weatherspace
+(defc mouse-location nil)
+
 (defc prevent-recomputation? false)
 
 ;; TODO: This can go away if we introduce a single-input way to input
@@ -307,6 +312,24 @@
            :reset-object-data-on-mission-change
            (fn [_ _ _ _]
              (reset! object-data {})))
+
+;; Zoom and pan for the map
+
+;; This is how much zoom you get for each "click" of the mousewheel
+(def zoom-speed 1.001)
+(defc map-zoom 1)
+(defc map-pan {:x 0 :y 0})
+
+(def map-viewbox
+  (formula-of [weather-params map-zoom map-pan]
+    (let [[nx ny] (:cell-count weather-params)
+          {:keys [x y]} map-pan]
+      {:x x
+       :y y
+       :width (/ nx map-zoom)
+       :height (/ ny map-zoom)})))
+
+
 
 #_(add-watch object-data
            :debug
@@ -1048,25 +1071,53 @@
                   hour
                   minute))
 
-(defn grid-coords
-  "Given a mouse event, determined where on the grid it occurred.
+;; TODO: get all the various coordinate systems sorted out. Maybe use
+;; records or something to permit auto conversion?
+(defn bullseye
+  "Returns bullseye (a map of `:heading` and `:distance`) given
+  weatherspace coordinates (a map of `:x` and `:y`)."
+  [mission {:keys [x y]}]
+  (let [{:keys [bullseye-x bullseye-y]} (-> mission :campaign-info)]
+    (gstring/format "%f %f (%d %d)"
+                    x y bullseye-x bullseye-y)))
+
+(defn format-bullseye
+  "Returns a bullseye string given bullseye coordinates."
+  [bullseye]
+  (let [{:keys [heading distance]} bullseye]
+    (gstring/format "%03d %d"
+                    (let [h (-> heading (mod 360) long)]
+                      (if (zero? h)
+                        360
+                        h))
+                    (long distance))))
+
+(defn mouse-weather-coords
+  "Given a mouse event, determined where on the map it occurred, in weatherspace.
   Returns coordinates as an [x y] pair, where x and y can be
   fractional."
   [e]
   (try
-    (let [px             (.-pageX e)
-          py             (.-pageY e)
-          offset         (-> "#grid" js/$ .offset)
-          top            (.-top offset)
-          left           (.-left offset)
-          x              (- px left)
-          y              (- py top)
+    (let [ox             (.-offsetX e)
+          oy             (.-offsetY e)
           [nx ny]        (:cell-count @weather-params)
+          {:keys [x y]}  @map-pan
           [width height] (:dimensions @display-params)]
-      [(-> x (* nx) (/ width))
-       (-> y (* ny) (/ height))])
+      [(-> ox (* nx) (/ width)  (/ @map-zoom) (+ x))
+       (-> oy (* ny) (/ height) (/ @map-zoom) (+ y))])
+    #_(let [px             (.-pageX e)
+            py             (.-pageY e)
+            offset         (-> "#grid" js/$ .offset)
+            top            (.-top offset)
+            left           (.-left offset)
+            x              (- px left)
+            y              (- py top)
+            [nx ny]        (:cell-count @weather-params)
+            [width height] (:dimensions @display-params)]
+        [(-> x (* nx) (/ width))
+         (-> y (* ny) (/ height))])
     (catch :default err
-      (log/error err "grid-coords error" :e e))))
+      (log/error err "mouse-weather-coords error" :e e))))
 
 (defn retry
   "Perform `f` asynchronously every `interval` milliseconds until it
@@ -1828,7 +1879,6 @@
                                     [:weather-overrides index :falloff]
                                     #(math/clamp 0 (long r) %))))]))])))))
 
-
 (defn flight-path->path
   [size path]
   (loop [[point & more] path
@@ -1836,7 +1886,7 @@
          s nil]
     (if-let [{:keys [::dtc/coordinates ::dtc/action]} point]
       (let [{:keys [::dtc/x ::dtc/y]} coordinates
-            [gx gy] (coords/falcon->grid size x y)]
+            [gx gy] (coords/ffeet->weather size x y)]
         (if landed?
           s
           (recur more
@@ -1847,23 +1897,10 @@
                       (gstring/format "%f,%f" gx gy)))))
       s)))
 
-(defn grid-coordinates
-  "Returns a map of :x and :y coordinates (in weather space) given
-  coordinates in Falcon space."
-  [mission x y]
-  ;; TODO: Another place where we're assuming 59x59.
-  {:x (-> x
-          (/ (-> mission :campaign-info :theater-size-x))
-          (* 59))
-   :y (-> y
-          (/ (-> mission :campaign-info :theater-size-y))
-          (->> (- 1))
-          (* 59))})
-
 (defn waypoint-grid-coords
   "Given a BMS waypoint, return an x/y map of its weatherspace coordinates."
   [mission waypoint]
-  (grid-coordinates mission (:grid-x waypoint) (:grid-y waypoint)))
+  (coords/fgrid->weather mission (:grid-x waypoint) (:grid-y waypoint)))
 
 (defn waypoints->path
   "Given a sequence of BMS waypoints, return an SVG path that follows them."
@@ -1881,18 +1918,18 @@
          s nil]
     (if-let [{:keys [::dtc/coordinates]} point]
       (let [{:keys [::dtc/x ::dtc/y]} coordinates
-            [gx gy] (coords/falcon->grid size x y)]
+            [wx wy] (coords/ffeet->weather size x y)]
         (recur more
                (str s
                     (when s " ")
                     (if s "L" "M")
-                    (gstring/format "%f,%f" gx gy))))
+                    (gstring/format "%f,%f" wx wy))))
       s)))
 
 (defn airbase-info-overlay
   "Renders the airbase portion of the info overlay."
   [mission airbase object-data]
-  (let [{:keys [x y]}     (grid-coordinates mission (:x airbase) (:y airbase))
+  (let [{:keys [x y]}     (coords/fgrid->weather mission (:x airbase) (:y airbase))
         label             (mission/objective-name mission airbase)
         {:keys [camp-id]} airbase
         visible?          (cell= (get-in object-data [camp-id :visible?]))
@@ -2089,7 +2126,7 @@
          :debug "waypoint markers"
          (for [[ordinal waypoint] (map-indexed vector waypoints)
                :let [{:keys [action grid-x grid-y]} waypoint
-                     {:keys [x y]} (grid-coordinates mission grid-x grid-y)
+                     {:keys [x y]} (coords/fgrid->weather mission grid-x grid-y)
                      style {:pointer-events "none"
                             :fill           "none"
                             :opacity        opacity}]]
@@ -2195,6 +2232,38 @@
     (< (+ (* dx dx) (* dy dy))
        (* radius radius))))
 
+(defn bullseye-overlay
+  "Renders the UI for display of bullseye."
+  [mission]
+  (let [stroke-width 0.025               ; TODO: Adjust for zoom?
+        bw (formula-of
+             [mission]
+             (let [{:keys [campaign-info]} mission
+                   {bx :bullseye-x by :bullseye-y} campaign-info]
+               (coords/fgrid->weather mission bx by)))
+        bx (cell= (:x bw))
+        by (cell= (:y bw))]
+    (svg/g
+     :attr {:debug "bullseye"}
+     :svg/transform (cell= (str "translate(" bx "," by ")"))
+     (for [r (range 30 200 30)]
+       (svg/circle
+        :stroke "black"
+        :fill "none"
+        :stroke-width stroke-width
+        :cx 0
+        :cy 0
+        :r (cell= (coords/nm->weather mission r))))
+     (for [theta (range 0 180 30)]
+       (svg/line
+        :attr {:transform (str "rotate(" theta ")")}
+        :stroke "black"
+        :stroke-width stroke-width
+        :x1 0
+        :y1 (cell= (coords/nm->weather mission -200))
+        :x2 0
+        :y2 (cell= (coords/nm->weather mission 200)))))))
+
 (defelem grid
   [{:keys [display-params
            selected-cell
@@ -2206,7 +2275,7 @@
            nx
            ny]
     :as attrs}]
-  (let [;; Drag and drop is complicated by the fact that there isn't a
+  (let [ ;; Drag and drop is complicated by the fact that there isn't a
         ;; good way to capture the mouse when it goes down. So we use
         ;; the document mouse events so that we can get global
         ;; notificaiton of the mouse movements and buttons.
@@ -2217,20 +2286,20 @@
                                 (swap! drag-handler #(or % h)))
         doc-move (fn [e]
                    (if-let [h @drag-handler]
-                     (let [[x y] (grid-coords e)
+                     (let [[x y] (mouse-weather-coords e)
                            [sx sy] @drag-start]
                        (h [(- x sx) (- y sy)] false)
                        (reset! hover-cell nil)
                        (.preventDefault e))
-                     (reset! hover-cell
-                             (let [[x y] (grid-coords e)]
+                     (reset! #_hover-cell
+                             mouse-location
+                             (let [[x y] (mouse-weather-coords e)]
                                (when (and (<= 0 x nx)
                                           (<= 0 y ny))
-                                 {:x (long x)
-                                  :y (long y)})))))
+                                 {:x x :y y})))))
         doc-up (fn doc-up [e]
                  (when-let [h @drag-handler]
-                   (let [[x y] (grid-coords e)
+                   (let [[x y] (mouse-weather-coords e)
                          [sx sy] @drag-start]
                      (h [(- x sx) (- y sy)] true)))
                  (reset! drag-start nil)
@@ -2256,58 +2325,61 @@
                                          :overlay
                                          #{:pressure :temperature :type})))
         selected-cell-overlay (formula-of
-                               [selected-cell]
-                               (let [[x y] (:coordinates selected-cell)]
-                                 (if (and x y)
-                                   (svg/rect
-                                    :id "selected-cell-overlay"
-                                    :x x
-                                    :y y
-                                    :width 1
-                                    :height 1)
-                                   [])))
+                                [selected-cell]
+                                (let [[x y] (:coordinates selected-cell)]
+                                  (if (and x y)
+                                    (svg/rect
+                                     :id "selected-cell-overlay"
+                                     :x x
+                                     :y y
+                                     :width 1
+                                     :height 1)
+                                    [])))
         wind-stability-areas     (formula-of
-                                  [weather-params]
-                                  (:wind-stability-areas weather-params))
+                                   [weather-params]
+                                   (:wind-stability-areas weather-params))
         weather-overrides        (formula-of
-                                  [weather-params]
-                                  (:weather-overrides weather-params))
+                                   [weather-params]
+                                   (:weather-overrides weather-params))
         effective-hover-cell     (formula-of
-                                  [hover-cell wind-stability-areas weather-overrides]
-                                  ;; Don't show the hover info when
-                                  ;; we're in an area where something
-                                  ;; can be dragged.
-                                  (if (or (some (fn [area]
-                                                  (and (within-area? area hover-cell)
-                                                       (:editing? area)))
-                                                wind-stability-areas)
-                                          (some (fn [override]
-                                                  (and (within-override? override hover-cell)
-                                                       (:editing? override)))
-                                                weather-overrides))
-                                    nil
-                                    hover-cell))
+                                   [hover-cell wind-stability-areas weather-overrides]
+                                   ;; Don't show the hover info when
+                                   ;; we're in an area where something
+                                   ;; can be dragged.
+                                   (if (or (some (fn [area]
+                                                   (and (within-area? area hover-cell)
+                                                        (:editing? area)))
+                                                 wind-stability-areas)
+                                           (some (fn [override]
+                                                   (and (within-override? override hover-cell)
+                                                        (:editing? override)))
+                                                 weather-overrides))
+                                     nil
+                                     hover-cell))
         info-overlay             (formula-of
-                                  [effective-hover-cell weather-data pressure-unit cloud-params]
-                                  (info-overlay effective-hover-cell
-                                                weather-data
-                                                pressure-unit
-                                                nx ny
-                                                cloud-params))]
+                                   [effective-hover-cell weather-data pressure-unit cloud-params]
+                                   (info-overlay effective-hover-cell
+                                                 weather-data
+                                                 pressure-unit
+                                                 nx ny
+                                                 cloud-params))]
     (with-let [elem (svg/svg
                      :id "grid"
                      (let [dims (formula-of
-                                 [display-params]
-                                 ;; Edge doesn't render right, so we
-                                 ;; have to make a little extra room
-                                 (map #(- % 7) (:dimensions display-params)))]
+                                  [display-params]
+                                  ;; Edge doesn't render right, so we
+                                  ;; have to make a little extra room
+                                  (map #(- % 7) (:dimensions display-params)))]
                        (-> attrs
                            (dissoc :display-params
                                    :selected-cell
                                    :weather-data
                                    :wind-stability-areas
                                    :weather-overrides)
-                           (assoc :viewBox (gstring/format "0 0 %d %d" nx ny)
+                           (assoc :viewBox (formula-of [map-viewbox]
+                                             (let [{:keys [x y width height]} map-viewbox]
+                                               (gstring/format "%f %f %f %f"
+                                                               x y width height)))
                                   :width (cell= (first dims))
                                   :height (cell= (second dims))
                                   :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
@@ -2317,7 +2389,7 @@
                                     (reset! hover-cell nil)))
                      :mousedown (fn [e]
                                   (when @drag-handler
-                                    (reset! drag-start (grid-coords e))))
+                                    (reset! drag-start (mouse-weather-coords e))))
                      ;; Overriding dragstart stops Firefox from trying
                      ;; to drag and drop SVG as images, which would
                      ;; interfere with our drag/resize functionality.
@@ -2334,6 +2406,7 @@
                       :width nx
                       :height ny)
                      primary-layer
+                     (bullseye-overlay mission)
                      wind-overlay
                      text-overlay
                      (wind-stability-overlay weather-params register-drag-handler)
@@ -2342,6 +2415,23 @@
                      selected-cell-overlay
                      (object-info-overlay mission object-data)
                      info-overlay)]
+      (gevents/listen (gevents/MouseWheelHandler. elem)
+                      gevents/MouseWheelHandler.EventType.MOUSEWHEEL
+                      (fn [e]
+                        (let [[mx my] (mouse-weather-coords e)
+                              {px :x py :y} @map-pan
+                              z' (->> @map-zoom
+                                      (* (Math/pow zoom-speed (.-deltaY e)))
+                                      (math/clamp 1 200))
+                              dz (/ z' @map-zoom)
+                              width (/ nx z')
+                              height (/ ny z')
+                              px (math/clamp 0 (- nx width)  (- mx (/ (- mx px) dz)))
+                              py (math/clamp 0 (- ny height) (- my (/ (- my py) dz)))]
+                          (log/debug :dz dz :pan-x px :pan-y py :zoom z')
+                          (dosync
+                           (reset! map-zoom z')
+                           (reset! map-pan {:x px :y py})))))
       ;; TODO: We're capturing the value of the number of cells, but it
       ;; never changes. One of these days I should probably factor this
       ;; out. Either that or just react to changes in the number of
@@ -2407,16 +2497,16 @@
                   (gdom/appendChild frag t)))
               (gdom/appendChild text-overlay frag))))
         (let [display-params* (formula-of
-                               [display-params]
-                               (dissoc display-params
-                                       :dimensions
-                                       :opacity
-                                       :map
-                                       :flight-paths
-                                       :multi-save))]
+                                [display-params]
+                                (dissoc display-params
+                                        :dimensions
+                                        :opacity
+                                        :map
+                                        :flight-paths
+                                        :multi-save))]
           (formula-of
-           [weather-data display-params*]
-           (update-grid weather-data display-params*)))))))
+            [weather-data display-params*]
+            (update-grid weather-data display-params*)))))))
 
 
 ;;; User Interface
@@ -2813,6 +2903,14 @@
        (with-help [:map :legend]
          :css {:margin-left "5px"}
          (span "Map Legend"))
+       (span
+        :css {:margin-left "5px"}
+        "Bullseye: "
+        (let [b (cell= (some->>
+                        mouse-location
+                        (coords/weather->bullseye mission)
+                        format-bullseye))]
+          (text b)))
        (span
         :css {:position "absolute"
               :right "27px"
