@@ -402,17 +402,17 @@ rect.inclement {
     display: none;
 }
 
-.wind-stability-area {
-    fill: none;
-    stroke: black;
-    stroke-width: 0.2px;
-    stroke-dasharray: 0.6 0.6;
-}
+/* .wind-stability-area { */
+/*     fill: none; */
+/*     stroke: black; */
+/*     stroke-width: 0.2px; */
+/*     stroke-dasharray: 0.6 0.6; */
+/* } */
 
-.wind-stability-area.alternate {
-    stroke: white;
-    stroke-dashoffset: 0.6;
-}
+/* .wind-stability-area.alternate { */
+/*     stroke: white; */
+/*     stroke-dashoffset: 0.6; */
+/* } */
 
 .wind-stability-boxes {
     display: flex;

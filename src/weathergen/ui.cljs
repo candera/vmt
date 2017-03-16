@@ -1096,28 +1096,30 @@
   "Given a mouse event, determined where on the map it occurred, in weatherspace.
   Returns coordinates as an [x y] pair, where x and y can be
   fractional."
-  [e]
-  (try
-    (let [ox             (.-offsetX e)
-          oy             (.-offsetY e)
-          [nx ny]        (:cell-count @weather-params)
-          {:keys [x y]}  @map-pan
-          [width height] (:dimensions @display-params)]
-      [(-> ox (* nx) (/ width)  (/ @map-zoom) (+ x))
-       (-> oy (* ny) (/ height) (/ @map-zoom) (+ y))])
-    #_(let [px             (.-pageX e)
-            py             (.-pageY e)
-            offset         (-> "#grid" js/$ .offset)
-            top            (.-top offset)
-            left           (.-left offset)
-            x              (- px left)
-            y              (- py top)
-            [nx ny]        (:cell-count @weather-params)
-            [width height] (:dimensions @display-params)]
-        [(-> x (* nx) (/ width))
-         (-> y (* ny) (/ height))])
-    (catch :default err
-      (log/error err "mouse-weather-coords error" :e e))))
+  ([e] (mouse-weather-coords e @map-zoom @map-pan))
+  ([e zoom pan]
+   (try
+     (let [browser-zoom   (.-devicePixelRatio js/window)
+           ox             (.-offsetX e)
+           oy             (.-offsetY e)
+           [nx ny]        (:cell-count @weather-params)
+           {:keys [x y]}  pan
+           [width height] (:dimensions @display-params)]
+       [(-> ox (* nx) (* browser-zoom) (/ width)  (/ zoom) (+ x))
+        (-> oy (* ny) (* browser-zoom) (/ height) (/ zoom) (+ y))])
+     #_(let [px             (.-pageX e)
+             py             (.-pageY e)
+             offset         (-> "#grid" js/$ .offset)
+             top            (.-top offset)
+             left           (.-left offset)
+             x              (- px left)
+             y              (- py top)
+             [nx ny]        (:cell-count @weather-params)
+             [width height] (:dimensions @display-params)]
+         [(-> x (* nx) (/ width))
+          (-> y (* ny) (/ height))])
+     (catch :default err
+       (log/error err "mouse-weather-coords error" :e e)))))
 
 (defn retry
   "Perform `f` asynchronously every `interval` milliseconds until it
@@ -1166,7 +1168,7 @@
                        :brown "#e27e43"
                        :orange "orange"
                        :yellow "yellow"
-                       :red "#f58e8e"
+                       :red "#f9adad"
                        :gray "lightgray"}}})
 
 (def resize-handle-size 0.75)
@@ -1673,90 +1675,102 @@
                      cell=)
         [nx ny] (:cell-count @weather-params)]
     (formula-of
-     [indexed]
-     (svg/g
-      :id "wind-stability-overlay"
-      (for [[index area] indexed]
-        (let [{:keys [bounds editing?]} area
-              {:keys [x y width height]} bounds]
-          [(svg/rect
-            :attr {:class "wind-stability-area"}
-            :css {:fill (if editing?
-                          (colors :edit)
-                          "none")
-                  :cursor (when editing?
-                            "move")}
-            :mousedown (fn [e]
-                         (reset! prevent-recomputation? true)
-                         (register-drag-handler
-                          (let [starting-bounds bounds]
-                            (fn [[dx dy] final?]
-                              (let [dx (long dx)
-                                    dy (long dy)]
-                                (dosync
-                                 (swap! weather-params
-                                        update-in
-                                        [:wind-stability-areas index :bounds]
-                                        (fn [bounds]
-                                          (assoc bounds
-                                                 :x (math/clamp
-                                                     0
-                                                     (- nx (:width bounds))
-                                                     (+ (:x starting-bounds)
-                                                        dx))
-                                                 :y (math/clamp
-                                                     0
-                                                     (- ny (:height bounds))
-                                                     (+ (:y starting-bounds)
-                                                        dy)))))
-                                 (when final?
-                                   (reset! prevent-recomputation? false))))))))
-            :x x
-            :y y
-            :width width
-            :height height)
-           (svg/rect
-            :attr {:class "wind-stability-area alternate"}
-            :x x
-            :y y
-            :width width
-            :height height)
-           (if-not editing?
-             []
-             (for [[dx dir-h] [[0 "w"] [(/ width 2) nil] [width "e"]]
-                   [dy dir-v] [[0 "n"] [(/ height 2) nil] [height "s"]]
-                   :when (not= [nil nil] [dir-h dir-v])]
-               (svg/rect
-                :attr {:stroke "black"
-                       :stroke-width "0.1"
-                       :fill "white"
-                       :cursor (str dir-v dir-h "-resize")}
-                :x (+ dx (- x (/ resize-handle-size 2)))
-                :y (+ dy (- y (/ resize-handle-size 2)))
-                :width resize-handle-size
-                :height resize-handle-size
-                :mousedown (fn [e]
-                             (reset! prevent-recomputation? true)
-                             (register-drag-handler
-                              (let [starting-bounds bounds]
-                                (fn [[dx dy] final?]
+      [indexed]
+      (svg/g
+       :id "wind-stability-overlay"
+       (for [[index area] indexed]
+         (let [{:keys [bounds editing?]} area
+               {:keys [x y width height]} bounds
+               mousedown (fn [e]
+                           (reset! prevent-recomputation? true)
+                           (register-drag-handler
+                            (let [starting-bounds bounds]
+                              (fn [[dx dy] final?]
+                                (let [dx (long dx)
+                                      dy (long dy)]
                                   (dosync
                                    (swap! weather-params
                                           update-in
                                           [:wind-stability-areas index :bounds]
                                           (fn [bounds]
-                                            (let [dx (long dx)
-                                                  dy (long dy)]
-                                              (or (restrict
-                                                   nx ny
-                                                   (cond-> bounds
-                                                     (= dir-h "w") (adjust-west starting-bounds dx)
-                                                     (= dir-h "e") (adjust-east starting-bounds dx)
-                                                     (= dir-v "n") (adjust-north starting-bounds dy)
-                                                     (= dir-v "s") (adjust-south starting-bounds dy)))
-                                                  bounds))))
+                                            (assoc bounds
+                                                   :x (math/clamp
+                                                       0
+                                                       (- nx (:width bounds))
+                                                       (+ (:x starting-bounds)
+                                                          dx))
+                                                   :y (math/clamp
+                                                       0
+                                                       (- ny (:height bounds))
+                                                       (+ (:y starting-bounds)
+                                                          dy)))))
                                    (when final?
-                                     (reset! prevent-recomputation? false))))))))))]))))))
+                                     (reset! prevent-recomputation? false))))))))]
+           (vector
+            (svg/rect
+             :fill (if editing? (colors :edit) "none")
+             :mousedown mousedown
+             :css {:cursor (when editing? "move")
+                   :border-width 0}
+             :x x
+             :y y
+             :width width
+             :height height)
+            (svg/rect
+             :fill "none"
+             :stroke "black"
+             :stroke-width 0.2
+             :stroke-dasharray "0.6 0.6"
+             :x x
+             :y y
+             :width width
+             :height height)
+            (svg/rect
+             :fill "none"
+             :stroke "white"
+             :stroke-width 0.2
+             :stroke-dasharray "0.6 0.6"
+             :stroke-dashoffset 0.6
+             :x x
+             :y y
+             :width width
+             :height height)
+            (if-not editing?
+              []
+              (for [[dx dir-h] [[0 "w"] [(/ width 2) nil] [width "e"]]
+                    [dy dir-v] [[0 "n"] [(/ height 2) nil] [height "s"]]
+                    :when (not= [nil nil] [dir-h dir-v])]
+                (svg/rect
+                 :attr {:stroke "black"
+                        :stroke-width "0.1"
+                        :fill "white"
+                        :cursor (str dir-v dir-h "-resize")}
+                 :x (+ dx (- x (/ resize-handle-size 2)))
+                 :y (+ dy (- y (/ resize-handle-size 2)))
+                 :width resize-handle-size
+                 :height resize-handle-size
+                 :mousedown (fn [e]
+                              (reset! prevent-recomputation? true)
+                              (register-drag-handler
+                               (let [starting-bounds bounds]
+                                 (fn [[dx dy] final?]
+                                   (dosync
+                                    (swap! weather-params
+                                           update-in
+                                           [:wind-stability-areas index :bounds]
+                                           (fn [bounds]
+                                             (let [dx (long dx)
+                                                   dy (long dy)]
+                                               (or (restrict
+                                                    nx ny
+                                                    (cond-> bounds
+                                                      (= dir-h "w") (adjust-west starting-bounds dx)
+                                                      (= dir-h "e") (adjust-east starting-bounds dx)
+                                                      (= dir-v "n") (adjust-north starting-bounds dy)
+                                                      (= dir-v "s") (adjust-south starting-bounds dy)))
+                                                   bounds))))
+                                    (when final?
+                                      (reset! prevent-recomputation? false)))))))))))))))))
 
 (defn weather-overrides-overlay
   [weather-params register-drag-handler]
@@ -1934,6 +1948,7 @@
         {:keys [camp-id]} airbase
         visible?          (cell= (get-in object-data [camp-id :visible?]))
         highlighted?      (cell= (get-in object-data [camp-id :highlighted?]))
+        font-size         (cell= (str (/ 3.5 map-zoom) "%"))
         color             (cell= (if highlighted?
                                    "yellow"
                                    (get-in colors
@@ -1942,52 +1957,75 @@
                                             (->> airbase
                                                  :owner
                                                  (mission/side mission)
-                                                 mission/team-color)])))]
+                                                 mission/team-color)])))
+        text-stroke-width (cell= (/ 0.03 map-zoom))
+        contrasting-color (cell= (contrasting color))]
     (svg/g
+     :id (str "airbase-info-" camp-id)
      :airbase label
      :toggle (cell= (or visible? highlighted?))
      :transform (when (and x y)
                   (gstring/format "translate(%f,%f)"
                                   x
                                   y))
-     (let [line-spacing 0.70
-           line-height 0.75]
-       (with-bbox :x x :y y :w w :h h
-         [t (svg/text
-             :font-size "3.5%"
-             :font-family "Source Code Pro"
-             :font-weight 100
-             :x (-> w (/ 2) - cell=)
-             :y line-height
-             :stroke color
-             :stroke-width 0.03
-             :fill color
-             (svg/tspan label)
-             (for [[i squadron] (map-indexed vector (::mission/squadrons airbase))]
-               (svg/tspan
-                :y (-> i inc (* line-height) (+ line-spacing))
-                :text-anchor "start"
-                :x (-> w (/ 2) - cell=)
-                :dx "0.75em"
-                (gstring/format "%d %s"
-                                (->> squadron ::mission/aircraft :quantity)
-                                (->> squadron ::mission/aircraft :airframe)))))]
-         (svg/g
-          (svg/rect
-           :x (cell= (- x (/ w 2)))
-           :y y
-           :width w
-           :height h
-           :opacity 0.4
-           :fill (cell= (contrasting color)))
-          t)))
-     (svg/circle
-      :cx 0
-      :cy 0
-      :r 0.15
-      :fill "none"
-      :stroke color
-      :stroke-width 0.1))))
+     (svg/g
+      :transform (cell= (str "scale(" (/ 1 map-zoom) ")"))
+      (let [line-spacing 0.70
+            line-height 0.75]
+        (with-bbox :x x :y y :w w :h h
+          [t (svg/text
+              :font-size "3.5%"
+              :font-family "Source Code Pro"
+              :font-weight 100
+              :x (-> w (/ 2) - cell=)
+              :y line-height
+              :stroke color
+              :stroke-width 0.03
+              :fill color
+              (svg/tspan label)
+              (for [[i squadron] (map-indexed vector (::mission/squadrons airbase))]
+                (svg/tspan
+                 :y (-> i inc (* line-height) (+ line-spacing))
+                 :text-anchor "start"
+                 :x (-> w (/ 2) - cell=)
+                 :dx "0.75em"
+                 (gstring/format "%d %s"
+                                 (->> squadron ::mission/aircraft :quantity)
+                                 (->> squadron ::mission/aircraft :airframe)))))]
+          (svg/g
+           (let [padding 0.1
+                 rx (cell= (- x padding (/ w 2)))
+                 ry (cell= (- y padding))
+                 rw (cell= (+ w padding padding))
+                 rh (cell= (+ h padding padding))]
+             (svg/g
+              :debug "background"
+              (svg/rect
+               :x rx
+               :y ry
+               :width rw
+               :height rh
+               :opacity 0.4
+               :fill contrasting-color
+               :stroke "none")
+              (svg/rect
+               :toggle highlighted?
+               :x rx
+               :y ry
+               :width rw
+               :height rh
+               :stroke-width 0.1
+               :stroke "yellow"
+               :fill "none")))
+           t)))
+      ;; TODO: Replace with airbase icon
+      (svg/circle
+       :cx 0
+       :cy 0
+       :r 0.15
+       :fill "none"
+       :stroke color
+       :stroke-width 0.1)))))
 
 #_(defn flight-paths-overlay
   [size display-params]
@@ -2194,15 +2232,24 @@
   [mission object-data]
   (formula-of [mission]
     [(svg/g
+      :section "airbase-info"
+      (let [airbases (->> mission mission/order-of-battle :air)]
+        (vector
+         (for [airbase airbases]
+           (airbase-info-overlay mission airbase object-data))
+         ;; This gets the highlighted one to be on top
+         (svg/use :xlink-href (formula-of [object-data]
+                                (->> airbases
+                                     (filter #(get-in object-data [(:camp-id %) :highlighted?]))
+                                     first
+                                     :camp-id
+                                     (str "#airbase-info-")))))))
+     (svg/g
       :section "flight-paths"
       (for [flight (->> mission
                         :units
                         (filter #(-> % :type #{:flight})))]
-        (flight-path-overlay mission flight object-data)))
-     (svg/g
-       :section "airbase-info"
-       (for [airbase (->> mission mission/order-of-battle :air)]
-         (airbase-info-overlay mission airbase object-data)))]))
+        (flight-path-overlay mission flight object-data)))]))
 
 (defn within-area?
   "Return true if the specified coordinates fall within the wind
@@ -2264,6 +2311,24 @@
         :x2 0
         :y2 (cell= (coords/nm->weather mission 200)))))))
 
+(defn- limit-pan
+  "Given a map pan as an x/y map, return a new map that doesn't permit showing areas outside the map."
+  [[nx ny] zoom {:keys [x y]}]
+  (let [width (/ nx zoom)
+        height (/ ny zoom)]
+    {:x (math/clamp 0 (- nx width)  x)
+     :y (math/clamp 0 (- ny height) y)}))
+
+(defn pixels->weather
+  "Converts an x/y offset in pixels to an x/y offset in weatherspace units."
+  [[dx dy]]
+  (let [zoom           @map-zoom
+        browser-zoom   (.-devicePixelRatio js/window)
+        [nx ny]        (:cell-count @weather-params)
+        [width height] (:dimensions @display-params)]
+    [(-> dx (* nx) (* browser-zoom) (/ width) (/ zoom))
+     (-> dy (* ny) (* browser-zoom) (/ height) (/ zoom))]))
+
 (defelem grid
   [{:keys [display-params
            selected-cell
@@ -2274,56 +2339,61 @@
            computing
            nx
            ny]
-    :as attrs}]
+    :as   attrs}]
   (let [ ;; Drag and drop is complicated by the fact that there isn't a
         ;; good way to capture the mouse when it goes down. So we use
         ;; the document mouse events so that we can get global
         ;; notificaiton of the mouse movements and buttons.
         ;; TODO: See if some core.async love might simplify this a bit.
-        drag-handler (atom nil)
-        drag-start (atom nil)
+        drag-handler          (atom nil)
+        drag-start            (atom nil)
         register-drag-handler (fn [h]
                                 (swap! drag-handler #(or % h)))
-        doc-move (fn [e]
-                   (if-let [h @drag-handler]
-                     (let [[x y] (mouse-weather-coords e)
-                           [sx sy] @drag-start]
-                       (h [(- x sx) (- y sy)] false)
-                       (reset! hover-cell nil)
-                       (.preventDefault e))
-                     (reset! #_hover-cell
-                             mouse-location
-                             (let [[x y] (mouse-weather-coords e)]
-                               (when (and (<= 0 x nx)
-                                          (<= 0 y ny))
-                                 {:x x :y y})))))
-        doc-up (fn doc-up [e]
-                 (when-let [h @drag-handler]
-                   (let [[x y] (mouse-weather-coords e)
-                         [sx sy] @drag-start]
-                     (h [(- x sx) (- y sy)] true)))
-                 (reset! drag-start nil)
-                 (reset! drag-handler nil))
-        _      (.addEventListener js/document "mousemove" doc-move)
-        _      (.addEventListener js/document "mouseup" doc-up)
-        primary-layer (svg/g
-                       :id "primary-layer"
-                       :toggle (cell= (-> display-params :display some?))
-                       :css (cell= {:opacity (-> display-params :opacity)}))
-        wind-overlay (svg/g
-                      :id "wind-overlay"
-                      :toggle (cell= (-> display-params
-                                         :overlay
-                                         (= :wind))))
-        text-overlay (svg/g
-                      :id "text-overlay"
-                      :attr (cell= {:class (str "text-overlay "
-                                                (some-> display-params
-                                                        :overlay
-                                                        name))})
-                      :toggle (cell= (-> display-params
-                                         :overlay
-                                         #{:pressure :temperature :type})))
+        doc-move              (fn [e]
+                                (if-let [h @drag-handler]
+                                  (let [x              (.-screenX e)
+                                        y              (.-screenY e)
+                                        [sx sy]        @drag-start
+                                        dx             (- x sx)
+                                        dy             (- y sy)]
+                                    (h (pixels->weather [dx dy]) false)
+                                    (reset! mouse-location nil)
+                                    (.preventDefault e))
+                                  (reset! mouse-location
+                                          (let [[x y] (mouse-weather-coords e)]
+                                            (when (and (<= 0 x nx)
+                                                       (<= 0 y ny))
+                                              {:x x :y y})))))
+        doc-up                (fn doc-up [e]
+                                (when-let [h @drag-handler]
+                                  (let [x (.-screenX e)
+                                        y (.-screenY e)
+                                        [sx sy] @drag-start
+                                        dx (- x sx)
+                                        dy (- y sy)]
+                                    (h (pixels->weather [dx dy]) true)))
+                                (reset! drag-start nil)
+                                (reset! drag-handler nil))
+        _                     (.addEventListener js/document "mousemove" doc-move)
+        _                     (.addEventListener js/document "mouseup" doc-up)
+        primary-layer         (svg/g
+                               :id "primary-layer"
+                               :toggle (cell= (-> display-params :display some?))
+                               :css (cell= {:opacity (-> display-params :opacity)}))
+        wind-overlay          (svg/g
+                               :id "wind-overlay"
+                               :toggle (cell= (-> display-params
+                                                  :overlay
+                                                  (= :wind))))
+        text-overlay          (svg/g
+                               :id "text-overlay"
+                               :attr (cell= {:class (str "text-overlay "
+                                                         (some-> display-params
+                                                                 :overlay
+                                                                 name))})
+                               :toggle (cell= (-> display-params
+                                                  :overlay
+                                                  #{:pressure :temperature :type})))
         selected-cell-overlay (formula-of
                                 [selected-cell]
                                 (let [[x y] (:coordinates selected-cell)]
@@ -2335,34 +2405,34 @@
                                      :width 1
                                      :height 1)
                                     [])))
-        wind-stability-areas     (formula-of
-                                   [weather-params]
-                                   (:wind-stability-areas weather-params))
-        weather-overrides        (formula-of
-                                   [weather-params]
-                                   (:weather-overrides weather-params))
-        effective-hover-cell     (formula-of
-                                   [hover-cell wind-stability-areas weather-overrides]
-                                   ;; Don't show the hover info when
-                                   ;; we're in an area where something
-                                   ;; can be dragged.
-                                   (if (or (some (fn [area]
-                                                   (and (within-area? area hover-cell)
-                                                        (:editing? area)))
-                                                 wind-stability-areas)
-                                           (some (fn [override]
-                                                   (and (within-override? override hover-cell)
-                                                        (:editing? override)))
-                                                 weather-overrides))
-                                     nil
-                                     hover-cell))
-        info-overlay             (formula-of
-                                   [effective-hover-cell weather-data pressure-unit cloud-params]
-                                   (info-overlay effective-hover-cell
-                                                 weather-data
-                                                 pressure-unit
-                                                 nx ny
-                                                 cloud-params))]
+        wind-stability-areas  (formula-of
+                                [weather-params]
+                                (:wind-stability-areas weather-params))
+        weather-overrides     (formula-of
+                                [weather-params]
+                                (:weather-overrides weather-params))
+        effective-hover-cell  (formula-of
+                                [hover-cell wind-stability-areas weather-overrides]
+                                ;; Don't show the hover info when
+                                ;; we're in an area where something
+                                ;; can be dragged.
+                                (if (or (some (fn [area]
+                                                (and (within-area? area hover-cell)
+                                                     (:editing? area)))
+                                              wind-stability-areas)
+                                        (some (fn [override]
+                                                (and (within-override? override hover-cell)
+                                                     (:editing? override)))
+                                              weather-overrides))
+                                  nil
+                                  hover-cell))
+        info-overlay          (formula-of
+                                [effective-hover-cell weather-data pressure-unit cloud-params]
+                                (info-overlay effective-hover-cell
+                                              weather-data
+                                              pressure-unit
+                                              nx ny
+                                              cloud-params))]
     (with-let [elem (svg/svg
                      :id "grid"
                      (let [dims (formula-of
@@ -2383,13 +2453,30 @@
                                   :width (cell= (first dims))
                                   :height (cell= (second dims))
                                   :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
-                                         "xmlns" "http://www.w3.org/2000/svg"})))
+                                         "xmlns"       "http://www.w3.org/2000/svg"})))
                      :mouseleave (fn [_]
                                    (dosync
                                     (reset! hover-cell nil)))
                      :mousedown (fn [e]
-                                  (when @drag-handler
-                                    (reset! drag-start (mouse-weather-coords e))))
+                                  (.log js/console e)
+                                  (reset! drag-start [(.-screenX e) (.-screenY e)])
+                                  (when-not @drag-handler
+                                    (let [{px0 :x py0 :y} @map-pan]
+                                      ;; We have to handle drag coordinates
+                                      ;; specially, because we're actually
+                                      ;; dragging the map around, and therefore
+                                      ;; computation of things like, "How far
+                                      ;; from initial" mean something different
+                                      ;; than when we drag, say, a weather
+                                      ;; region.
+                                      (register-drag-handler
+                                       (fn [[dx dy] final?]
+                                         (prn "dragging" :dx dx :dy dy)
+                                         (reset! map-pan (limit-pan
+                                                          (:cell-count @weather-params)
+                                                          @map-zoom
+                                                          {:x (- px0 dx)
+                                                           :y (- py0 dy)})))))))
                      ;; Overriding dragstart stops Firefox from trying
                      ;; to drag and drop SVG as images, which would
                      ;; interfere with our drag/resize functionality.
@@ -2418,20 +2505,20 @@
       (gevents/listen (gevents/MouseWheelHandler. elem)
                       gevents/MouseWheelHandler.EventType.MOUSEWHEEL
                       (fn [e]
-                        (let [[mx my] (mouse-weather-coords e)
+                        (.preventDefault e)
+                        (let [[mx my]       (mouse-weather-coords e)
                               {px :x py :y} @map-pan
-                              z' (->> @map-zoom
-                                      (* (Math/pow zoom-speed (.-deltaY e)))
-                                      (math/clamp 1 200))
-                              dz (/ z' @map-zoom)
-                              width (/ nx z')
-                              height (/ ny z')
-                              px (math/clamp 0 (- nx width)  (- mx (/ (- mx px) dz)))
-                              py (math/clamp 0 (- ny height) (- my (/ (- my py) dz)))]
-                          (log/debug :dz dz :pan-x px :pan-y py :zoom z')
+                              z'            (->> @map-zoom
+                                                 (* (Math/pow zoom-speed (.-deltaY e)))
+                                                 (math/clamp 1 200))
+                              dz            (/ z' @map-zoom)
+                              width         (/ nx z')
+                              height        (/ ny z')
+                              px            (- mx (/ (- mx px) dz))
+                              py            (- my (/ (- my py) dz))]
                           (dosync
                            (reset! map-zoom z')
-                           (reset! map-pan {:x px :y py})))))
+                           (reset! map-pan (limit-pan [nx ny] z' {:x px :y py}))))))
       ;; TODO: We're capturing the value of the number of cells, but it
       ;; never changes. One of these days I should probably factor this
       ;; out. Either that or just react to changes in the number of
@@ -2454,7 +2541,7 @@
                           (.setAttribute "height" "1")
                           (.setAttribute "fill" "none")
                           (-> .-onclick
-                              (set! #(reset! selected-cell {:location nil
+                              (set! #(reset! selected-cell {:location    nil
                                                             :coordinates [x y]}))))]
                   (gdom/appendChild frag r)))
               (gdom/appendChild primary-layer frag))
@@ -2479,7 +2566,7 @@
                   (gdom/appendChild frag g)))
               (gdom/appendChild wind-overlay frag))
             ;; Text overlay layer
-            (let [frag (.createDocumentFragment js/document)
+            (let [frag  (.createDocumentFragment js/document)
                   scale 0.03]
               (doseq [x (range nx)
                       y (range ny)]
