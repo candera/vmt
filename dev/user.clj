@@ -16,6 +16,7 @@
             [weathergen.falcon.files.mission :as mission]
             [weathergen.falcon.files.resources :as resources]
             [weathergen.filesystem :as fs]
+            [weathergen.falcon.files.images :as im]
             [weathergen.lzss :as lzss]
             [weathergen.math :as math]
             [weathergen.model :as model]

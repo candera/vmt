@@ -104,3 +104,27 @@
       (when (and parent descendant)
         (or (= parent ancestor)
             (ancestor? ancestor parent))))))
+
+(defn mkdir
+  "Creates a directory. Recursively creates the parents if
+  `make-parents?` is true."
+  [path make-parents?]
+  (let [par (parent path)]
+    (when (and make-parents? (not (exists? par)))
+      (mkdir par true))
+    (when (not (exists? path))
+      (.mkdirSync filesystem path))))
+
+(defn save-binary
+  "Saves `buf` to the filesystem at `path`. Creates the directory if
+  necessary."
+  [path buf]
+  (mkdir (parent path) true)
+  (.writeFileSync filesystem path buf))
+
+(defn stat
+  "Returns stats for file as map with keys `:size` and `:modified`."
+  [path]
+  (let [stats (.statSync filesystem path)]
+    {:size (.-size stats)
+     :modified (-> stats .-mtime .valueOf)}))

@@ -9,6 +9,7 @@
             [weathergen.falcon.constants :as c]
             [weathergen.falcon.files :refer [larray fixed-string lstring bitflags
                                              constant read-> spec-if]]
+            [weathergen.falcon.files.images :as im]
             [weathergen.filesystem :as fs]
             [weathergen.lzss :as lzss]
             [weathergen.util :as util]))
@@ -43,6 +44,14 @@
        (class-table-entry mission)
        :data-pointer
        (nth (:objective-class-data mission))))
+
+(defn unit-class-entry
+  "Returns a unit's entry from the unit class table."
+  [mission unit]
+  (->> unit
+       (class-table-entry mission)
+       :data-pointer
+       (nth (:unit-class-data mission))))
 
 (defn objective-type
   "Given an objective, return its numeric type."
@@ -588,9 +597,9 @@
 (defn read-id-list
   "Read in the id list file with `id`"
   [installation id]
-  (let [pairs (->> (-> installation
-                       :art-dir
-                       (fs/path-combine (str id ".LST")))
+  (let [pairs (->> (fs/path-combine (:data-dir installation)
+                                    (:art-dir installation)
+                                    (str id ".LST"))
                    fs/file-text
                    str/split-lines
                    (map str/trim)
@@ -615,8 +624,8 @@
   "Return information about the installed theaters."
   [install-dir]
   (let [data-dir (fs/path-combine install-dir "Data")
-        art-dir (fs/path-combine data-dir "Art")
-        object-dir (fs/path-combine data-dir "Terrdata/objects")]
+        art-dir "Art"
+        object-dir "Terrdata/objects"]
     {:install-dir install-dir
      :data-dir data-dir
      :art-dir art-dir
@@ -717,18 +726,22 @@
                              :strings strings)
         scenario-path (fs/path-combine (fs/parent path)
                                        (str scenario (extension path)))
-        scenario-files (read-embedded-files scenario-path database)]
-    (merge database
-           mission-files
-           ;; TODO: Figure out if we need to merge persistent objects
-           {:objectives     (merge-objective-deltas
-                             (:objectives scenario-files)
-                             (:objective-deltas mission-files))
-            :scenario-files scenario-files
-            :path           path
-            :names          names
-            :installation   installation
-            :theater        theater})))
+        scenario-files (read-embedded-files scenario-path database)
+        mission (merge database
+                       mission-files
+                       ;; TODO: Figure out if we need to merge persistent objects
+                       {:objectives     (merge-objective-deltas
+                                         (:objectives scenario-files)
+                                         (:objective-deltas mission-files))
+                        :scenario-files scenario-files
+                        :path           path
+                        :names          names
+                        :installation   installation
+                        :theater        theater})]
+    (-> mission
+        (assoc :map-image (im/make-descriptor mission
+                                              "resource/campmap"
+                                              "BIG_MAP_ID")))))
 
 
 ;; Campaign details file
@@ -1652,11 +1665,27 @@
   ;; TODO: Add army, navy, objective
   {:air (oob-air mission)})
 
-(def map-image-descriptor
-  "Returns an image descriptor for the campaign map."
-  {:resource "resource/campmap"
-   :image-id "BIG_MAP_ID"})
+(def air-icon-resource-prefix
+  {:white  "wh"
+   :green  "gn"
+   :blue   "bl"
+   :brown  "br"
+   :orange "or"
+   :yellow "yl"
+   :red    "rd"
+   :grey   "gy"})
 
+(defn squadron-image
+  "Returns an image descriptor for a squadron."
+  [mission squadron]
+  (let [{:keys [owner]}      squadron
+        {:keys [icon-index]} (unit-class-entry mission squadron)
+        {:keys [image-ids]}  mission]
+    (im/make-descriptor mission
+                        (str "resource/"
+                             (-> owner team-color air-icon-resource-prefix)
+                             "air_nn")
+                        (get-in image-ids [:id->name icon-index]))))
 
 ;; Bunch of ideas:
 ;;
