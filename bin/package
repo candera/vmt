@@ -2,4 +2,6 @@
 
 boot electron
 mkdir -p package/
-electron-packager target/ --electron-version=`electrion --version` --out package/ --overwrite --all
+ELECTRON_VERSION=$(electron --version | cut -d v -f 2)
+echo "Using Electron version ${ELECTRON_VERSION}"
+electron-packager target/ --electron-version=$ELECTRON_VERSION --out package/ --overwrite --all

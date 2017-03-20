@@ -128,7 +128,12 @@
    (hoplon)
    ;; Compile everything except main with advanced opts
    (cljs :ids #{#_"renderer" "worker" "index.html"}
-         :optimizations :advanced
+         :optimizations :simple
+         ;; When I enable advanced optimizations, Electron won't
+         ;; launch. It gives a "nodejs.js" not found error ro some
+         ;; such. I wonder if it's dead code elimination, or some sort
+         ;; of missing extern?
+         ;;:optimizations :advanced
          :compiler-options {:target :nodejs
                             :hashbang false})
    (cljs :ids #{"main"}
