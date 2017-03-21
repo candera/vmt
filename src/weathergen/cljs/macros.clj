@@ -81,6 +81,9 @@
   element is added to the DOM. Bindings are specified via zero or more
   key-value pairs, and are optional.
 
+  If `:watch` is specified, it will be taken as a cell, and bounds
+  will be recomputed and cells updated when its value changes.
+
   Dimension bindings are available both in the body and in the
   elem-form, so an element can react to its own boundaries.
 
@@ -98,7 +101,7 @@
         {:keys [elem-name elem-form]} elem-binding
         bounds-map        (zipmap (map :binding-dim bounds-bindings)
                                   (map :binding-name bounds-bindings))
-        {:keys [x y w h]} bounds-map
+        {:keys [x y w h watch]} bounds-map
         x* (or x (gensym))
         y* (or y (gensym))
         w* (or w (gensym))
@@ -107,13 +110,18 @@
            ~y* (javelin.core/cell 0)
            ~w* (javelin.core/cell 0)
            ~h* (javelin.core/cell 0)
-           ~elem-name ~elem-form]
-       (hoplon.core/when-dom ~elem-name
-         #(javelin.core/dosync
-           (let [bb# (.getBBox ~elem-name)]
-             (when (.-x bb#)
-               (reset! ~x* (.-x bb#))
-               (reset! ~y* (.-y bb#))
-               (reset! ~w* (.-width bb#))
-               (reset! ~h* (.-height bb#))))))
+           ~elem-name ~elem-form
+           update-bbox#  #(javelin.core/dosync
+                           (let [bb# (.getBBox ~elem-name)]
+                             (when (.-x bb#)
+                               (reset! ~x* (.-x bb#))
+                               (reset! ~y* (.-y bb#))
+                               (reset! ~w* (.-width bb#))
+                               (reset! ~h* (.-height bb#)))))]
+       (hoplon.core/when-dom ~elem-name  update-bbox#)
+       (when-let [w# ~(:watch bounds-map)]
+         (add-watch w#
+                    (keyword (gensym))
+                    (fn [~'_ ~'_ ~'_ ~'_]
+                      (update-bbox#))))
        ~@body)))

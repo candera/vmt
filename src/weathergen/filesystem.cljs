@@ -102,7 +102,8 @@
           descendant (normalize descendant)
           parent     (parent descendant)]
       (when (and parent descendant)
-        (or (= parent ancestor)
+        (or (= (->> parent   (.statSync filesystem) .-ino)
+               (->> ancestor (.statSync filesystem) .-ino))
             (ancestor? ancestor parent))))))
 
 (defn mkdir

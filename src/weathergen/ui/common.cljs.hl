@@ -16,6 +16,23 @@
       (.appendChild head (style :type "text/css" styles))
       (swap! registered-styles conj key))))
 
+;;; Styled
+(defelem styled
+  "Creates an element which is a scope for a set of CSS rules,
+  provided via a `:garden` attribute, by adding an element with a
+  unique ID and new <style> element to the <head> of the document."
+  [attrs content]
+  (let [{:keys [garden]} attrs
+        attrs (dissoc attrs :garden)
+        head (aget (.getElementsByTagName js/document "head") 0)
+        id (str (gensym))
+        styles (cell= (css [(keyword (str "#" id))
+                            garden]))]
+    (.appendChild head (style :type "text/css" styles))
+    (div
+     (merge attrs {:id id})
+     content)))
+
 (defelem inl
   [attrs content]
   (div (assoc-in attrs

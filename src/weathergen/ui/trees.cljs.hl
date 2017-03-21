@@ -1,0 +1,84 @@
+(ns weathergen.ui.trees
+  "A library for rendering collapsable trees of elements."
+  (:require [weathergen.ui.common :as comm :refer [inl styled]]
+            [taoensso.timbre :as log
+             :refer-macros (log trace debug info warn error fatal report
+                                logf tracef debugf infof warnf errorf fatalf reportf
+                                spy get-env log-env)])
+  (:require-macros
+   [weathergen.cljs.macros :refer [formula-of]]))
+
+(defn- tree*
+  "Helper function for the tree control."
+  [expand-state levels items level-number]
+  (let [[level & more-levels] levels
+        {:keys [formatter children attrs]} level]
+    (styled
+     :garden [:li {:margin-left "-28px"}]
+     (ol
+      :css {:list-style-type "none"}
+      (for [item items]
+        (let [kids (when children (children item))
+              expanded? (cell true)]
+          (add-watch expand-state
+                     (-> (gensym) str keyword)
+                     (fn [_ _ _ n]
+                       (log/debug "expand-state changing" :n n :level level-number)
+                       (cond
+                         (= n :all-expanded)
+                         (reset! expanded? true)
+
+                         (= n :all-collapsed)
+                         (reset! expanded? false)
+
+                         (= (first n) :expand-through-level)
+                         (let [e (< level-number (second n))]
+                           (log/debug "Expanding?" :e e :level level-number :arg (second n))
+                           (reset! expanded? e)))))
+          (li
+           (if attrs
+             (attrs item)
+             {})
+           (inl
+            (inl :css {:width "15px"
+                       :font-size "120%"
+                       :vertical-align "top"}
+                 (if kids
+                   (div :css {:display "inline-block"
+                              :cursor "pointer"
+                              :position "relative"
+                              :background "white"}
+                        :click (fn []
+                                 (dosync
+                                  (swap! expanded? not)
+                                  (reset! expand-state nil)))
+                        (div
+                         :css (formula-of [expanded?]
+                                {:display "inline-block"
+                                 :width 0
+                                 :height 0
+                                 :border-left "5px solid transparent"
+                                 :border-right "5px solid transparent"
+                                 :border-top "7px solid black"
+                                 :vertical-align "middle"
+                                 :transform (str "rotate("
+                                                 (if expanded?
+                                                   0
+                                                   -90)
+                                                 "deg)")})))
+                   ""))
+            (formatter expanded? item))
+           (when-tpl expanded?
+             (if-not kids
+               []
+               (tree* expand-state more-levels kids (inc level-number)))))))))))
+
+(defn tree
+  "Returns a collapable tree with hierarchy defined by `levels`, a seq
+  of maps with `:formatter` and `:children` keys, each a function of a
+  single item in the hierarchy. The formatter returns UI for that
+  item, and children (if present) returns items that will be rendered
+  as children."
+  [expand-state levels items]
+  (tree* expand-state levels items 0))
+

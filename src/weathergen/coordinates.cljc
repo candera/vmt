@@ -115,11 +115,12 @@
   degrees."
   [mission {:keys [x y] :as coords}]
   ;; We're going to assume 59x59 for now.
-  (let [{:keys [campaign-info]} mission
-        {:keys [bullseye-x bullseye-y]} campaign-info
-        {fx :x fy :y} (weather->fgrid mission coords)
-        dx (- fx bullseye-x)
-        dy (- fy bullseye-y)
-        d [dx dy]]
-    {:heading (math/heading d)
-     :distance (-> d math/magnitude (* nm-per-km))}))
+  (when mission
+    (let [{:keys [campaign-info]} mission
+          {:keys [bullseye-x bullseye-y]} campaign-info
+          {fx :x fy :y} (weather->fgrid mission coords)
+          dx (- fx bullseye-x)
+          dy (- fy bullseye-y)
+          d [dx dy]]
+      {:heading (math/heading d)
+       :distance (-> d math/magnitude (* nm-per-km))})))
