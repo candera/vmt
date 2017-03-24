@@ -45,6 +45,29 @@
        :data-pointer
        (nth (:objective-class-data mission))))
 
+;; This might turn out to be a cleaner way to do this if we have a
+;; need to get class entries when we don't know what sort of thing
+;; we're working with. So far, that doesn't seem to be the case.
+
+;; (defn data-table
+;;   "Return the appropriate data table."
+;;   [database data-type]
+;;   (let [k (condp = data-type
+;;             c/DTYPE_UNIT :unit-class-data
+;;             nil)]
+;;     (if k
+;;       (get database k)
+;;       ;; This is a TODO
+;;       (vec (repeat 10000 {})))))
+
+;; (defn class-data
+;;   "Return the class data appropriate to the type."
+;;   [database type-id]
+;;   (let [{:keys [class-table]} database
+;;         {:keys [data-pointer data-type]} (nth class-table (- type-id c/VU_LAST_ENTITY_TYPE))]
+;;     (nth (data-table database data-type) data-pointer)))
+
+
 (defn unit-class-entry
   "Returns a unit's entry from the unit class table."
   [mission unit]
@@ -135,29 +158,11 @@
        [c/DOMAIN_SEA]               616
        617))))
 
-(defn data-table
-  "Return the appropriate data table."
-  [database data-type]
-  (let [k (condp = data-type
-            c/DTYPE_UNIT :unit-class-data
-            nil)]
-    (if k
-      (get database k)
-      ;; This is a TODO
-      (vec (repeat 10000 {})))))
-
-(defn class-data
-  "Return the class data appropriate to the type."
-  [database type-id]
-  (let [{:keys [class-table]} database
-        {:keys [data-pointer data-type]} (nth class-table (- type-id c/VU_LAST_ENTITY_TYPE))]
-    (nth (data-table database data-type) data-pointer)))
-
 (defn unit-name
   "Returns a human-readable name for the given unit"
   [mission unit]
   (let [{:keys [name-id type-id]} unit
-        {:keys [name]} (class-data mission type-id)
+        {:keys [name]} (unit-class-entry mission unit)
         {:keys [domain type] :as ci} (class-info mission type-id)
         strings (-> mission :strings :fn)]
     ;; Ref: unit.cpp::GetName
@@ -1500,17 +1505,17 @@
   "Returns a map of `:airframe` and `:quantity` for a squadron."
   [mission squadron]
   {:airframe (-> squadron
-                     :type-id
-                     (- 100)
-                     (->> (nth (:class-table mission)))
-                     :data-pointer
-                     (->> (nth (:unit-class-data mission)))
-                     :vehicle-type
-                     first
-                     (->> (nth (:class-table mission)))
-                     :data-pointer
-                     (->> (nth (:vehicle-class-data mission)))
-                     :name)
+                 :type-id
+                 (- 100)
+                 (->> (nth (:class-table mission)))
+                 :data-pointer
+                 (->> (nth (:unit-class-data mission)))
+                 :vehicle-type
+                 first
+                 (->> (nth (:class-table mission)))
+                 :data-pointer
+                 (->> (nth (:vehicle-class-data mission)))
+                 :name)
    :quantity (reduce +
                      (for [i (range 16)]
                        (-> squadron
@@ -1686,6 +1691,12 @@
                              (-> owner team-color air-icon-resource-prefix)
                              "air_nn")
                         (get-in image-ids [:id->name icon-index]))))
+
+(defn squadron-type
+  "Returns a string describing the type of the squadron - Fighter,
+  Attack, etc."
+  [mission squadron]
+  (->> squadron (unit-class-entry mission) :name))
 
 ;; Bunch of ideas:
 ;;

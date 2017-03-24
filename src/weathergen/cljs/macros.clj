@@ -123,5 +123,5 @@
          (add-watch w#
                     (keyword (gensym))
                     (fn [~'_ ~'_ ~'_ ~'_]
-                      (update-bbox#))))
+                      (hoplon.core/with-timeout 0 (update-bbox#)))))
        ~@body)))

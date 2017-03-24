@@ -17,13 +17,12 @@
      :garden [:li {:margin-left "-28px"}]
      (ol
       :css {:list-style-type "none"}
-      (for [item items]
-        (let [kids (when children (children item))
+      (for-tpl [item items]
+        (let [kids (if children (children item) (cell nil))
               expanded? (cell true)]
           (add-watch expand-state
                      (-> (gensym) str keyword)
                      (fn [_ _ _ n]
-                       (log/debug "expand-state changing" :n n :level level-number)
                        (cond
                          (= n :all-expanded)
                          (reset! expanded? true)
@@ -33,7 +32,6 @@
 
                          (= (first n) :expand-through-level)
                          (let [e (< level-number (second n))]
-                           (log/debug "Expanding?" :e e :level level-number :arg (second n))
                            (reset! expanded? e)))))
           (li
            (if attrs
@@ -43,7 +41,7 @@
             (inl :css {:width "15px"
                        :font-size "120%"
                        :vertical-align "top"}
-                 (if kids
+                 (if-tpl (-> kids seq cell=)
                    (div :css {:display "inline-block"
                               :cursor "pointer"
                               :position "relative"
@@ -68,10 +66,8 @@
                                                  "deg)")})))
                    ""))
             (formatter expanded? item))
-           (when-tpl expanded?
-             (if-not kids
-               []
-               (tree* expand-state more-levels kids (inc level-number)))))))))))
+           (when-tpl (cell= (and expanded? kids))
+             (tree* expand-state more-levels kids (inc level-number))))))))))
 
 (defn tree
   "Returns a collapable tree with hierarchy defined by `levels`, a seq

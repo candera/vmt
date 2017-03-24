@@ -1159,7 +1159,7 @@
   (let [strings (mission/read-strings
                  (file-buf "/Users/candera/falcon/4.33.3/Data/Campaign/Save/Strings.idx")
                  (file-buf "/Users/candera/falcon/4.33.3/Data/Campaign/Save/Strings.wch"))]
-    (map strings (range 100 15d0))))
+    (map strings (range 100 150))))
 
 (def smpu
   (-> "/Users/candera/falcon/4.33.3/Data/Campaign/Save/SMPU-Day  3 00 41 48.cam"
@@ -2318,3 +2318,12 @@ type: 0x64 -> image
       {:keys [campaign-info]} mission
       {:keys [bullseye-x bullseye-y]} campaign-info]
   (coords/fgrid->weather mission bullseye-x bullseye-y))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(->> @smpu
+     mission/order-of-battle
+     :air
+     (mapcat ::mission/squadrons)
+     (map #(mission/squadron-type @smpu %))
+     (into #{}))

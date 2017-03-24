@@ -1,9 +1,12 @@
 (ns weathergen.ui.common
   "Things used across various UI libraries."
-  (:require [garden.core :refer [css]]
+  (:require [clojure.pprint :as pp]
+            [garden.core :refer [css]]
             [goog.string :as gstring]
             [goog.string.format]
-            [hoplon.svg :as svg]))
+            [hoplon.svg :as svg])
+  (:require-macros
+   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
 
 (def registered-styles (atom #{}))
 
@@ -16,7 +19,6 @@
       (.appendChild head (style :type "text/css" styles))
       (swap! registered-styles conj key))))
 
-;;; Styled
 (defelem styled
   "Creates an element which is a scope for a set of CSS rules,
   provided via a `:garden` attribute, by adding an element with a
@@ -35,10 +37,16 @@
 
 (defelem inl
   [attrs content]
-  (div (assoc-in attrs
-                 [:css :display]
-                 "inline-block")
-       content))
+  (let [{:keys [css]} attrs]
+    (div
+     (update attrs
+             :css
+             (fn [css-orig]
+               (if (cell? css-orig)
+                 (formula-of [css-orig]
+                   (assoc css-orig :display "inline-block"))
+                 (assoc css-orig :display "inline-block"))))
+     content)))
 
 (defelem triangle
   [attrs _]
@@ -55,3 +63,17 @@
                         (- x) y)
      attrs)))
 
+(defn pre-cell
+  "Pretty-prints the value of cell c and displays it in a pre tag."
+  [title c]
+  (register-styles!
+   ::pre-cell
+   [[:.pre-cell {:background "black"
+                 :color "green"
+                 :font-family "monospace"}]])
+  (div
+   :class "pre-cell"
+   (h4 title)
+   (pre
+    :css {:white-space "pre-wrap"}
+    (cell= (pp/write c :stream nil :pretty true)))))
