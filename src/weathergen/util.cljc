@@ -39,3 +39,10 @@
     (pred (first coll)) (take 1 coll)
     :else (let [[head next] (partition-by pred coll)]
             (concat head (take 1 next)))))
+
+(defn toggle-set-membership
+  "If `x` is a member of `s`, remove it. Otherwise, add it."
+  [s x]
+  (let [op (if (contains? s x) disj conj)]
+    (op s x)))
+

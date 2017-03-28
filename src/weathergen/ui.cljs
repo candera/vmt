@@ -3,7 +3,6 @@
             [cljsjs.jszip]
             [cljsjs.filesaverjs]
             [cljsjs.select2]
-            [cljsjs.tinycolor]
             [clojure.data]
             [clojure.set :as set]
             [clojure.string :as str]
@@ -50,8 +49,11 @@
             [weathergen.math :as math]
             [weathergen.model :as model]
             [weathergen.twx :as twx]
-            [weathergen.ui.common :as comm :refer [triangle inl styled pre-cell]]
+            [weathergen.ui.common :as comm :refer [colors control-section
+                                                   format-time inl pre-cell
+                                                   styled triangle]]
             [weathergen.ui.grids :as grids]
+            [weathergen.ui.layers.flights]
             [weathergen.ui.trees :as trees]
             [weathergen.util :as util]
             ;;[weathergen.ui.slickgrid :as slickgrid]
@@ -68,7 +70,7 @@
                                 spy get-env log-env)])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]])
+   [weathergen.cljs.macros :refer [with-bbox with-time formula-of formula-of$]])
   (:refer-clojure :exclude [load-file]))
 
 ;;; Constants
@@ -101,13 +103,6 @@
 (def electron (js/require "electron")
   #_(when (= "nodejs" cljs.core/*target*)
       (js/require "electron")))
-
-;; This is a massive hack, and I have no idea what we're going to do if some other library decides to
-;; say `module.exports` in its code.
-(def tinycolor (.-exports js/module)
-  #_(if (= "nodejs" cljs.core/*target*)
-    (.-exports js/module)
-    js/tinycolor))
 
 (def app-dir
   (-> electron
@@ -330,11 +325,13 @@
 
 (defc highlighted-airbase nil)
 
+
 (add-watch mission
            :reset-object-data-on-mission-change
            (fn [_ _ _ _]
-             (reset! highlighted-airbase nil)
-             (reset! checked-airbases #{})))
+             (dosync
+              (reset! highlighted-airbase nil)
+              (reset! checked-airbases #{}))))
 
 ;; Zoom and pan for the map
 
@@ -352,7 +349,11 @@
        :width (/ nx map-zoom)
        :height (/ ny map-zoom)})))
 
-;; Load the settings file
+;;; Components
+
+(def flight-paths-layer (weathergen.ui.layers.flights/create mission map-zoom))
+
+;;; Load the settings file
 (def settings-path (fs/path-combine app-dir "settings.edn"))
 (when (fs/exists? settings-path)
   (let [settings (-> settings-path fs/file-text reader/read-string)]
@@ -936,12 +937,6 @@
   [coll n]
   (vec (concat (take n coll) (drop (inc n) coll))))
 
-(defn toggle-set-membership
-  "If `x` is a member of `s`, remove it. Otherwise, add it."
-  [s x]
-  (let [op (if (contains? s x) disj conj)]
-    (op s x)))
-
 (defn invert-map
   [m]
   (zipmap (vals m) (keys m)))
@@ -1151,13 +1146,6 @@
       "Snow")
     "None"))
 
-(defn format-time
-  [{:keys [day hour minute]}]
-  (gstring/format "%02d/%02d%02d"
-                  day
-                  hour
-                  minute))
-
 ;; TODO: get all the various coordinate systems sorted out. Maybe use
 ;; records or something to permit auto conversion?
 (defn bullseye
@@ -1237,29 +1225,6 @@
      (swap! c assoc-in p v))))
 
 ;;; Global Styles
-(def colors
-  {:invalid       "#c70505"
-   :invalid-background "#fcc"
-   :error-message "#c70505"
-   :edit "rgba(128,128,255,0.5)"
-   :header-background "lightgray"
-   :team {:dark-text {:white "gray"
-                      :green "green"
-                      :blue "blue"
-                      :brown "#923c25"
-                      :orange "darkorange"
-                      :yellow "#caae18"
-                      :red "red"
-                      :gray "darkgray"}
-          :light-text {:white "white"
-                       :green "lightgreen"
-                       :blue "#8ddbf5"
-                       :brown "#e27e43"
-                       :orange "orange"
-                       :yellow "yellow"
-                       :red "#f9adad"
-                       :gray "lightgray"}}})
-
 (def resize-handle-size 0.75)
 
 (defn image-button-style
@@ -1284,20 +1249,6 @@
    :display        "inline-block"
    :margin-right   "3px"
    :vertical-align "middle"})
-
-(defn contrasting
-  "Returns a color that contrasts well with the specified color."
-  [color]
-  ;; http://stackoverflow.com/questions/3942878/how-to-decide-font-color-in-white-or-black-depending-on-background-color
-  (let [rgb (-> color tinycolor .toRgb)
-        ;; Advanced compilation is somehow screwing up direct field
-        ;; access, so we have to go in by name.
-        r (aget rgb "r")
-        g (aget rgb "g")
-        b (aget rgb "b")]
-    (if (< 128 (+ (* r 0.299) (* g 0.587) (* b 0.114)))
-      "black"
-      "white")))
 
 ;;; Controls
 
@@ -1340,28 +1291,6 @@
        contents)))))
 
 ;;; Page sections
-
-(defelem control-section
-  [attributes children]
-  (let [visible (cell (not (:collapsed? attributes)))
-        change-visibility #(swap! visible not)]
-    (fieldset
-     :class "controls"
-     (dissoc attributes :title :collapsed? :help-for)
-     (legend
-      (div
-       :click change-visibility
-       :class (formula-of [visible]
-                          {:toggle true
-                           :visible visible})
-       "")
-      (span
-       (:title attributes)))
-     (div
-      :class "control-visibility-container"
-      :toggle visible
-      :fade-toggle visible
-      (div :class "control-container" children)))))
 
 (defelem control-subsection
   "Renders a bordered box with a title bar."
@@ -2033,20 +1962,6 @@
                       (gstring/format "%f,%f" gx gy)))))
       s)))
 
-(defn waypoint-grid-coords
-  "Given a BMS waypoint, return an x/y map of its weatherspace coordinates."
-  [mission waypoint]
-  (coords/fgrid->weather mission (:grid-x waypoint) (:grid-y waypoint)))
-
-(defn waypoints->path
-  "Given a sequence of BMS waypoints, return an SVG path that follows them."
-  [mission waypoints]
-  (->> waypoints
-       (util/take-until #(-> % :flags (bit-and c/WPF_LAND) zero? not))
-       (mapv #(waypoint-grid-coords mission %))
-       (mapv #(gstring/format "%f,%f" (:x %) (:y %)))
-       (interpose " L")
-       (apply str "M")))
 
 (defn line->path
   [size line]
@@ -2088,7 +2003,7 @@
                                             (mission/side mission)
                                             mission/team-color)])))
         text-stroke-width (formula-of [map-zoom] (/ 0.03 map-zoom))
-        contrasting-color (formula-of [color] (contrasting color))]
+        contrasting-color (formula-of [color] (comm/contrasting color))]
     (svg/g
      :id (cell= (airbase-info-id airbase))
      :airbase label
@@ -2163,223 +2078,14 @@
        :stroke color
        :stroke-width 0.1)))))
 
-#_(defn flight-paths-overlay
-  [size display-params]
-  (let [ ;; cells
-        flightpaths (formula-of
-                     [display-params]
-                     (->> display-params
-                          :flight-paths))
-        indexes (-> flightpaths count range cell=)
-        ;; Styling
-        opacity             0.8
-        label-stroke-width  0.01
-        narrow-stroke-width 0.1
-        lines-stroke-dasharray-on 0.1
-        lines-stroke-dasharray-off 0.1
-        wide-stroke-width   0.15
-        font-size           4           ; Percent
-        font-weight         400
-        marker-size         0.4
-        background-opacity  0.4
-        strokes (fn [color]
-                  [[wide-stroke-width (contrasting color)]
-                   [narrow-stroke-width color]])
-        magnify (fn [scale]
-                  (->> scale (* 1.5) (+ 1)))]
-    (svg/g
-     :id "flight-paths-overlays"
-     (formula-of
-      [indexes]
-      (for [index indexes
-            :let [flightpath (formula-of [flightpaths] (get flightpaths index))
-                  show? (-> flightpath :show? cell=)
-                  show-lines? (-> flightpath :show-lines? cell=)
-                  path (-> flightpath :path cell=)
-                  lines (-> flightpath :lines cell=)
-                  magnification (-> flightpath :scale magnify cell=)
-                  color (-> flightpath :color cell=)
-                  anticolor (-> color contrasting cell=)
-                  strokes (-> color strokes cell=)]]
-        (svg/g
-         :attr {:class "flight-path-overlay"}
-         :toggle show?
-         ;; The lines
-         (formula-of
-          [strokes magnification lines]
-          (for [line lines]
-            (svg/g
-             :attr {:class "steerpoint-line"}
-             :toggle show-lines?
-             (for [[stroke-width stroke-color] strokes]
-               (svg/path
-                :stroke stroke-color
-                :stroke-width (* stroke-width magnification 0.75)
-                :stroke-dasharray (str lines-stroke-dasharray-on lines-stroke-dasharray-off)
-                :fill "none"
-                :pointer-events "none"
-                :opacity opacity
-                :d (line->path size line)))
-             (svg/g
-              :attr {:class "steerpoint-line-markers"}
-              (for [{:keys [::dtc/coordinates]} line
-                    :let [{:keys [::dtc/x ::dtc/y]} coordinates
-                          [gx gy] (coords/falcon->grid size x y)]]
-                (svg/circle
-                 {:pointer-events "none"
-                  :fill           "none"
-                  :opacity        opacity}
-                 :attr {:transform (gstring/format "translate(%f,%f)" gx gy)}
-                 :cx 0
-                 :cy 0
-                 :r (/ (* marker-size magnification) 2)))))))
-         ;; The flight path route itself
-         (formula-of
-          [strokes magnification]
-          (for [[stroke-width stroke-color] strokes]
-            (svg/path
-             :stroke stroke-color
-             :stroke-width (* stroke-width magnification)
-             :fill "none"
-             :pointer-events "none"
-             :opacity opacity
-             :d (formula-of [path] (flight-path->path size path)))))))))))
-
-(defn flight-path-overlay
-  [mission flight object-data]
-  (let [{:keys [camp-id]} flight
-        visible?         (cell= (get-in object-data [camp-id :visible?]))
-        highlighted?     (cell= (get-in object-data [camp-id :highlighted?]))
-        color            (cell= (if highlighted? "yellow" "white"))
-        ;; Styling
-        opacity             1
-        label-stroke-width  0.01
-        narrow-stroke-width 0.1
-        lines-stroke-dasharray-on 0.1
-        lines-stroke-dasharray-off 0.1
-        wide-stroke-width   0.15
-        font-size           4           ; Percent
-        font-weight         400
-        marker-size         0.4
-        background-opacity  0.4
-        compute-strokes (fn [color]
-                          [[wide-stroke-width (contrasting color)]
-                           [narrow-stroke-width color]])
-        magnify (fn [scale]
-                  (->> scale (* 1.5) (+ 1)))]
-    (svg/g
-     :flight (:name flight)
-     :toggle (cell= (or visible? highlighted?))
-     (let [{:keys [waypoints]} flight
-           ;; show-lines? (-> flightpath :show-lines? cell=)
-           ;; path (-> flightpath :path cell=)
-           ;; lines (-> flightpath :lines cell=)
-           ;; magnification (-> flightpath :scale magnify cell=)
-           magnification (cell= (if highlighted? 1.75 1))
-           ;; color (-> flightpath :color cell=)
-           anticolor (-> color contrasting cell=)
-           strokes (-> color compute-strokes cell=)
-           ]
-       (svg/g
-        :debug "waypoint markers and lines"
-        ;; TODO: Steerpoint lines
-        ;; The flight path route itself
-        (svg/g
-         :debug "waypoint lines"
-         (formula-of
-           [strokes magnification]
-           (for [[stroke-width stroke-color] strokes]
-             (svg/path
-              :stroke stroke-color
-              :stroke-width (* stroke-width magnification)
-              :fill "none"
-              :pointer-events "none"
-              :opacity opacity
-              :d (waypoints->path mission waypoints)))))
-        (svg/g
-         :debug "waypoint markers"
-         (for [[ordinal waypoint] (map-indexed vector waypoints)
-               :let [{:keys [action grid-x grid-y]} waypoint
-                     {:keys [x y]} (coords/fgrid->weather mission grid-x grid-y)
-                     style {:pointer-events "none"
-                            :fill           "none"
-                            :opacity        opacity}]]
-           (svg/g
-            :debug "waypoint marker"
-            :attr {:transform (gstring/format "translate(%f,%f)" x y)}
-            (formula-of
-              [strokes magnification]
-              (for [[stroke-width stroke-color] strokes
-                    :let [style (assoc style
-                                       :opacity opacity
-                                       :stroke stroke-color
-                                       :stroke-width (* 0.6 stroke-width magnification))]]
-                (if (-> waypoint :flags (bit-and c/WPF_TARGET) zero?)
-                  (svg/circle
-                   style
-                   :cx 0
-                   :cy 0
-                   :r (/ (* marker-size magnification) 2))
-                  (triangle
-                   style
-                   :r (/ (* marker-size magnification) 2)))))
-            ;; formula-of
-            ;; {show-labels? (-> flightpath :show-labels? cell=)
-            ;;  show-numbers? (-> flightpath :show-numbers? cell=)
-            ;;  magnification magnification}
-            (let [show-labels? (cell true)
-                  show-numbers? (cell true)]
-              (formula-of
-                [magnification show-labels? show-numbers? color anticolor]
-                (let [txt (cond
-                            (and show-labels? (-> waypoint :flags (bit-and c/WPF_ALTERNATE) zero? not))
-                            "Alternate Field"
-
-                            (and show-labels? (= action c/WP_REFUEL))
-                            (when show-labels? "Tanker")
-
-                            :else
-                            (when show-numbers? (inc ordinal)))]
-                  (with-bbox :w tw :h th :x tx :y ty
-                    [t (svg/text
-                        :stroke color
-                        :stroke-width (* label-stroke-width magnification)
-                        :fill color
-                        :font-size (str (* font-size magnification) "%")
-                        :text-anchor "middle"
-                        :opacity opacity
-                        :x 0
-                        :y (- (* marker-size magnification))
-                        txt)]
-                    (svg/g
-                     :debug "waypoint label"
-                     :toggle (some? txt)
-                     (svg/rect
-                      :x tx
-                      :y ty
-                      :width tw
-                      :height th
-                      :fill anticolor
-                      :opacity background-opacity)
-                     t)))))))))))))
-
-(def objective-info-overlay
-  "Draws information about objectives on the map."
+(def airbases-info-overlay
   (svg/g
-   :section "objective-info-overlay"
-   (svg/g
-    :section "airbase-info"
-    (vector
-     (for-tpl [airbase all-airbases]
-       (airbase-info-overlay mission airbase))
-     ;; This gets the highlighted one to be on top
-     (svg/use :xlink-href (cell= (airbase-info-id highlighted-airbase)))))
-   #_(svg/g
-    :section "flight-paths"
-    (for [flight (->> mission
-                      :units
-                      (filter #(-> % :type #{:flight})))]
-      (flight-path-overlay mission flight object-data)))))
+   :section "airbase-info"
+   (vector
+    (for-tpl [airbase all-airbases]
+      (airbase-info-overlay mission airbase))
+    ;; This gets the highlighted one to be on top
+    (svg/use :xlink-href (cell= (airbase-info-id highlighted-airbase))))))
 
 (defn within-area?
   "Return true if the specified coordinates fall within the wind
@@ -2630,8 +2336,8 @@
                      (weather-overrides-overlay weather-params register-drag-handler)
                      ;;(flight-paths-overlay [nx ny] display-params)
                      selected-cell-overlay
-                     objective-info-overlay
-                     #_info-overlay
+                     airbases-info-overlay
+                     (:overlay flight-paths-layer)
                      bullseye-info-box)]
       (gevents/listen (gevents/MouseWheelHandler. elem)
                       gevents/MouseWheelHandler.EventType.MOUSEWHEEL
@@ -4089,7 +3795,7 @@
            :css {:margin-right "5px"}
            (triple-border
             :inner (-> path :color cell=)
-            :outer (-> path :color contrasting cell=)
+            :outer (-> path :color comm/contrasting cell=)
             (table
              (let [checkbox-row (fn checkbox
                                   ([l k {:keys [change row-attrs]}]
@@ -4188,126 +3894,6 @@
    (button :click load-dtc "Load DTC")))
 
 
-(defn flights-section
-  [_]
-  (control-section
-   :title "Flights"
-   "TODO"
-   #_(formula-of [mission]
-     (if-not mission
-       "No mission loaded"
-       (let [{flights :flight
-              packages :package}
-             (->> mission
-                  :units
-                  (group-by :type))]
-         (if (-> flights count zero?)
-           "No flights in mission, or no mission loaded."
-           (styled
-            :garden [:tr.highlighted {:background "lightgoldenrodyellow"}]
-            (grids/table-grid
-             :data flights
-             :row-attrs (fn [flight]
-                          (let [{:keys [camp-id]} flight]
-                            #_ (log/debug :flight flight)
-                            {:mouseenter #(swap! object-data
-                                                 assoc-in
-                                                 [camp-id :highlighted?]
-                                                 true)
-                             :mouseleave #(swap! object-data
-                                                 assoc-in
-                                                 [camp-id :highlighted?]
-                                                 false)
-                             :click #(do
-                                       ;; It's confusing if we click something to
-                                       ;; hide it, but it stays visible due to
-                                       ;; highlighting.
-                                       (dosync
-                                        (-> (swap! object-data update-in [camp-id :visible?] not)
-                                            (get-in [camp-id :visible?])
-                                            (->> (swap! object-data assoc-in [camp-id :highlighted?])))))
-                             :class (cell= {:highlighted (get-in object-data [camp-id :highlighted?])})}))
-             :columns [{:title "Show?"
-                        :sort-key (fn [flight]
-                                    (not (get-in @object-data [(:camp-id flight) :visible?])))
-                        :formatter (fn [flight]
-                                     (let [visible? (path-lens object-data [(:camp-id flight) :visible?])
-                                           highlighted? (path-lens object-data [(:camp-id flight) :highlighted?])]
-                                       (input :camp-id (:camp-id flight)
-                                              :type "checkbox"
-                                              :value visible?)))}
-                       {:title "Combatant"
-                        :sort-key #(->> %
-                                        :owner
-                                        (mission/side mission)
-                                        (mission/team-name mission))
-                        :formatter #(let [side (->> %
-                                                    :owner
-                                                    (mission/side mission))]
-                                      (inl
-                                       :css {:color (get-in colors
-                                                            [:team
-                                                             :dark-text
-                                                             (mission/team-color side)])}
-                                       (mission/team-name mission side)))}
-                       {:title "Package"
-                        :formatter #(->> %
-                                         :package
-                                         (mission/package-name mission))}
-                       ;; Not enough space for these
-                       ;; {:title "Squadron"
-                       ;;  :formatter (constantly "TODO")}
-                       ;; {:title "Airbase"
-                       ;;  :formatter (constantly "TODO")}
-                       {:title "Callsign"
-                        :formatter :name}
-                       {:title "Mission"
-                        :formatter #(->> %
-                                         :mission
-                                         (mission/flight-mission mission))}
-                       {:title "T/O"
-                        :formatter #(->> %
-                                         :waypoints
-                                         first
-                                         :depart
-                                         format-time)}
-                       {:title "TOT"
-                        :formatter #(->> %
-                                         :time-on-target
-                                         format-time)}
-                       {:title "Egress"
-                        :formatter #(->> %
-                                         :mission-over-time
-                                         format-time)}]))
-           #_(svg/svg
-              :width "20px"
-              :viewBox "-100 -100 200 200"
-              (triangle :r 100
-                        :stroke "black"
-                        :fill "black"))
-           #_(let [td* (fn [& contents]
-                         (td
-                          :css {:padding-right "3px"}
-                          contents))]
-               (table
-                :class "info-grid"
-                (thead
-                 (td* "Team")
-                 (td* "Package")
-                 (td* "Callsign")
-                 (td* "Mission")
-                 (td* "T/O")
-                 (td* "TOT"))
-                (for [flight flights
-                      :let [package (unit-lookup-by-id packages (:package flight))]]
-                  (tr
-                   (td* (->> flight :owner (mission/stringify mission :team-name)))
-                   (td* (:name-id package))
-                   (td* (:name flight))
-                   (td* (->> flight :mission (mission/stringify mission :flight-mission)))
-                   (td* (-> flight :waypoints first :depart format-time))
-                   (td* (-> flight :time-on-target format-time))))))))))))
-
 (defelem select2
   [attrs kids]
   (with-let [elem (select attrs kids)]
@@ -4376,8 +3962,7 @@
                                             :val @val
                                             :type @squadron-type)
                                  (swap! included-squadron-types (if @val disj conj) @squadron-type))))
-             (label squadron-type))))
-         #_(pre-cell "included-squadron-types" included-squadron-types))
+             (label squadron-type)))))
         (row
          (button :click #(reset! expand-state :all-expanded)
                  "Expand all")
@@ -4398,7 +3983,6 @@
                :font-size "120%"
                :background "white"
                :border "inset 1px lightgray"}
-         #_(pre-cell "listed-airbases" (cell= (map #(mission/objective-name mission %) listed-airbases)))
          (->> all-airbases
               (group-by (fn [airbase]
                           (->> airbase :owner (mission/side mission))))
@@ -4447,7 +4031,7 @@
                                          :margin-top "4px"
                                          :cursor "pointer"})
                                  :click #(dosync
-                                          (swap! checked-airbases toggle-set-membership @airbase)
+                                          (swap! checked-airbases util/toggle-set-membership @airbase)
                                           (reset! highlighted-airbase (@checked-airbases @airbase)))
                                  :mouseenter #(reset! highlighted-airbase @airbase)
                                  :mouseleave #(reset! highlighted-airbase nil)
@@ -4674,7 +4258,7 @@
    :weather-override-parameters weather-override-parameters
    :advanced-controls advanced-controls
    :flightpath-controls flightpath-controls
-   :flights-section flights-section
+   :flights-section (:controls flight-paths-layer)
    :air-forces-section air-forces-section
    :oob-section order-of-battle-section
    :test-section test-section})

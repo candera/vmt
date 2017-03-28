@@ -126,6 +126,15 @@
                                   "black"
                                   "none"))))))
 
+;; :data - A cell containing a seq of maps
+;; :row-attrs - A function from a cell containing a row to an Hoplon
+;;              attrs map
+;; :columns - A seq of maps describing columns
+;;
+;; Column description:
+;; :title - Shows up in the header row
+;; :sort-key - Function from a row value (not cell) to a sort value
+;; :formatter - Function from a row cell to UI
 (defelem table-grid
   [attrs _]
   (register-styles!
@@ -147,10 +156,18 @@
                    :border-top "none"}]]]])
   (let [{:keys [data columns row-attrs]} attrs
         attrs (dissoc attrs :data :columns :row-attrs)
-        ;; TODO: Cell-ify
-        ;; data* (cell= data)
-        ;; columns* (cell= columns)
-        sort-criteria (cell nil)]
+        sort-criteria (cell nil)
+        sorted-items (formula-of [data sort-criteria]
+                       (if-not sort-criteria
+                         data
+                         (let [[sort-column sort-direction] sort-criteria
+                               {:keys [sort-key formatter]} (nth columns sort-column)]
+                           (sort-by sort-key
+                                    (if (= sort-direction :ascending)
+                                      compare
+                                      (fn [a b]
+                                        (- (compare a b))))
+                                    data))))]
     (table
      :class "table-grid"
      (thead
@@ -175,19 +192,8 @@
                []
                (sorters sort-criteria column-index))))))
      (tbody
-      (formula-of [sort-criteria]
-        (for [item (if-not sort-criteria
-                     data
-                     (let [[sort-column sort-direction] sort-criteria
-                           {:keys [sort-key formatter]} (nth columns sort-column)
-                           sort-key (or sort-key formatter)]
-                       (sort-by sort-key
-                                (if (= sort-direction :ascending)
-                                  compare
-                                  (fn [a b]
-                                    (- (compare a b))))
-                                data)))]
-          (tr
-           (row-attrs item)
-           (for [{:keys [formatter]} columns]
-             (td (formatter item))))))))))
+      (for-tpl [item sorted-items]
+        (tr
+         (row-attrs item)
+         (for [{:keys [formatter]} columns]
+           (td (formatter item)))))))))

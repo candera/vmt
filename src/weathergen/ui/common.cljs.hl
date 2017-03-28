@@ -1,12 +1,20 @@
 (ns weathergen.ui.common
   "Things used across various UI libraries."
-  (:require [clojure.pprint :as pp]
+  (:require [cljsjs.tinycolor]
+            [clojure.pprint :as pp]
             [garden.core :refer [css]]
             [goog.string :as gstring]
             [goog.string.format]
             [hoplon.svg :as svg])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-bbox with-time formula-of formula-of$]]))
+
+;; This is a massive hack, and I have no idea what we're going to do if some other library decides to
+;; say `module.exports` in its code.
+(def tinycolor (.-exports js/module)
+  #_(if (= "nodejs" cljs.core/*target*)
+    (.-exports js/module)
+    js/tinycolor))
 
 (def registered-styles (atom #{}))
 
@@ -18,6 +26,43 @@
           styles (cell= (css garden))]
       (.appendChild head (style :type "text/css" styles))
       (swap! registered-styles conj key))))
+
+(def colors
+  {:invalid       "#c70505"
+   :invalid-background "#fcc"
+   :error-message "#c70505"
+   :edit "rgba(128,128,255,0.5)"
+   :header-background "lightgray"
+   :team {:dark-text {:white "gray"
+                      :green "green"
+                      :blue "blue"
+                      :brown "#923c25"
+                      :orange "darkorange"
+                      :yellow "#caae18"
+                      :red "red"
+                      :gray "darkgray"}
+          :light-text {:white "white"
+                       :green "lightgreen"
+                       :blue "#8ddbf5"
+                       :brown "#e27e43"
+                       :orange "orange"
+                       :yellow "yellow"
+                       :red "#f9adad"
+                       :gray "lightgray"}}})
+
+(defn contrasting
+  "Returns a color that contrasts well with the specified color."
+  [color]
+  ;; http://stackoverflow.com/questions/3942878/how-to-decide-font-color-in-white-or-black-depending-on-background-color
+  (let [rgb (-> color tinycolor .toRgb)
+        ;; Advanced compilation is somehow screwing up direct field
+        ;; access, so we have to go in by name.
+        r (aget rgb "r")
+        g (aget rgb "g")
+        b (aget rgb "b")]
+    (if (< 128 (+ (* r 0.299) (* g 0.587) (* b 0.114)))
+      "black"
+      "white")))
 
 (defelem styled
   "Creates an element which is a scope for a set of CSS rules,
@@ -51,16 +96,18 @@
 (defelem triangle
   [attrs _]
   (let [{:keys [r]} attrs
-        attrs (dissoc attrs :r)
-        alpha 0.8660254037844387 ; sin 60deg
-        beta 0.5 ; sin 30deg
-        x (* r alpha)
-        y (* r alpha)]
+        r*          (cell= r)
+        attrs       (dissoc attrs :r)
+        alpha       0.8660254037844387 ; sin 60deg
+        beta        0.5                ; sin 30deg
+        x           (cell= (* r* alpha))
+        y           (cell= (* r* alpha))]
     (svg/path
-     :d (gstring/format "M%f,%f L%f,%f L%f,%f Z"
-                        0 (- y)
-                        x y
-                        (- x) y)
+     :d (formula-of$ [x y]
+          (gstring/format "M%f,%f L%f,%f L%f,%f Z"
+                          0 (- $y)
+                          $x $y
+                          (- $x) $y))
      attrs)))
 
 (defn pre-cell
@@ -77,3 +124,34 @@
    (pre
     :css {:white-space "pre-wrap"}
     (cell= (pp/write c :stream nil :pretty true)))))
+
+(defelem control-section
+  [attributes children]
+  (let [visible (cell (not (:collapsed? attributes)))
+        change-visibility #(swap! visible not)]
+    (fieldset
+     :class "controls"
+     (dissoc attributes :title :collapsed? :help-for)
+     (legend
+      (div
+       :click change-visibility
+       :class (formula-of [visible]
+                          {:toggle true
+                           :visible visible})
+       "")
+      (span
+       (:title attributes)))
+     (div
+      :class "control-visibility-container"
+      :toggle visible
+      :fade-toggle visible
+      (div :class "control-container" children)))))
+
+
+(defn format-time
+  [{:keys [day hour minute]}]
+  (gstring/format "%02d/%02d%02d"
+                  day
+                  hour
+                  minute))
+

@@ -1,0 +1,397 @@
+(ns weathergen.ui.layers.flights
+  "Responsible for drawing the flight path layer and the associated controls."
+  (:require [goog.string :as gstring]
+            [goog.string.format]
+            [hoplon.svg :as svg]
+            [taoensso.timbre :as log
+             :include-macros true
+             :refer (log trace debug info warn error fatal report
+                         logf tracef debugf infof warnf errorf fatalf reportf
+                         spy get-env log-env)]
+            [weathergen.coordinates :as coords]
+            [weathergen.falcon.constants :as c]
+            [weathergen.falcon.files.images :as im]
+            [weathergen.falcon.files.mission :as mission]
+            [weathergen.ui.common :as comm :refer [colors control-section format-time inl pre-cell styled]]
+            [weathergen.ui.grids :as grids]
+            [weathergen.util :as util])
+  (:require-macros
+   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
+
+(defn controls
+  [{:keys [all-flights checked-flights highlighted-flight mission]}]
+  (control-section
+   :title "Flights"
+   (cond-tpl
+     (-> mission not cell=)
+     "No mission loaded"
+
+     (-> all-flights count zero? cell=)
+     "No flights present in the mission"
+
+     :else
+     (styled
+      :garden [:tr.highlighted {:background "lightgoldenrodyellow"}]
+      (vector
+       #_(pre-cell "highlighted flight" (-> highlighted-flight :camp-id cell=))
+       #_(pre-cell "checked flights" (->> checked-flights (map :camp-id) cell=))
+       (grids/table-grid
+        :data all-flights
+        :row-attrs (fn [flight]
+                     (let [camp-id (-> flight :camp-id cell=)]
+                       #_ (log/debug :flight flight)
+                       {:mouseenter #(reset! highlighted-flight @flight)
+                        :mouseleave #(reset! highlighted-flight nil)
+                        :click #(do
+                                  ;; It's confusing if we click something to
+                                  ;; hide it, but it stays visible due to
+                                  ;; highlighting.
+                                  (dosync
+                                   (swap! checked-flights util/toggle-set-membership @flight)
+                                   (reset! highlighted-flight (@checked-flights @flight))))
+                        :class (cell= {:highlighted (= highlighted-flight flight)})}))
+        :columns (let [col (fn [title f]
+                             {:title title
+                              :sort-key #(f @mission %)
+                              :formatter (fn [flight]
+                                           (formula-of [mission flight]
+                                             (f mission flight)))})]
+                   [{:title "Show?"
+                     :sort-key (fn [flight]
+                                 (not (@checked-flights flight)))
+                     :formatter (fn [flight]
+                                  (let [visible? (formula-of [checked-flights flight]
+                                                   (checked-flights flight))]
+                                    (vector
+                                     (input :camp-id (cell= (:camp-id flight))
+                                            :type "checkbox"
+                                            :value visible?)
+                                     (inl :css {:border-width "1px"
+                                                :border-style "solid"
+                                                :border-color "argb(880000FF)"
+                                                :border-radius "3px"
+                                                :color "blue"
+                                                :padding "3px"
+                                                :display "inline-block"
+                                                :font-size "150%"
+                                                :vertical-align "middle"
+                                                :line-height 0
+                                                :padding-bottom "18px"}
+                                          "..."))))}
+                    {:title "Combatant"
+                     :sort-key #(->> %
+                                     :owner
+                                     (mission/side @mission)
+                                     (mission/team-name @mission))
+                     :formatter #(let [side (->> %
+                                                 :owner
+                                                 (mission/side mission)
+                                                 cell=)]
+                                   (inl
+                                    :css (cell= {:color (get-in colors
+                                                                [:team
+                                                                 :dark-text
+                                                                 (mission/team-color side)])})
+                                    (cell= (mission/team-name mission side))))}
+                    (col "Package"
+                         (fn [mission flight]
+                           (->> flight
+                                :package
+                                (mission/package-name mission))))
+                    ;; Not enough space for these
+                    ;; {:title "Squadron"
+                    ;;  :formatter (constantly "TODO")}
+                    ;; {:title "Airbase"
+                    ;;  :formatter (constantly "TODO")}
+                    (col "Callsign"
+                         (fn [_ flight] (:name flight)))
+                    (col "Mission"
+                         (fn [mission flight]
+                           (->> flight :mission (mission/flight-mission mission))))
+                    (col "T/O"
+                         (fn [_ flight]
+                           (->> flight :waypoints first :depart format-time)))
+                    (col "TOT"
+                         (fn [_ flight]
+                           (->> flight :time-on-target format-time)))
+                    (col "Egress"
+                         (fn [_ flight]
+                           (->> flight :mission-over-time format-time)))])))))
+   #_(formula-of [mission]
+       (if-not mission
+         "No mission loaded"
+         (let [{flights :flight
+                packages :package}
+               (->> mission
+                    :units
+                    (group-by :type))]
+           (if (-> flights count zero?)
+             "No flights in mission, or no mission loaded."
+             (styled
+              :garden [:tr.highlighted {:background "lightgoldenrodyellow"}]
+              (grids/table-grid
+               :data flights
+               :row-attrs (fn [flight]
+                            (let [{:keys [camp-id]} flight]
+                              #_ (log/debug :flight flight)
+                              {:mouseenter #(swap! object-data
+                                                   assoc-in
+                                                   [camp-id :highlighted?]
+                                                   true)
+                               :mouseleave #(swap! object-data
+                                                   assoc-in
+                                                   [camp-id :highlighted?]
+                                                   false)
+                               :click #(do
+                                         ;; It's confusing if we click something to
+                                         ;; hide it, but it stays visible due to
+                                         ;; highlighting.
+                                         (dosync
+                                          (-> (swap! object-data update-in [camp-id :visible?] not)
+                                              (get-in [camp-id :visible?])
+                                              (->> (swap! object-data assoc-in [camp-id :highlighted?])))))
+                               :class (cell= {:highlighted (get-in object-data [camp-id :highlighted?])})}))
+               :columns [{:title "Show?"
+                          :sort-key (fn [flight]
+                                      (not (get-in @object-data [(:camp-id flight) :visible?])))
+                          :formatter (fn [flight]
+                                       (let [visible? (path-lens object-data [(:camp-id flight) :visible?])
+                                             highlighted? (path-lens object-data [(:camp-id flight) :highlighted?])]
+                                         (input :camp-id (:camp-id flight)
+                                                :type "checkbox"
+                                                :value visible?)))}
+                         {:title "Combatant"
+                          :sort-key #(->> %
+                                          :owner
+                                          (mission/side mission)
+                                          (mission/team-name mission))
+                          :formatter #(let [side (->> %
+                                                      :owner
+                                                      (mission/side mission))]
+                                        (inl
+                                         :css {:color (get-in colors
+                                                              [:team
+                                                               :dark-text
+                                                               (mission/team-color side)])}
+                                         (mission/team-name mission side)))}
+                         {:title "Package"
+                          :formatter #(->> %
+                                           :package
+                                           (mission/package-name mission))}
+                         ;; Not enough space for these
+                         ;; {:title "Squadron"
+                         ;;  :formatter (constantly "TODO")}
+                         ;; {:title "Airbase"
+                         ;;  :formatter (constantly "TODO")}
+                         {:title "Callsign"
+                          :formatter :name}
+                         {:title "Mission"
+                          :formatter #(->> %
+                                           :mission
+                                           (mission/flight-mission mission))}
+                         {:title "T/O"
+                          :formatter #(->> %
+                                           :waypoints
+                                           first
+                                           :depart
+                                           format-time)}
+                         {:title "TOT"
+                          :formatter #(->> %
+                                           :time-on-target
+                                           format-time)}
+                         {:title "Egress"
+                          :formatter #(->> %
+                                           :mission-over-time
+                                           format-time)}]))
+             #_(svg/svg
+                :width "20px"
+                :viewBox "-100 -100 200 200"
+                (triangle :r 100
+                          :stroke "black"
+                          :fill "black"))
+             #_(let [td* (fn [& contents]
+                           (td
+                            :css {:padding-right "3px"}
+                            contents))]
+                 (table
+                  :class "info-grid"
+                  (thead
+                   (td* "Team")
+                   (td* "Package")
+                   (td* "Callsign")
+                   (td* "Mission")
+                   (td* "T/O")
+                   (td* "TOT"))
+                  (for [flight flights
+                        :let [package (unit-lookup-by-id packages (:package flight))]]
+                    (tr
+                     (td* (->> flight :owner (mission/stringify mission :team-name)))
+                     (td* (:name-id package))
+                     (td* (:name flight))
+                     (td* (->> flight :mission (mission/stringify mission :flight-mission)))
+                     (td* (-> flight :waypoints first :depart format-time))
+                     (td* (-> flight :time-on-target format-time))))))))))))
+
+(defn waypoint-grid-coords
+  "Given a BMS waypoint, return an x/y map of its weatherspace coordinates."
+  [mission waypoint]
+  (coords/fgrid->weather mission (:grid-x waypoint) (:grid-y waypoint)))
+
+(defn waypoints->path
+  "Given a sequence of BMS waypoints, return an SVG path that follows them."
+  [mission waypoints]
+  (some->> waypoints
+           (util/take-until #(-> % :flags (bit-and c/WPF_LAND) zero? not))
+           (mapv #(waypoint-grid-coords mission %))
+           (mapv #(gstring/format "%f,%f" (:x %) (:y %)))
+           (interpose " L")
+           (apply str "M")))
+
+(defn flight-path-overlay
+  [flight {:keys [checked-flights highlighted-flight mission map-zoom]}]
+  (let [highlighted?               (formula-of [flight highlighted-flight]
+                                     (= flight highlighted-flight))
+        color                      (cell= (if highlighted? "yellow" "white"))
+        ;; Styling
+        opacity                    1
+        label-stroke-width         0.01
+        narrow-stroke-width        0.1
+        lines-stroke-dasharray-on  0.1
+        lines-stroke-dasharray-off 0.1
+        wide-stroke-width          0.15
+        font-size                  4    ; Percent
+        font-weight                400
+        marker-size                0.4
+        background-opacity         0.4
+        compute-strokes            (fn [color]
+                                     [{:width wide-stroke-width
+                                       :color (comm/contrasting color)}
+                                      {:width narrow-stroke-width
+                                       :color color}])
+        magnify                    (fn [scale]
+                                     (->> scale (* 1.5) (+ 1)))]
+    (svg/g
+     :flight (cell= (:name flight))
+     (cell-let [{:keys [waypoints]} flight]
+       (let [magnification (cell= (if highlighted? 1.25 1.0))
+             strokes       (cell= (compute-strokes color))
+             anticolor     (cell= (comm/contrasting color))]
+         (svg/g
+          :debug "waypoint markers and lines"
+          ;; TODO: Steerpoint lines
+          ;; The flight path route itself
+          (svg/g
+           :debug "waypoint lines"
+           (for-tpl [stroke strokes]
+             (cell-let [{:keys [width color]} stroke]
+               (svg/path
+                :stroke color
+                :stroke-width (cell= (-> width (* magnification) (/ map-zoom)))
+                :fill "none"
+                :pointer-events "none"
+                :opacity opacity
+                :d (formula-of [mission waypoints]
+                     (waypoints->path mission waypoints))))))
+          (svg/g
+           :debug "waypoint markers"
+           :transform (formula-of [map-zoom]
+                        (gstring/format "scale(%f,%f)" (/ 1.0 map-zoom) (/ 1.0 map-zoom)))
+           (for-tpl [indexed (cell= (map-indexed vector waypoints))]
+             (cell-let [[ordinal waypoint] indexed
+                        {:keys [action grid-x grid-y]} waypoint
+                        {:keys [x y]} (cell= (coords/fgrid->weather mission grid-x grid-y))]
+               (let [style {:pointer-events "none"
+                            :fill           "none"
+                            :opacity        opacity}]
+                 (svg/g
+                  :debug "waypoint markers"
+                  :transform (formula-of [x y map-zoom]
+                               (gstring/format "translate(%f,%f)"
+                                               (* x map-zoom) (* y map-zoom)))
+                  (for-tpl [stroke strokes]
+                    (svg/g
+                     :debug "waypoint marker"
+                     (cell-let [{:keys [width color]} stroke]
+                       (let [r      (formula-of [magnification] (/ (* marker-size magnification) 2))
+                             style* (assoc style
+                                           :opacity opacity
+                                           :stroke color
+                                           :stroke-width (cell= (* 0.6 width magnification)))
+                             circle? (formula-of [waypoint]
+                                       (-> waypoint :flags (bit-and c/WPF_TARGET) zero?))]
+                         (if-tpl circle?
+                           (svg/circle
+                            style*
+                            :cx 0
+                            :cy 0
+                            :r r)
+                           (comm/triangle
+                            style*
+                            :r r))))))
+                  (let [show-labels?  (cell true)
+                        show-numbers? (cell true)]
+                    (let [txt (formula-of [waypoint action show-labels? show-numbers? ordinal]
+                                (cond
+                                  (and show-labels? (-> waypoint :flags (bit-and c/WPF_ALTERNATE) zero? not))
+                                  "Alternate Field"
+
+                                  (and show-labels? (= action c/WP_REFUEL))
+                                  (when show-labels? "Tanker")
+
+                                  :else
+                                  (when show-numbers? (inc ordinal))))
+                          bbox-trigger (formula-of [txt magnification]
+                                         [txt magnification])]
+                      (with-bbox :w tw :h th :x tx :y ty :watch bbox-trigger
+                        [t (svg/text
+                            :stroke color
+                            :stroke-width (cell= (* label-stroke-width magnification))
+                            :fill color
+                            :font-size (cell= (str (* font-size magnification) "%"))
+                            :text-anchor "middle"
+                            :opacity opacity
+                            :x 0
+                            :y (cell= (- (* marker-size magnification)))
+                            txt)]
+                        (svg/g
+                         :debug "waypoint label"
+                         :toggle (cell= (some? txt))
+                         (svg/rect
+                          :x tx
+                          :y ty
+                          :width tw
+                          :height th
+                          :fill anticolor
+                          :opacity background-opacity)
+                         t)))))))))))))))
+
+(defn overlay
+  [{:keys [checked-flights highlighted-flight mission] :as state}]
+  (svg/g
+   :section "flights-overlay"
+   (svg/g
+    :section "checked-flight-paths"
+    (for-tpl [flight (cell= (disj checked-flights highlighted-flight))]
+      (flight-path-overlay flight state))
+    (when-tpl highlighted-flight
+      (svg/g
+       :section "highlighted-flight-path"
+       (flight-path-overlay highlighted-flight state))))))
+
+(defn create
+  [mission map-zoom]
+  (let [state {:mission mission
+               :map-zoom map-zoom
+               :checked-flights (cell #{})
+               :highlighted-flight (cell nil)
+               :all-flights (cell= (some->> mission :units (filter #(= (:type %) :flight))))}]
+    (add-watch mission
+               :reset-object-data-on-mission-change
+               (fn [_ _ _ _]
+                 (dosync
+                  (reset! (:highlighted-flight state) nil)
+                  (reset! (:checked-flights state) #{}))))
+    (assoc state
+           :controls (controls state)
+           :overlay (overlay state))))
+
