@@ -5,7 +5,7 @@
                  [org.clojure/clojurescript "1.9.456"]
                  [adzerk/boot-cljs          "1.7.228-2"]
                  [adzerk/boot-reload        "0.5.0"]
-                 [adzerk/boot-cljs-repl     "0.3.3"]
+                 ;; [adzerk/boot-cljs-repl     "0.3.3"]
                  ;;[hoplon/javelin "3.9.0"]
                  [hoplon/hoplon             "6.0.0-alpha17"]
                  [org.clojure/core.async    "0.2.395"
@@ -46,7 +46,7 @@
 
 (require
  '[adzerk.boot-cljs         :refer [cljs]]
- '[adzerk.boot-cljs-repl    :refer [cljs-repl start-repl]]
+;; '[adzerk.boot-cljs-repl    :refer [cljs-repl start-repl]]
  '[adzerk.boot-reload       :refer [reload]]
  '[hoplon.boot-hoplon       :refer [hoplon prerender]]
  '[tailrecursion.boot-jetty :refer [serve]]
@@ -79,7 +79,7 @@
    #_(reload :ids #{"index.html"}
              ;; :only-by-re [#"^((?!worker).)*$"]
              )
-   (cljs-repl :ids #{"index.html"})
+   ;;(cljs-repl :ids #{"index.html"})
    (cljs :ids #{#_"renderer" "worker" "index.html"}
          :optimizations :whitespace
          :compiler-options {;;:target :nodejs
