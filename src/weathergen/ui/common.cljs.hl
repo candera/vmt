@@ -5,7 +5,12 @@
             [garden.core :refer [css]]
             [goog.string :as gstring]
             [goog.string.format]
-            [hoplon.svg :as svg])
+            [hoplon.svg :as svg]
+            [taoensso.timbre :as log
+             :refer-macros (log trace debug info warn error fatal report
+                                logf tracef debugf infof warnf errorf fatalf reportf
+                                spy get-env log-env)]
+            [weathergen.falcon.files.mission :as mission])
   (:require-macros
    [weathergen.cljs.macros :refer [with-bbox with-time formula-of formula-of$]]))
 
@@ -15,17 +20,6 @@
   #_(if (= "nodejs" cljs.core/*target*)
     (.-exports js/module)
     js/tinycolor))
-
-(def registered-styles (atom #{}))
-
-(defn register-styles!
-  "Adds styles to the head of the document. If already registered under `key`, does nothing."
-  [key garden]
-  (when-not (contains? @registered-styles key)
-    (let [head (aget (.getElementsByTagName js/document "head") 0)
-          styles (cell= (css garden))]
-      (.appendChild head (style :type "text/css" styles))
-      (swap! registered-styles conj key))))
 
 (def colors
   {:invalid       "#c70505"
@@ -50,19 +44,58 @@
                        :red "#f9adad"
                        :gray "lightgray"}}})
 
+(defn team-color
+  "Returns a color for a team."
+  [team type]
+  (get-in colors [:team type (mission/team-color team)]))
+
+(def registered-styles (atom #{}))
+
+(defn register-styles!
+  "Adds styles to the head of the document. If already registered under `key`, does nothing."
+  [key garden]
+  (when-not (contains? @registered-styles key)
+    (let [head (aget (.getElementsByTagName js/document "head") 0)
+          styles (cell= (css garden))]
+      (.appendChild head (style :type "text/css" styles))
+      (swap! registered-styles conj key))))
+
 (defn contrasting
-  "Returns a color that contrasts well with the specified color."
+  "Returns a color that contrasts well with the specified color.
+  Optionally, the colors to use for dark and light can be specified."
+  ([color] (contrasting color "black" "white"))
+  ([color dark light]
+   ;; http://stackoverflow.com/questions/3942878/how-to-decide-font-color-in-white-or-black-depending-on-background-color
+   (-> tinycolor (.mostReadable color #js [dark light]) .toHexString)
+   #_(let [rgb (-> color tinycolor .toRgb)
+         ;; Advanced compilation is somehow screwing up direct field
+         ;; access, so we have to go in by name.
+         r (aget rgb "r")
+         g (aget rgb "g")
+         b (aget rgb "b")]
+     (if (< 128 (+ (* r 0.299) (* g 0.587) (* b 0.114)))
+       dark
+       light))))
+
+(defn darken
+  "Darkens a color by an amount from 0-100."
+  [color amount]
+  (-> color tinycolor (.darken amount) .toHexString))
+
+(defn lighten
+  "Lightens a color by an amount from 0-100."
+  [color amount]
+  (-> color tinycolor (.lighten amount) .toHexString))
+
+(defn spin
+  "Rotates a color by an amount from 0 to 360 degrees."
+  [color amount]
+  (-> color tinycolor (.spin amount) .toHexString))
+
+(defn to-hex-str
+  "Converts a color to a hex string."
   [color]
-  ;; http://stackoverflow.com/questions/3942878/how-to-decide-font-color-in-white-or-black-depending-on-background-color
-  (let [rgb (-> color tinycolor .toRgb)
-        ;; Advanced compilation is somehow screwing up direct field
-        ;; access, so we have to go in by name.
-        r (aget rgb "r")
-        g (aget rgb "g")
-        b (aget rgb "b")]
-    (if (< 128 (+ (* r 0.299) (* g 0.587) (* b 0.114)))
-      "black"
-      "white")))
+  (-> color tinycolor .toHexString))
 
 (defelem styled
   "Creates an element which is a scope for a set of CSS rules,
@@ -154,4 +187,69 @@
                   day
                   hour
                   minute))
+
+(defn image-button-style
+  [pressed?]
+  {:border-style (if pressed? "inset" "outset")
+   :border-color "#ddd"
+   :border-radius "6px"
+   :padding "2px"
+   ;; :width "16px"
+   ;; :height "16px"
+   :background (if pressed? "lightgrey" "white")
+   :border-width "2px"
+   :vertical-align "middle"})
+
+(defelem image-button
+  [attrs]
+  (let [down (cell false)
+        css (:css attrs)
+        attrs (dissoc attrs :css)]
+    (img
+     :css (formula-of
+            [down]
+            (merge (image-button-style down)
+                   css))
+     :mousedown (fn [e]
+                  (let [up (fn up-fn [e]
+                             (.removeEventListener js/document "mouseup" up-fn)
+                             (reset! down false))]
+                    (.addEventListener js/document "mouseup" up))
+                  (reset! down true))
+     ;; Overriding dragstart stops the browser from trying
+     ;; to drag and drop SVG as images, which would
+     ;; interfere with our functionality.
+     :dragstart (constantly false)
+     attrs)))
+
+(defelem color-picker
+  [attrs _]
+  ;; Because sometimes we want to set the value and not have the
+  ;; corresponding change event fire, we override it, and only pass it
+  ;; along when the change occurs while the picker is open. If we need
+  ;; to, we can add an option or another event for changes that happen
+  ;; due to the value cell being updated.
+  (let [{:keys [change hide show]} attrs
+        attrs* (dissoc attrs :change :hide :show)
+        open? (atom false)]
+    (with-let [i (input attrs*
+                        :class "minicolors"
+                        :type "hidden"
+                        :change (fn [e]
+                                  (when (and change @open?)
+                                    (change e))))]
+      (add-watch (:value attrs)
+                 (-> (gensym) str keyword)
+                 (fn [_ _ _ n]
+                   (-> i js/jQuery (.minicolors "value" (to-hex-str n)))))
+      (when-dom i
+        #(-> i js/jQuery (.minicolors #js {"theme" "weathergen"
+                                           "show" (fn []
+                                                    (reset! open? true)
+                                                    (when show (show)))
+                                           "hide" (fn []
+                                                    (reset! open? false)
+                                                    (when hide (hide)))}))))))
+
+
 

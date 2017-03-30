@@ -1432,10 +1432,72 @@
   [_ entry buf _]
   :not-yet-implemented)
 
-(defn flight-mission
-  "Given its numeric code, returns the name of a flight mission type, e.g. BARCAP."
-  [mission mission-type-number]
-  (get-in mission [:strings :mission-type-names mission-type-number]))
+(defn flight-mission-name
+  "Given a flight, returns the name of a flight mission type, e.g. BARCAP."
+  [mission flight]
+  (get-in mission [:strings :mission-type-names (:mission flight)]))
+
+(defn flight-mission-category
+  "Given a flight, return its mission category, e.g. ATO_DCA."
+  [mission flight]
+  (let [{:keys [mission]} flight]
+    (condp contains? mission
+      #{c/AMIS_OCASTRIKE
+        c/AMIS_SWEEP
+        c/AMIS_TARCAP
+        c/AMIS_ESCORT}
+      c/ATO_OCA
+
+      #{c/AMIS_STRIKE
+        c/AMIS_DEEPSTRIKE
+        c/AMIS_STSTRIKE
+        c/AMIS_STRATBOMB}
+      c/ATO_STRIKE
+
+      #{c/AMIS_INTSTRIKE
+        c/AMIS_INT
+        c/AMIS_SAD
+        c/AMIS_BAI}
+      c/ATO_INTERDICTION
+
+      #{c/AMIS_SEADSTRIKE
+        c/AMIS_SEADESCORT}
+      c/ATO_SEAD
+
+      #{c/AMIS_PRPLANCAS
+        c/AMIS_CAS
+        c/AMIS_ONCALLCAS
+        c/AMIS_FAC}
+      c/ATO_CAS
+
+      #{c/AMIS_BARCAP
+        c/AMIS_BARCAP2
+        c/AMIS_HAVCAP
+        c/AMIS_AMBUSHCAP
+        c/AMIS_INTERCEPT
+        c/AMIS_ALERT}
+      c/ATO_DCA
+
+      #{c/AMIS_AWACS
+        c/AMIS_JSTAR
+        c/AMIS_ECM
+        c/AMIS_RECON
+        c/AMIS_BDA
+        c/AMIS_RECONPATROL
+        c/AMIS_PATROL}
+      c/ATO_CCCI
+
+      #{c/AMIS_ASW
+        c/AMIS_ASHIP}
+      c/ATO_MARITIME
+
+      #{c/AMIS_TANKER
+        c/AMIS_AIRLIFT
+        c/AMIS_SAR
+        c/AMIS_RESCAP}
+      c/ATO_SUPPORT
+
+      c/ATO_OTHER)))
 
 (defn team-name
   "Given a team's number, return its name, e.g. 'DPRK'."
@@ -1489,6 +1551,16 @@
   combatant, side denots the alliance."
   [mission team]
   (-> mission :teams (nth team) :team :c-team))
+
+(defn sides
+  "Returns a seq of sides."
+  [mission]
+  (->> mission
+       :teams
+       (drop 1)
+       (map :team)
+       (map :c-team)
+       distinct))
 
 ;; These are abstract, not particular RGB colors
 (def team-color
@@ -1703,4 +1775,3 @@
 ;; Things like having a name or being able to be turned into a string
 ;; should be protocols. The read functions should therefore return
 ;; records for something like airbases, squadarons, etc.
-

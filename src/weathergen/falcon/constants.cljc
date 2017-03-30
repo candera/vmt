@@ -2915,3 +2915,17 @@
 
 (with-file "campstr.h"
   (def NUM_CAMERA_LABELS 16))
+
+(with-file "ato.cpp"
+  (defenum MissionCategories
+    ATO_OCA = 1,
+    ATO_STRIKE,
+    ATO_INTERDICTION,
+    ATO_SEAD,
+    ATO_CAS,
+    ATO_DCA,
+    ATO_CCCI,
+    ATO_MARITIME,
+    ATO_SUPPORT,
+    ATO_OTHER,
+    ))

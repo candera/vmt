@@ -51,7 +51,7 @@
             [weathergen.twx :as twx]
             [weathergen.ui.common :as comm :refer [colors control-section
                                                    format-time inl pre-cell
-                                                   styled triangle]]
+                                                   styled team-color triangle]]
             [weathergen.ui.grids :as grids]
             [weathergen.ui.layers.flights]
             [weathergen.ui.trees :as trees]
@@ -272,12 +272,13 @@
                        :direction {:heading 135 :speed 20}
                        :looping? false})
 
-(def initial-size (let [[window-width window-height] @window-size]
-                    (max 250 (min window-width
-                                  (- window-height 140)))))
+(def map-size (formula-of [window-size]
+                (let [[window-width window-height] window-size
+                      dim (max 250 (min window-width
+                                        (- window-height 140)))]
+                  [dim dim])))
 
-(defc display-params {:dimensions [initial-size initial-size]
-                      :opacity    0.75
+(defc display-params {:opacity    0.75
                       :display    nil #_:type
                       :map        :korea
                       :mouse-mode :select
@@ -1181,7 +1182,7 @@
            oy             (-> e .-offsetY (* browser-zoom))
            [nx ny]        (:cell-count @weather-params)
            {:keys [x y]}  pan
-           [width height] (:dimensions @display-params)]
+           [width height] @map-size]
        [(-> ox (* nx) (/ width)  (/ zoom) (/ browser-zoom) (+ x))
         (-> oy (* ny) (/ height) (/ zoom) (/ browser-zoom) (+ y))])
      #_(let [px             (.-pageX e)
@@ -1227,18 +1228,6 @@
 ;;; Global Styles
 (def resize-handle-size 0.75)
 
-(defn image-button-style
-  [pressed?]
-  {:border-style (if pressed? "inset" "outset")
-   :border-color "#ddd"
-   :border-radius "6px"
-   :padding "2px"
-   :width "16px"
-   :height "16px"
-   :background (if pressed? "lightgrey" "white")
-   :border-width "2px"
-   :vertical-align "middle"})
-
 (defn triangle-style
   []
   {:width          0
@@ -1251,14 +1240,6 @@
    :vertical-align "middle"})
 
 ;;; Controls
-
-(defelem color-picker
-  [attrs _]
-  (with-let [i (input attrs
-                      :class "minicolors"
-                      :type "hidden")]
-    (when-dom i
-      #(-> i js/jQuery (.minicolors #js {"theme" "weathergen"})))))
 
 (defelem triple-border
   "Creates a three-layer border with :inner and :outer colors."
@@ -1995,13 +1976,10 @@
         color             (formula-of [mission airbase highlighted?]
                             (if highlighted?
                               "yellow"
-                              (get-in colors
-                                      [:team
-                                       :light-text
-                                       (->> airbase
-                                            :owner
-                                            (mission/side mission)
-                                            mission/team-color)])))
+                              (team-color (->> airbase
+                                               :owner
+                                               (mission/side mission))
+                                          :light-text)))
         text-stroke-width (formula-of [map-zoom] (/ 0.03 map-zoom))
         contrasting-color (formula-of [color] (comm/contrasting color))]
     (svg/g
@@ -2161,7 +2139,7 @@
   (let [zoom           @map-zoom
         browser-zoom   (.-devicePixelRatio js/window)
         [nx ny]        (:cell-count @weather-params)
-        [width height] (:dimensions @display-params)]
+        [width height] @map-size]
     [(-> dx (* nx) (/ browser-zoom) (/ width)  (/ zoom))
      (-> dy (* ny) (/ browser-zoom) (/ height) (/ zoom))]))
 
@@ -2266,10 +2244,10 @@
     (with-let [elem (svg/svg
                      :id "grid"
                      (let [dims (formula-of
-                                  [display-params]
+                                  [map-size]
                                   ;; Edge doesn't render right, so we
                                   ;; have to make a little extra room
-                                  (map #(- % 7) (:dimensions display-params)))]
+                                  (map #(- % 7) map-size))]
                        (-> attrs
                            (dissoc :display-params
                                    :selected-cell
@@ -2336,8 +2314,8 @@
                      (weather-overrides-overlay weather-params register-drag-handler)
                      ;;(flight-paths-overlay [nx ny] display-params)
                      selected-cell-overlay
-                     airbases-info-overlay
                      (:overlay flight-paths-layer)
+                     airbases-info-overlay
                      bullseye-info-box)]
       (gevents/listen (gevents/MouseWheelHandler. elem)
                       gevents/MouseWheelHandler.EventType.MOUSEWHEEL
@@ -2425,7 +2403,7 @@
         (let [display-params* (formula-of
                                 [display-params]
                                 (dissoc display-params
-                                        :dimensions
+                                        ;;:dimensions
                                         :opacity
                                         :map
                                         :flight-paths
@@ -2774,33 +2752,15 @@
    :source (formula-of [c] (get-in c path))
    :update #(swap! c assoc-in path %)))
 
-(defelem image-button
-  [attrs]
-  (let [down (cell false)
-        css (:css attrs)
-        attrs (dissoc attrs :css)]
-    (img
-     :css (formula-of
-           [down]
-           (merge (image-button-style down)
-                  css))
-     :mousedown (fn [e]
-                  (let [up (fn up-fn [e]
-                             (.removeEventListener js/document "mouseup" up-fn)
-                             (reset! down false))]
-                    (.addEventListener js/document "mouseup" up))
-                  (reset! down true))
-     attrs)))
-
 (defn button-bar
   []
   (div :class "button-bar"
        :css (formula-of
-             [display-params]
+             [map-size]
              {:position "relative"
-              :width (-> display-params :dimensions first (str "px"))
+              :width (-> map-size first (str "px"))
               :margin "0 0 3px 0"})
-       (button :id "enlarge-grid"
+       #_(button :id "enlarge-grid"
                :click #(swap! display-params
                               update
                               :dimensions
@@ -2811,7 +2771,7 @@
                 :css {:width "24px"
                       :height "24px"}
                 :src "images/bigger.png"))
-       (button :id "shrink-grid"
+       #_(button :id "shrink-grid"
                :click #(swap! display-params
                               update
                               :dimensions
@@ -2997,7 +2957,7 @@
            (tr (td "Wind spd/hdg")
                (td (edit-field weather-params [:wind-stability-areas @index :wind :speed]))
                (td (edit-field weather-params [:wind-stability-areas @index :wind :heading])))))
-         (image-button
+         (comm/image-button
           :src "images/trash.png"
           :width "16px"
           :title "Remove"
@@ -3017,7 +2977,7 @@
           :height "16px"
           :css (formula-of
                 [area]
-                (image-button-style (:editing? area))))
+                (comm/image-button-style (:editing? area))))
          (hr)))))
    (button
     :click #(swap! weather-params
@@ -3118,7 +3078,7 @@
                    (td (time-entry weather-params [:weather-overrides @index k]))))
              (checkbox "Exclude from forecast?" :exclude-from-forecast?
                        {:row-attrs {:toggle (cell= (:animate? override))}}))))
-         (image-button
+         (comm/image-button
           :src "images/trash.png"
           :width "16px"
           :title "Remove"
@@ -3138,7 +3098,7 @@
           :height "16px"
           :css (formula-of
                 {{:keys [editing?]} override}
-                (image-button-style editing?)))))))
+                (comm/image-button-style editing?)))))))
    (button
     :click #(swap! weather-params
                    (fn [wp]
@@ -3594,12 +3554,12 @@
                 [(validating-edit
                   :conform (fn [v]
                              (formula-of
-                              [v]
-                              (let [valid? (not-empty v)]
-                                {:valid? valid?
-                                 :message (when-not valid?
-                                            "Mission name should be set when saving a weather package. It will default to 'weathergen'.")
-                                 :value v})))
+                               [v]
+                               (let [valid? (not-empty v)]
+                                 {:valid? valid?
+                                  :message (when-not valid?
+                                             "Mission name should be set when saving a weather package. It will default to 'weathergen'.")
+                                  :value v})))
                   :source l
                   :placeholder "Name of mission file")
                  (div
@@ -3609,10 +3569,10 @@
                         ;; relatively-positioned error image in the
                         ;; text box to the left.
                         :z-index 2}
-                  (image-button :src "images/file-open.png"
-                                :width "14px"
-                                :title "Load Mission File (.cam/.tac)"
-                                :click load-mission))]))
+                  (comm/image-button :src "images/file-open.png"
+                                     :width "14px"
+                                     :title "Load Mission File (.cam/.tac)"
+                                     :click load-mission))]))
          (row "From:"
               [:serialization-controls :multi-save :from]
               (time-entry display-params [:multi-save :from]))
@@ -3630,14 +3590,14 @@
       (let [progress (cell nil)
             cancelling? (cell false)]
         [(button :css (formula-of
-                       [progress cancelling?]
-                       {:width "105px"
-                        :background
-                        (if (and (not cancelling?) (some? progress))
-                          (let [pct (long (* 100 progress))]
-                            (gstring/format "linear-gradient(to right, lightblue, lightblue %f%%, white %f%%)"
-                                            pct pct))
-                          "white")})
+                        [progress cancelling?]
+                        {:width "105px"
+                         :background
+                         (if (and (not cancelling?) (some? progress))
+                           (let [pct (long (* 100 progress))]
+                             (gstring/format "linear-gradient(to right, lightblue, lightblue %f%%, white %f%%)"
+                                             pct pct))
+                           "white")})
                  :class "button"
                  :click (fn []
                           (if @progress
@@ -3657,11 +3617,11 @@
                                                :nx (-> @weather-params :cell-count first)
                                                :ny (-> @weather-params :cell-count second)}))))
                  (formula-of
-                  [progress cancelling?]
-                  (cond
-                    (and progress cancelling?) "Cancelling..."
-                    progress "Cancel"
-                    :else "Save Package")))])))))
+                   [progress cancelling?]
+                   (cond
+                     (and progress cancelling?) "Cancelling..."
+                     progress "Cancel"
+                     :else "Save Package")))])))))
 
 (defn debug-info
   []
@@ -3709,22 +3669,33 @@
   [{:keys []}]
   (control-section
    :title "Test"
-   (let [expand-state (cell :all-expanded)]
-     (trees/tree
-      expand-state
-      [ ;; Sides
-       {:formatter (fn [expanded? item]
-                     (pre-cell "side" (cell= {:expanded? expanded? :item item})))
-        :children (fn [item]
-                    (formula-of [item]
-                      (:children item)))}
-       ;; Airbases
-       {:formatter (fn [expanded? item]
-                     (pre-cell "airbase" (cell= {:expanded? expanded? :item item})))}
-       ]
-      (cell [{:name "side one" :children [:ab1 :ab2]}
-             {:name "side two" :children [:ab3 :ab4]}])
-      ))
+   (let [color (cell (comm/to-hex-str "blue"))]
+     (vector
+      (inl
+       (comm/color-picker
+        :value color
+        :change (fn [e] (log/debug "Color picker 1 changed " :color @e))))
+      (inl
+       (comm/color-picker
+        :value color
+        :change (fn [e] (log/debug "Color picker 2 changed " :color @e))))
+      (button :click #(reset! color (comm/to-hex-str "green")) "Green")))
+   #_(let [expand-state (cell :all-expanded)]
+       (trees/tree
+        expand-state
+        [ ;; Sides
+         {:formatter (fn [expanded? item]
+                       (pre-cell "side" (cell= {:expanded? expanded? :item item})))
+          :children (fn [item]
+                      (formula-of [item]
+                        (:children item)))}
+         ;; Airbases
+         {:formatter (fn [expanded? item]
+                       (pre-cell "airbase" (cell= {:expanded? expanded? :item item})))}
+         ]
+        (cell [{:name "side one" :children [:ab1 :ab2]}
+               {:name "side two" :children [:ab3 :ab4]}])
+        ))
    #_(let [data (cell [{:a 1 :b 2 :c 3
                         :children [{:a 4 :b 5 :c 6}
                                    {"a" "a" "b" "b" "c" "c"}]}])
@@ -3848,7 +3819,7 @@
                                               [:label :editing?]
                                               true))
                              label)))
-                        (image-button
+                        (comm/image-button
                          :css {:width "12px"
                                :height "12px"}
                          :src (formula-of
@@ -3870,7 +3841,7 @@
                      (div
                       :css {:padding-left "5px"
                             :padding-top "2px"}
-                      (color-picker
+                      (comm/color-picker
                        :value (cell= (:color path))
                        :change #(swap! path assoc :color @%)))))
                 (tr (td (with-help [:flight-paths :scale]
@@ -3884,7 +3855,7 @@
                       :value (-> path :scale (* 100) long cell=)
                       :change #(swap! path assoc :scale (/ @% 100.0)))))
                 (tr (td
-                     (image-button
+                     (comm/image-button
                       :src "images/trash.png"
                       :click #(swap! display-params
                                      update
@@ -3999,10 +3970,7 @@
                                          :font-weight "bold"
                                          :margin-right "3px"
                                          :margin-top "4px"
-                                         :color (get-in colors
-                                                        [:team
-                                                         :dark-text
-                                                         (mission/team-color side)])})
+                                         :color (team-color side :dark-text)})
                                  (formula-of [mission side] (mission/team-name mission side)))))
                  :children (fn [item]
                              (formula-of [item mission]
@@ -4057,12 +4025,7 @@
                                  (inl
                                   :css (formula-of [airbase]
                                          {:font-weight "bold"
-                                          :color (get-in colors
-                                                         [:team
-                                                          :dark-text
-                                                          (->> airbase
-                                                               :owner
-                                                               mission/team-color)])
+                                          :color (team-color (:owner airbase) :dark-text)
                                           :margin-right "10px"})
                                   ab-name)
                                  (inl
@@ -4270,30 +4233,30 @@
    (body
     (let [right-width 575               ; Min width of controls column
           portrait? (formula-of
-                     [display-params window-size]
-                     (let [[grid-width grid-height] (:dimensions display-params)
-                           [window-width window-height] window-size]
-                       (< window-width (+ grid-width right-width -10))))]
+                      [map-size window-size]
+                      (let [[grid-width grid-height] map-size
+                            [window-width window-height] window-size]
+                        (< window-width (+ grid-width right-width -10))))]
       (div
        :css (formula-of
-             {portrait? portrait?
-              [window-width window-height] window-size}
-             {:display "flex"
-              :flex-direction (if portrait? "column" "row")
-              ;; These next plus the overflow/height in the columns are
-              ;; what let the two sides scroll separately
-              :overflow (if portrait? "show" "hidden")
-              :height (if portrait?
-                        "100%"
-                        (str (- window-height 90) "px"))})
+              {portrait? portrait?
+               [window-width window-height] window-size}
+              {:display "flex"
+               :flex-direction (if portrait? "column" "row")
+               ;; These next plus the overflow/height in the columns are
+               ;; what let the two sides scroll separately
+               :overflow (if portrait? "show" "hidden")
+               :height (if portrait?
+                         "100%"
+                         (str (- window-height 90) "px"))})
        (div
         :class "left-column"
         :css (formula-of
-              [portrait?]
-              (if portrait?
-                {}
-                {:overflow "auto"
-                 :height "auto"}))
+               [portrait?]
+               (if portrait?
+                 {}
+                 {:overflow "auto"
+                  :height "auto"}))
         (button-bar)
         (grid :display-params display-params
               :weather-data weather-data
@@ -4309,18 +4272,18 @@
        (div
         :class "right-column"
         :css (formula-of
-              [portrait?]
-              (merge {:display "block"
-                      :align-content "flex-start"
-                      :flex-wrap "wrap"
-                      :flex-grow 1
-                      :min-width (str (- right-width 20) "px")
-                      ;;  This one weird trick keeps the column from expanding
-                      ;;  past where it should. Yay CSS.
-                      :width 0}
-                     (when-not portrait?
-                       {:overflow "auto"
-                        :height "auto"})))
+               [portrait?]
+               (merge {:display "block"
+                       :align-content "flex-start"
+                       :flex-wrap "wrap"
+                       :flex-grow 1
+                       :min-width (str (- right-width 20) "px")
+                       ;;  This one weird trick keeps the column from expanding
+                       ;;  past where it should. Yay CSS.
+                       :width 0}
+                      (when-not portrait?
+                        {:overflow "auto"
+                         :height "auto"})))
         (for [[section opts] (partition 2 section-infos)
               :let [ctor (sections section)]]
           (with-time
