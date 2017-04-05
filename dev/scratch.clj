@@ -2285,6 +2285,17 @@ type: 0x64 -> image
               (catch Exception _ ""))]
       (printf "%03d %s\n" i n))))
 
+(let [names (-> @wnpu :strings :fn)]
+  (doseq [i (range 2000)]
+    (let [n (try
+              (names i)
+              (catch Exception _ ""))]
+      (printf "%03d %s\n" i n))))
+
+(let [names (-> @ito :names)]
+  (doseq [n (range 1000 1007)]
+    (println n (names n))))
+
 ;; Sunch'on Airbase name id = 344. What has that name?
 
 (->> @wnpu
@@ -2327,3 +2338,31 @@ type: 0x64 -> image
      (mapcat ::mission/squadrons)
      (map #(mission/squadron-type @smpu %))
      (into #{}))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(let [mission @smpu
+      side 2
+      side-teams (->> mission
+                      mission/teams
+                      (filter #(-> % :team :c-team (= side)))
+                      (map #(-> % :team :who))
+                      set)]
+  (disj side-teams side))
+
+(->> @smpu
+     mission/last-player-team
+     :team
+     :who)
+
+(mission/sides @smpu)
+
+(->> @smpu
+     :teams
+     (map :team)
+     (map #(select-keys % [:name :flags])))
+
+(->> @smpu
+     mission/teams
+     (map :team)
+     (map :name))

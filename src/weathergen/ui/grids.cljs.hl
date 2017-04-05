@@ -152,10 +152,11 @@
        [:svg {:vertical-align "bottom"}]]]
      [:tbody [:td {:padding "2px 3px 2px 3px"
                    :border "solid 1px lightgray"
-                   :border-bottom "none"
-                   :border-top "none"}]]]])
-  (let [{:keys [data columns row-attrs]} attrs
-        attrs (dissoc attrs :data :columns :row-attrs)
+                   ;;:border-bottom "none"
+                   ;;:border-top "none"
+                   }]]]])
+  (let [{:keys [data columns row-attrs when-empty]} attrs
+        attrs (dissoc attrs :data :columns :row-attrs :when-empty)
         sort-criteria (cell nil)
         sorted-items (formula-of [data sort-criteria]
                        (if-not sort-criteria
@@ -191,11 +192,17 @@
              (if disable-sort
                []
                (sorters sort-criteria column-index))))))
-     (tbody
-      (for-tpl [indexed (cell= (map-indexed vector sorted-items))]
-        (cell-let [[rownum item] indexed]
-          (tr
-           (row-attrs item rownum)
-           (for [{:keys [attrs formatter] :or {attrs (constantly {})}} columns]
-             (td (attrs item rownum)
-                 (formatter item rownum))))))))))
+     (if-tpl (-> sorted-items count zero? (and when-empty) cell=)
+       (tbody
+        (tr
+         (td
+          :colspan (count columns)
+          when-empty)))
+       (tbody
+        (for-tpl [indexed (cell= (map-indexed vector sorted-items))]
+          (cell-let [[rownum item] indexed]
+            (tr
+             (row-attrs item rownum)
+             (for [{:keys [attrs formatter] :or {attrs (constantly {})}} columns]
+               (td (attrs item rownum)
+                   (formatter item rownum)))))))))))

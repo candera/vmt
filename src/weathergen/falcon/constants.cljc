@@ -2614,6 +2614,61 @@
     OOB_FLAGS_JAPAN_HRZ = 52051,
     );
 
+;;   long FlagImageID[TOTAL_FLAGS][MAX_FLAG_TYPES] =
+;; {
+;;     // { BIG_VERT_DARK, BIG_VERT, BIG_HORIZ, SMALL_HORIZ },
+
+;;     { 0, OOB_FLAGS_SWISS_DRK, OOB_FLAGS_SWISS, OOB_FLAGS_SWISS_HRZ, SMFLGS_SWISS }, // 6
+;;     { 0, OOB_FLAGS_USA_DRK, OOB_FLAGS_USA, OOB_FLAGS_USA_HRZ, SMFLGS_USA }, // 0
+;;     { 0, OOB_FLAGS_SKOREA_DRK, OOB_FLAGS_SKOREA, OOB_FLAGS_SKOREA_HRZ, SMFLGS_SKOREA }, // 1
+;;     { 0, OOB_FLAGS_JAPAN_DRK, OOB_FLAGS_JAPAN, OOB_FLAGS_JAPAN_HRZ, SMFLGS_JAPAN }, // 11
+;;     { 0, OOB_FLAGS_CIS_DRK, OOB_FLAGS_CIS, OOB_FLAGS_CIS_HRZ, SMFLGS_CIS }, // 8
+;;     { 0, OOB_FLAGS_CHINA_DRK, OOB_FLAGS_CHINA, OOB_FLAGS_CHINA_HRZ, SMFLGS_CHINA }, // 3
+;;     { 0, OOB_FLAGS_NKOREA_DRK, OOB_FLAGS_NKOREA, OOB_FLAGS_NKOREA_HRZ, SMFLGS_NKOREA }, // 2
+;;     { 0, OOB_FLAGS_GERMAN_DRK, OOB_FLAGS_GERMAN, OOB_FLAGS_GERMAN_HRZ, SMFLGS_GERMAN }, // 4
+;;     // These flags are no longer used because we have no team adjectives to match them
+;;     /* { 0, OOB_FLAGS_FRANCE_DRK, OOB_FLAGS_FRANCE, OOB_FLAGS_FRANCE_HRZ, SMFLGS_FRANCE }, // 5
+;;      { 0, OOB_FLAGS_BELGIUM_DRK,OOB_FLAGS_BELGIUM, OOB_FLAGS_BELGIUM_HRZ, SMFLGS_BELGIUM }, // 7
+;;      { 0, OOB_FLAGS_BRAZIL_DRK, OOB_FLAGS_BRAZIL, OOB_FLAGS_BRAZIL_HRZ, SMFLGS_BRAZIL }, // 10
+;;      { 0, OOB_FLAGS_BAHRAIN_DRK,OOB_FLAGS_BAHRAIN, OOB_FLAGS_BAHRAIN_HRZ, SMFLGS_BAHRAIN }, // 9
+;;     */
+;; };
+
+  (def FlagImageID
+    [{:big-vert-dark OOB_FLAGS_SWISS_DRK
+      :big-vert      OOB_FLAGS_SWISS
+      :big-horiz     OOB_FLAGS_SWISS_HRZ
+      :small-horiz   SMFLGS_SWISS}
+     {:big-vert-dark OOB_FLAGS_USA_DRK
+      :big-vert      OOB_FLAGS_USA
+      :big-horiz     OOB_FLAGS_USA_HRZ
+      :small-horiz   SMFLGS_USA}
+     {:big-vert-dark OOB_FLAGS_SKOREA_DRK
+      :big-vert      OOB_FLAGS_SKOREA
+      :big-horiz     OOB_FLAGS_SKOREA_HRZ
+      :small-horiz   SMFLGS_SKOREA}
+     {:big-vert-dark OOB_FLAGS_JAPAN_DRK
+      :big-vert      OOB_FLAGS_JAPAN
+      :big-horiz     OOB_FLAGS_JAPAN_HRZ
+      :small-horiz   SMFLGS_JAPAN}
+     {:big-vert-dark OOB_FLAGS_CIS_DRK
+      :big-vert      OOB_FLAGS_CIS
+      :big-horiz     OOB_FLAGS_CIS_HRZ
+      :small-horiz   SMFLGS_CIS}
+     {:big-vert-dark OOB_FLAGS_CHINA_DRK
+      :big-vert      OOB_FLAGS_CHINA
+      :big-horiz     OOB_FLAGS_CHINA_HRZ
+      :small-horiz   SMFLGS_CHINA}
+     {:big-vert-dark OOB_FLAGS_NKOREA_DRK
+      :big-vert      OOB_FLAGS_NKOREA
+      :big-horiz     OOB_FLAGS_NKOREA_HRZ
+      :small-horiz   SMFLGS_NKOREA}
+     {:big-vert-dark OOB_FLAGS_GERMAN_DRK
+      :big-vert      OOB_FLAGS_GERMAN
+      :big-horiz     OOB_FLAGS_GERMAN_HRZ
+      :small-horiz   SMFLGS_GERMAN}])
+
+
   ;; Map Icons
   (defenum MapIcons
     BLUE_TEAM_ICONS = 565120000,
@@ -2911,6 +2966,21 @@
     TEAM_7,
     NUM_TEAMS,
     )
+
+  ;; Relationship/stance type
+  (defenum RelType
+    NoRelations,
+    Allied,
+    Friendly,
+    Neutral,
+    Hostile,
+    War)
+
+  (defenum TeamFlagEnum
+    TEAM_ACTIVE         = 0x01, ; Set if team is being used
+    TEAM_HASSATS        = 0x02, ; Has satelites
+    TEAM_UPDATED        = 0x04, ; We've gotten remote data for this team
+    )
   )
 
 (with-file "campstr.h"
@@ -2929,3 +2999,4 @@
     ATO_SUPPORT,
     ATO_OTHER,
     ))
+

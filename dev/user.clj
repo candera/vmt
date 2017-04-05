@@ -95,13 +95,23 @@
           (apply str)))))
 
 
-(def smpu
+(def smpu-old
   (delay
    (log/debug "Reading SMPU...")
    (let [mission (mission/read-mission
                   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/SMPU-Day  3 00 41 48.cam")]
      (log/debug "Done reading.")
      mission)))
+
+(def smpu
+  (delay
+   (log/debug "Reading SMPU...")
+   (let [mission (mission/read-mission
+                  "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 18 15 07.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+
 
 (def save2
   (delay
@@ -132,5 +142,13 @@
    (log/debug "Reading WNPU...")
    (let [mission (mission/read-mission
                   "/Users/candera/falcon/4.33.3/Data/Add-On Korea Strong DPRK/Campaign/WNPU-Day  1 21 07 12.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+(def ito
+  (delay
+   (log/debug "Reading ITO...")
+   (let [mission (mission/read-mission
+                  "/Users/candera/falcon/4.33.3/Data/Add-On Israel/campaign/save0.cam")]
      (log/debug "Done reading.")
      mission)))

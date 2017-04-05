@@ -40,7 +40,7 @@
    c/ATO_DCA "#ffa800"
    c/ATO_CCCI (comm/to-hex-str "white")
    c/ATO_MARITIME (comm/to-hex-str "lightblue")
-   c/ATO_SUPPORT "#707070"
+   c/ATO_SUPPORT "#a8a8a8"
    c/ATO_OTHER (comm/to-hex-str "black")})
 
 (def mission-category-colors
@@ -55,9 +55,10 @@
 (defn row-color
   "Returns a color for a table row based on its ordinal."
   [rownum]
-  (if (even? rownum)
-    row-alternate-color
-    row-primary-color))
+  (when rownum
+    (if (even? rownum)
+      row-alternate-color
+      row-primary-color)))
 
 (defn flight-mission-color
   "Returns the color for a flight mission"
@@ -67,7 +68,7 @@
        colors))
 
 (defn controls
-  [{:keys [all-flights checked-flights display highlighted-flight mission]}]
+  [{:keys [all-flights checked-flights display highlighted-flight mission selected-teams]}]
   (control-section
    :title "Flights"
    (cond-tpl
@@ -79,18 +80,32 @@
 
      :else
      (vector
-      (div
-       (label :css {:margin-left "3px"
-                    :margin-right "3px"}
-              "Show flights for:")
-       (select
-        ;;:change "TODO"
-        (for-tpl [side (cell= (mission/sides mission))]
-          (option :value side
-                  (div
-                   :css (formula-of [side]
-                          {:color (team-color side :dark-text)})
-                   (cell= (mission/team-name mission side)))))))
+      (fieldset
+       (legend "Show flights for")
+       (for-tpl [team (cell= (mission/teams mission))]
+         (inl
+          :css (formula-of [team]
+                 {:margin-right "3px"
+                  :padding      "3px"
+                  :border       (str "2px solid " (team-color team :dark-text))})
+          (img :css {:border "solid 1px black"}
+               :src (formula-of [mission team]
+                      (comm/get-image
+                       mission
+                       (mission/team-flag mission
+                                          team
+                                          :big-vert))))
+          (div
+           :css {:text-align "center"}
+           (span :css (cell= {:color (team-color team :dark-text)})
+                 (->> team :team :who (mission/team-name mission) cell=)))
+          (div
+           :css {:text-align "center"}
+           (let [val (cell= (contains? selected-teams (mission/team-number team)))]
+             (input :css {:margin "auto"}
+                    :type "checkbox"
+                    :value val
+                    :change #(swap! selected-teams (if @val disj conj) (mission/team-number @team))))))))
       (fieldset
        :css {:margin-bottom "3px"}
        (legend "Mission Key")
@@ -111,22 +126,28 @@
        (button :click #(reset! mission-category-colors default-mission-category-colors)
                "Reset to defaults"))
       (grids/table-grid
-       :data all-flights
+       :data (formula-of [mission all-flights selected-teams]
+               (->> all-flights
+                    (filter #(->> %
+                                  :owner
+                                  selected-teams))))
+       :when-empty (text "No flights to show")
        :row-attrs (fn [flight rownum]
-                    {:css        (formula-of [rownum flight highlighted-flight]
-                                   {:background (if (= highlighted-flight flight)
-                                                  "lightgoldenrodyellow"
-                                                  (row-color rownum))})
-                     :mouseenter #(reset! highlighted-flight @flight)
-                     :mouseleave #(reset! highlighted-flight nil)
-                     :click      #(do
-                                    ;; It's confusing if we click something to
-                                    ;; hide it, but it stays visible due to
-                                    ;; highlighting.
-                                    (dosync
-                                     (swap! checked-flights util/toggle-set-membership @flight)
-                                     (reset! highlighted-flight (@checked-flights @flight))))
-                     :class      (cell= {:highlighted (= highlighted-flight flight)})})
+                    (when (and flight rownum)
+                      {:css        (formula-of [rownum flight highlighted-flight]
+                                     {:background (if (= highlighted-flight flight)
+                                                    "lightgoldenrodyellow"
+                                                    (row-color rownum))})
+                       :mouseenter #(reset! highlighted-flight @flight)
+                       :mouseleave #(reset! highlighted-flight nil)
+                       :click      #(do
+                                      ;; It's confusing if we click something to
+                                      ;; hide it, but it stays visible due to
+                                      ;; highlighting.
+                                      (dosync
+                                       (swap! checked-flights util/toggle-set-membership @flight)
+                                       (reset! highlighted-flight (@checked-flights @flight))))
+                       :class      (cell= {:highlighted (= highlighted-flight flight)})}))
        :columns (let [col (fn [title f]
                             {:title     title
                              :sort-key  #(f @mission %)
@@ -164,15 +185,11 @@
                    {:title     "Combatant"
                     :sort-key  #(->> %
                                      :owner
-                                     (mission/side @mission)
                                      (mission/team-name @mission))
-                    :formatter #(let [side (->> %
-                                                :owner
-                                                (mission/side mission)
-                                                cell=)]
+                    :formatter #(let [team (cell= (:owner %))]
                                   (inl
-                                   :css (cell= {:color (team-color side :dark-text)})
-                                   (cell= (mission/team-name mission side))))}
+                                   :css (cell= {:color (team-color team :dark-text)})
+                                   (cell= (mission/team-name mission team))))}
                    (col "Package"
                         (fn [mission flight]
                           (->> flight
@@ -372,14 +389,20 @@
                :checked-flights (cell #{})
                :highlighted-flight (cell nil)
                :display (cell {})
-               :all-flights (cell= (some->> mission :units (filter #(= (:type %) :flight))))}]
-    (add-watch mission
-               ::reset-on-mission-change
-               (fn [_ _ _ _]
-                 (dosync
-                  (reset! (:display state) {})
-                  (reset! (:highlighted-flight state) nil)
-                  (reset! (:checked-flights state) #{}))))
+               :all-flights (cell= (some->> mission :units (filter #(= (:type %) :flight))))
+               :selected-teams (cell (->> (mission/last-player-team mission)
+                                          (mission/side mission)
+                                          (mission/teams-for-side mission)))}]
+    (do-watch mission
+              ::reset-on-mission-change
+              (fn [_ mission]
+                (dosync
+                 (reset! (:display state) {})
+                 (reset! (:highlighted-flight state) nil)
+                 (reset! (:checked-flights state) #{})
+                 (reset! (:selected-teams state) (->> (mission/last-player-team mission)
+                                                      (mission/side mission)
+                                                      (mission/teams-for-side mission))))))
     (assoc state
            :controls (controls state)
            :overlay (overlay state))))

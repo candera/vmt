@@ -10,7 +10,9 @@
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
-            [weathergen.falcon.files.mission :as mission])
+            [weathergen.falcon.files.images :as im]
+            [weathergen.falcon.files.mission :as mission]
+            [weathergen.filesystem :as fs])
   (:require-macros
    [weathergen.cljs.macros :refer [with-bbox with-time formula-of formula-of$]]))
 
@@ -20,6 +22,14 @@
   #_(if (= "nodejs" cljs.core/*target*)
     (.-exports js/module)
     js/tinycolor))
+
+(def app-dir
+  (-> "electron"
+      js/require
+      .-remote
+      .-app
+      (.getPath "appData")
+      (fs/path-combine "craigandera.org" "VMT")))
 
 (def colors
   {:invalid       "#c70505"
@@ -251,5 +261,74 @@
                                                     (reset! open? false)
                                                     (when hide (hide)))}))))))
 
+(defelem side-label
+  "Returns UI for the display name of a side."
+  [attrs _]
+  (let [{:keys [mission side]} attrs
+        allies                 (formula-of [mission side]
+                                 (let [side-teams (->> mission
+                                                       mission/teams
+                                                       (filter #(-> % :team :c-team (= side)))
+                                                       (map #(-> % :team :who))
+                                                       set)]
+                                   (disj side-teams side)))]
+    (div
+     (dissoc attrs :mission :side)
+     (for-tpl [elem (formula-of [mission side allies]
+                      (interpose {:color "" :name "/"}
+                                 (for [team (into [side] allies)]
+                                   {:color (team-color team :dark-text)
+                                    :name  (mission/team-name mission team)} )))]
+       (cell-let [{:keys [color name]} elem]
+         (span
+          :css (cell= {:color color})
+          (cell= name)))))))
 
+
+(defn image-cache-path
+  "Returns a path to where we should cache an image."
+  [image-descriptor]
+  (fs/path-combine app-dir "cache" "images" (str (im/cache-key image-descriptor) ".png")))
+
+(defn get-image
+  "Return a URL for the image identified by `image-descriptor`."
+  [mission image-descriptor]
+  (let [path (image-cache-path image-descriptor)]
+    (if (fs/exists? path)
+      path
+      (let [canvas (.createElement js/document "canvas")]
+        (with-time
+          (str "Loading image " (:image-id image-descriptor))
+          (im/read-image
+           mission
+           image-descriptor
+           (fn [width height]
+             (-> canvas .-width (set! width))
+             (-> canvas .-height (set! height))
+             (let [context (.getContext canvas "2d")
+                   image-data (.getImageData context 0 0 width height)
+                   buf (-> image-data .-data .-length js/ArrayBuffer.)
+                   buf8 (js/Uint8ClampedArray. buf)
+                   data (js/Uint32Array. buf)]
+               {:set-pixel! (fn [^long x ^long y ^long argb]
+                              (aset data (+ x (* y width)) argb))
+                :finalize (fn []
+                            (-> image-data .-data (.set buf8))
+                            (-> context (.putImageData image-data 0 0)))}))))
+        ;; Async - cache for later use
+        (.toBlob canvas
+                 (fn [blob]
+                   (let [reader (js/FileReader.)]
+                     (-> reader
+                         .-onload
+                         (set! (fn []
+                                 (->> reader
+                                      .-result
+                                      js/Buffer.
+                                      (fs/save-binary path))
+                                 ;; Might need this - no idea what it does.
+                                 ;;   deferred.resolve();
+                                 )))
+                     (.readAsArrayBuffer reader blob))))
+        (.toDataURL canvas)))))
 

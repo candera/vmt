@@ -199,6 +199,19 @@
 (def vu-id (buf/spec :name buf/uint32
                      :creator buf/uint32))
 
+(defn campaign-time->long
+  "Converts a campaign time map to a long."
+  [{:keys [day hour minute second millisecond] :as t}]
+  (-> day
+      (* 24)
+      (+ hour)
+      (* 60)
+      (+ minute)
+      (* 60)
+      (+ second)
+      (* 1000)
+      (+ millisecond)))
+
 (def campaign-time
   (reify
     octet.spec/ISpecSize
@@ -220,16 +233,8 @@
             :second s
             :millisecond ms})]))
 
-    (write [_ buff pos {:keys [day hour minute second millisecond]}]
-      (buf/write! buff buf/int32 (-> day
-                                     (* 24)
-                                     (+ hour)
-                                     (* 60)
-                                     (+ minute)
-                                     (* 60)
-                                     (+ second)
-                                     (* 1000)
-                                     (+ millisecond))))))
+    (write [_ buff pos t]
+      (buf/write! buff buf/int32 (campaign-time->long t)))))
 
 ;; Ref: f4vu.h
 (def vector3
@@ -1499,29 +1504,107 @@
 
       c/ATO_OTHER)))
 
+(defn team-number
+  "Returns the team number given a team or team number."
+  [team-or-number]
+  (cond
+    (nil? team-or-number)
+    0
+
+    (number? team-or-number)
+    team-or-number
+
+    :else
+    (-> team-or-number :team :who)))
+
 (defn team-name
-  "Given a team's number, return its name, e.g. 'DPRK'."
-  [mission team-number]
-  (-> mission :teams (nth team-number) :team :name))
+  "Given a team, return its name, e.g. 'DPRK'."
+  [mission team]
+  (-> mission :teams (nth (team-number team)) :team :name))
 
-(defn package-name
-  "Given a package ID, return its string name, e.g. Package 12345."
-  [mission package-id]
-   (let [packages (->> mission
-                      :units
-                      (util/filter= :type :package))]
-    (->> package-id
-         (unit-lookup-by-id packages)
-         :name-id
-         str)))
+(defn team-flag
+  "Returns an image descriptor for the flag of `team`. `flag-type` can
+  be one of `:big-vert-dark`, `:big-vert`, `:big-horiz`, and
+  `:small-horiz`."
+  [mission team flag-type]
+  (let [icon-index (get-in c/FlagImageID [(team-number team) flag-type])
+        image-id (get-in mission [:image-ids :id->name icon-index])]
+    (im/make-descriptor mission
+                        "resource/main"
+                        image-id)))
 
-(defn squadron-airbase
-  "Returns the airbase objective for the given squadron."
-  [mission squadron]
-  (let [squadron-id (-> squadron :id :name)
-        unit (->> mission :units (util/filter= :camp-id squadron-id) util/only)
-        airbase-id (:airbase-id unit)]
-    (->> mission :objectives (util/filter= :id airbase-id) util/only)))
+
+;; We've got a terminology problem here. A team is both a structure
+;; and a team number. Need terms that refer to them separately.
+;; Probably should also ditch "side" for "alliance"
+
+(defn side
+  "Returns the side number given a team. Team indicates the individual
+  combatant, side denots the alliance."
+  [mission team]
+  (-> mission :teams (nth (team-number team)) :team :c-team))
+
+(defn team-priority
+  "Returns a sort priority for `team` relative to `who` - allies
+  first, then enemies, then neutrals."
+  [mission who team]
+  (let [stance (-> mission :teams (nth who) :team :stance (nth (team-number team)))]
+    ({c/Allied   0
+      c/Friendly 1
+      c/War      2
+      c/Hostile  3
+      c/Neutral  4}
+     stance
+     5)))
+
+(defn teams
+  "Returns a seq of the teams."
+  [mission]
+  (let [active-teams (->> mission
+                          :teams
+                          (remove #(-> % :team :flags (bit-and c/TEAM_ACTIVE) zero?)))
+        first-team-num (->> active-teams first :team :who)]
+    (sort-by #(team-priority mission first-team-num (-> % :team :who)) active-teams)))
+
+(defn last-player-team
+  "Returns the team with the most-recently player-played mission."
+  [mission]
+  (->> mission
+       teams
+       (sort-by #(-> % :team :last-player-mission campaign-time->long -))
+       first))
+
+(defn sides
+  "Returns a seq of team numbers representing the sides."
+  [mission]
+  (->> mission
+       teams
+       (map :team)
+       (map :c-team)
+       distinct))
+
+(defn teams-for-side
+  "Returns a set of the team numbers for a given side."
+  [mission side]
+  (->> mission
+       teams
+       (filter #(-> % :team :c-team (= side)))
+       (map team-number)
+       set))
+
+;; These are abstract, not particular RGB colors
+(defn team-color
+  "Returns the abstract color corresponding to `team-or-number`."
+  [team]
+  (nth [:white
+        :green
+        :blue
+        :brown
+        :orange
+        :yellow
+        :red
+        :grey]
+       (team-number team)))
 
 ;; Note that the below will also return carriers, which might be what
 ;; we want, but might not be. Carrier airbases have subtype 7 and
@@ -1546,32 +1629,26 @@
          :objectives
          (filterv (fn [objective]
                     (airbase-classes (- (:entity-type objective) 100)))))))
-(defn side
-  "Returns the side given a team. Team indicates the individual
-  combatant, side denots the alliance."
-  [mission team]
-  (-> mission :teams (nth team) :team :c-team))
 
-(defn sides
-  "Returns a seq of sides."
-  [mission]
-  (->> mission
-       :teams
-       (drop 1)
-       (map :team)
-       (map :c-team)
-       distinct))
+(defn package-name
+  "Given a package ID, return its string name, e.g. Package 12345."
+  [mission package-id]
+   (let [packages (->> mission
+                      :units
+                      (util/filter= :type :package))]
+    (->> package-id
+         (unit-lookup-by-id packages)
+         :name-id
+         str)))
 
-;; These are abstract, not particular RGB colors
-(def team-color
-  {0 :white
-   1 :green
-   2 :blue
-   3 :brown
-   4 :orange
-   5 :yellow
-   6 :red
-   7 :grey})
+(defn squadron-airbase
+  "Returns the airbase objective for the given squadron."
+  [mission squadron]
+  (let [squadron-id (-> squadron :id :name)
+        unit (->> mission :units (util/filter= :camp-id squadron-id) util/only)
+        airbase-id (:airbase-id unit)]
+    (->> mission :objectives (util/filter= :id airbase-id) util/only)))
+
 
 (defn squadron-aircraft
   "Returns a map of `:airframe` and `:quantity` for a squadron."
