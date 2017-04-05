@@ -291,6 +291,8 @@
 
 ;; Records the mouse location in weatherspace
 (defc mouse-location nil)
+;; Records raw mouse position in pixelspace
+(defc mouse-raw-offset [0 0])
 
 (defc prevent-recomputation? false)
 
@@ -1494,10 +1496,13 @@
           :stroke "black"
           :stroke-width 0.03
           :fill "black"
-          (svg/tspan (cell= (some->>
-                             mouse-location
-                             (coords/weather->bullseye mission)
-                             format-bullseye))))]
+          (svg/tspan (cell= (str (some->>
+                                  mouse-location
+                                  (coords/weather->bullseye mission)
+                                  format-bullseye)
+                                 ;; Debug mouse position
+                                 ;; "(" (first mouse-raw-offset) ", " (second mouse-raw-offset) ")"
+                                 ))))]
       (svg/g
        :debug "bullseye-info-box"
        :toggle (-> mouse-location some? cell=)
@@ -2082,8 +2087,8 @@
         browser-zoom   (.-devicePixelRatio js/window)
         [nx ny]        (:cell-count @weather-params)
         [width height] @map-size]
-    [(-> dx (* nx) (/ browser-zoom) (/ width)  (/ zoom))
-     (-> dy (* ny) (/ browser-zoom) (/ height) (/ zoom))]))
+    [(-> dx (* nx) #_(/ browser-zoom) (/ width)  (/ zoom))
+     (-> dy (* ny) #_(/ browser-zoom) (/ height) (/ zoom))]))
 
 (defelem grid
   [{:keys [display-params
@@ -2107,8 +2112,8 @@
                                 (swap! drag-handler #(or % h)))
         doc-move              (fn [e]
                                 (if-let [h @drag-handler]
-                                  (let [x              (.-screenX e)
-                                        y              (.-screenY e)
+                                  (let [x              (.-offsetX e)
+                                        y              (.-offsetY e)
                                         [sx sy]        @drag-start
                                         dx             (- x sx)
                                         dy             (- y sy)]
@@ -2116,8 +2121,8 @@
                                     (.preventDefault e))))
         doc-up                (fn doc-up [e]
                                 (when-let [h @drag-handler]
-                                  (let [x (.-screenX e)
-                                        y (.-screenY e)
+                                  (let [x (.-offsetX e)
+                                        y (.-offsetY e)
                                         [sx sy] @drag-start
                                         dx (- x sx)
                                         dy (- y sy)]
@@ -2205,17 +2210,19 @@
                                   :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
                                          "xmlns"       "http://www.w3.org/2000/svg"})))
                      :mousemove (fn [e]
-                                  (reset! mouse-location
-                                          (let [[x y] (mouse-weather-coords e)]
-                                            (when (and (<= 0 x nx)
-                                                       (<= 0 y ny))
-                                              {:x x :y y}))))
+                                  (dosync
+                                   (reset! mouse-raw-offset [(.-offsetX e) (.-offsetY e)])
+                                   (reset! mouse-location
+                                           (let [[x y] (mouse-weather-coords e)]
+                                             (when (and (<= 0 x nx)
+                                                        (<= 0 y ny))
+                                               {:x x :y y})))))
                      :mouseleave (fn [_]
                                    (dosync
                                     (reset! hover-cell nil)))
                      :mousedown (fn [e]
                                   (.log js/console e)
-                                  (reset! drag-start [(.-screenX e) (.-screenY e)])
+                                  (reset! drag-start [(.-offsetX e) (.-offsetY e)])
                                   (when-not @drag-handler
                                     (let [{px0 :x py0 :y} @map-pan]
                                       ;; We have to handle drag coordinates
@@ -2227,11 +2234,12 @@
                                       ;; region.
                                       (register-drag-handler
                                        (fn [[dx dy] final?]
-                                         (reset! map-pan (limit-pan
-                                                          (:cell-count @weather-params)
-                                                          @map-zoom
-                                                          {:x (- px0 dx)
-                                                           :y (- py0 dy)})))))))
+                                         (let [browser-zoom (.-devicePixelRatio js/window)]
+                                           (reset! map-pan (limit-pan
+                                                            (:cell-count @weather-params)
+                                                            @map-zoom
+                                                            {:x (- px0 dx)
+                                                             :y (- py0 dy)}))))))))
                      ;; Overriding dragstart stops Firefox from trying
                      ;; to drag and drop SVG as images, which would
                      ;; interfere with our drag/resize functionality.
@@ -2273,8 +2281,8 @@
                               ;; TODO: Need to figure out how to deal with browser zoom
                               px1            (- mx (/ (- mx px0) dz))
                               py1            (- my (/ (- my py0) dz))
-                              px             (-> px1 (- px0) (/ browser-zoom) (+ px0))
-                              py             (-> py1 (- py0) (/ browser-zoom) (+ py0))]
+                              px             (-> px1 (- px0) #_(/ browser-zoom) (+ px0))
+                              py             (-> py1 (- py0) #_(/ browser-zoom) (+ py0))]
                           (dosync
                            (reset! map-zoom z')
                            (reset! map-pan (limit-pan [nx ny] z' {:x px :y py}))))))
