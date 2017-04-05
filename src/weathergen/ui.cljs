@@ -1133,17 +1133,6 @@
            [width height] @map-size]
        [(-> ox (* nx) (/ width)  (/ zoom) (/ browser-zoom) (+ x))
         (-> oy (* ny) (/ height) (/ zoom) (/ browser-zoom) (+ y))])
-     #_(let [px             (.-pageX e)
-             py             (.-pageY e)
-             offset         (-> "#grid" js/$ .offset)
-             top            (.-top offset)
-             left           (.-left offset)
-             x              (- px left)
-             y              (- py top)
-             [nx ny]        (:cell-count @weather-params)
-             [width height] (:dimensions @display-params)]
-         [(-> x (* nx) (/ width))
-          (-> y (* ny) (/ height))])
      (catch :default err
        (log/error err "mouse-weather-coords error" :e e)))))
 
@@ -1493,37 +1482,42 @@
        (wind/barb speed)))))
 
 (def bullseye-info-box
-  (with-bbox :x x :y y :w w :h h :watch mouse-location
-    [t (svg/text
-        :x 0
-        :y 0
-        :font-size "3.5%"
-        :font-family "Source Code Pro"
-        :font-weight 100
-        :stroke "black"
-        :stroke-width 0.03
-        :fill "black"
-        (svg/tspan (cell= (some->>
-                           mouse-location
-                           (coords/weather->bullseye mission)
-                           format-bullseye))))]
-    (svg/g
-     :debug "bullseye-info-box"
-     :toggle (-> mouse-location some? cell=)
-     :svg/transform (cell= (gstring/format "translate(%f, %f)"
-                                           (-> mouse-location :x (+ (/ 1.0 map-zoom)))
-                                           (-> mouse-location :y (+ (/ 1.0 map-zoom)))))
-     (svg/g
-      :svg/transform (cell= (gstring/format "scale(%f)"
-                                            (/ 1.0 map-zoom)))
-      (svg/rect
-       :x (cell= (* w -0.05))
-       :y (cell= (- (* 0.8 h)))
-       :width (cell= (* w 1.1))
-       :height h
-       :fill "white"
-       :opacity 0.8)
-      t))))
+  (let [watched (formula-of [mouse-location map-zoom]
+                  [mouse-location map-zoom])]
+    (with-bbox :x x :y y :w w :h h :watch watched
+      [t (svg/text
+          :x 0
+          :y 0
+          :font-size "3.5%"
+          :font-family "Source Code Pro"
+          :font-weight 100
+          :stroke "black"
+          :stroke-width 0.03
+          :fill "black"
+          (svg/tspan (cell= (some->>
+                             mouse-location
+                             (coords/weather->bullseye mission)
+                             format-bullseye))))]
+      (svg/g
+       :debug "bullseye-info-box"
+       :toggle (-> mouse-location some? cell=)
+       :svg/transform (formula-of [mouse-location map-zoom map-size]
+                        (let [{:keys [x y]}  mouse-location
+                              [width height] map-size]
+                          (gstring/format "translate(%f, %f)"
+                                          (-> x (+ (/ (/ 1000.0 width)  map-zoom)))
+                                          (-> y (+ (/ (/ 1250.0 height) map-zoom))))))
+       (svg/g
+        :svg/transform (cell= (gstring/format "scale(%f)"
+                                              (/ 1.0 map-zoom)))
+        (svg/rect
+         :x (cell= (* w -0.05))
+         :y (cell= (- (* 0.8 h)))
+         :width (cell= (* w 1.1))
+         :height h
+         :fill "white"
+         :opacity 0.8)
+        t)))))
 
 (defn info-overlay
   [hover-cell weather-data pressure-unit nx ny cloud-params]
