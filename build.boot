@@ -7,7 +7,7 @@
                  [adzerk/boot-reload        "0.5.0"]
                  ;; [adzerk/boot-cljs-repl     "0.3.3"]
                  ;;[hoplon/javelin "3.9.0"]
-                 [hoplon/hoplon             "6.0.0-alpha17"]
+                 [hoplon/hoplon             "7.0.0-SNAPSHOT"]
                  [org.clojure/core.async    "0.2.395"
                   :exclusions [org.clojure/tools.reader]]
                  [tailrecursion/boot-jetty  "0.1.3"]
