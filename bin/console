@@ -3,9 +3,15 @@
 background 000033
 title weathergen
 
+cat > /tmp/boot-dev <<EOF
+. ~/.bashrc
+boot repl-server dev
+EOF
+
+
 # Sets up a tmux window
 
-tmux new-session -s wgen   -n repl -d 'bash -i'
+tmux new-session -s wgen   -n repl -d 'bash --rcfile /tmp/boot-dev'
 tmux new-window  -t wgen:1 -n tags    'bash -i -c "watch-clojure-tags src dev"'
 tmux new-window  -t wgen:2 -n electron 'bash -i -c "electron target/"'
 
