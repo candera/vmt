@@ -1560,10 +1560,21 @@
 (defn teams
   "Returns a seq of the teams."
   [mission]
-  (let [active-teams (->> mission
-                          :teams
-                          (remove #(-> % :team :flags (bit-and c/TEAM_ACTIVE) zero?)))
-        first-team-num (->> active-teams first :team :who)]
+  (let [teams-with-units      (->> mission
+                                   :units
+                                   (map :owner)
+                                   distinct
+                                   set)
+        teams-with-objectives (->> mission
+                                   :objectives
+                                   (map :owner)
+                                   distinct
+                                   set)
+        active-team-nums      (into teams-with-units teams-with-objectives)
+        active-teams          (->> mission
+                                   :teams
+                                   (filter #(-> % team-number active-team-nums)))
+        first-team-num        (->> active-teams first :team :who)]
     (sort-by #(team-priority mission first-team-num (-> % :team :who)) active-teams)))
 
 (defn last-player-team
