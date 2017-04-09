@@ -106,7 +106,8 @@
           :css (formula-of [team]
                  {:margin-right "3px"
                   :padding      "3px"
-                  :border       (str "2px solid " (team-color team :dark-text))})
+                  :border       (str "2px solid " (team-color team :dark-text))
+                  :text-align   "center"})
           (img :css {:border "solid 1px black"}
                :src (formula-of [mission team]
                       (comm/get-image
