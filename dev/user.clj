@@ -149,6 +149,14 @@
   (delay
    (log/debug "Reading ITO...")
    (let [mission (mission/read-mission
-                  "/Users/candera/falcon/4.33.3/Data/Add-On Israel/campaign/save0.cam")]
+                  "/Users/candera/falcon/4.33.3/Data/Add-On Israel/campaign/Solid Truss Start.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+(def balkans
+  (delay
+   (log/debug "Reading Balkans...")
+   (let [mission (mission/read-mission
+                  "/Users/candera/falcon/4.33.3/Data/Add-On Balkans/Campaign/Powder Keg Start.cam")]
      (log/debug "Done reading.")
      mission)))

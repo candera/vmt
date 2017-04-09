@@ -1,7 +1,5 @@
 (ns weathergen.ui
-  (:require [cljsjs.jquery.minicolors]
-            [cljsjs.jszip]
-            [cljsjs.filesaverjs]
+  (:require [cljsjs.filesaverjs]
             [cljsjs.select2]
             [clojure.data]
             [clojure.set :as set]
@@ -4077,7 +4075,14 @@
    (title "WeatherGen")
    ;; (link :href "lib/slickgrid/slick.grid.css" :rel "stylesheet" :title "main" :type "text/css")
    ;; (link :href "lib/slickgrid/slick-default-theme.css" :rel "stylesheet" :title "main" :type "text/css")
-   (link :href "jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
+
+   ;; It would be great to use ClojureScript's inclusion mechanism,
+   ;; but something about the combination of that, Boot, and who knows
+   ;; what else makes it not work with source maps, which are too
+   ;; important to give up. So I hacked it this way. Maybe some day
+   ;; I'll figure out how to fix this.
+   (link :href "lib/jquery-minicolors/jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
+   (script :href "lib/jquery-minicolors/jquery.minicolors.min.js" :type "text/javascript")
    (link :href "select2.css" :rel "stylesheet" :type "text/css")
    (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "fonts/open-sans-condensed/open-sans-condensed.css"

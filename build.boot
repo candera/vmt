@@ -66,7 +66,7 @@
 
 (deftask dev
   "Build and serve WeatherGen for local development."
-  []
+  [s source-maps bool "Enable source maps"]
   (comp
    (repl-server)
    (watch)
@@ -87,13 +87,7 @@
                             :parallel-build false
                             ;;:externs ["js/slickgrid/slickgrid.ext.js"]
                             }
-         ;; For some reason this results in the following error:
-         ;;
-         ;; adzerk.boot_cljs.util.proxy$clojure.lang.ExceptionInfo$ff19274a:
-         ;; /Users/candera/.boot/cache/tmp1mgm/uanrg/cljsjs/development/jszip.inc.js
-         ;; is not a relative path
-         ;;:source-map true #_"index.html.js.map"
-         :source-map false)
+         :source-map source-maps)
    (cljs :ids #{"main"}
          ;; :optimizations :simple
          :compiler-options {:asset-path "target/main.out"

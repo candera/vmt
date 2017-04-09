@@ -2366,3 +2366,14 @@ type: 0x64 -> image
      mission/teams
      (map :team)
      (map :name))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(->> @ito :teams (map #(-> % :team (select-keys [:name :who :flags]))))
+
+(->> @balkans :teams (map #(-> % :team (select-keys [:name :who :flags]))))
+
+
+(->> @balkans :teams (map #(-> % :team (select-keys [:name :who :flags]))))
+
+(->> @smpu :objectives (map :owner) distinct)
