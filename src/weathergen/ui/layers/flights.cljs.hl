@@ -81,7 +81,26 @@
      :else
      (vector
       (fieldset
-       (legend "Show flights for")
+       :css {:margin-bottom "3px"}
+       (legend "Mission Key")
+       (div
+        :css {:display   "flex"
+              :flex-wrap "wrap"
+              :max-width "400px"}
+        (for [[id name] mission-category-names]
+          (div
+           :css {:white-space "nowrap"}
+           (inl
+            :css {:margin-right "3px"}
+            :click (constantly false)
+            (comm/color-picker
+             :value (formula-of [mission-category-colors] (mission-category-colors id))
+             :change #(swap! mission-category-colors assoc id @%)))
+           (inl :css {:width "70px"} name))))
+       (button :click #(reset! mission-category-colors default-mission-category-colors)
+               "Reset to defaults"))
+      (div
+       :css {:margin-bottom "5px"}
        (for-tpl [team (cell= (mission/teams mission))]
          (inl
           :css (formula-of [team]
@@ -106,25 +125,6 @@
                     :type "checkbox"
                     :value val
                     :change #(swap! selected-teams (if @val disj conj) (mission/team-number @team))))))))
-      (fieldset
-       :css {:margin-bottom "3px"}
-       (legend "Mission Key")
-       (div
-        :css {:display   "flex"
-              :flex-wrap "wrap"
-              :max-width "400px"}
-        (for [[id name] mission-category-names]
-          (div
-           :css {:white-space "nowrap"}
-           (inl
-            :css {:margin-right "3px"}
-            :click (constantly false)
-            (comm/color-picker
-             :value (formula-of [mission-category-colors] (mission-category-colors id))
-             :change #(swap! mission-category-colors assoc id @%)))
-           (inl :css {:width "70px"} name))))
-       (button :click #(reset! mission-category-colors default-mission-category-colors)
-               "Reset to defaults"))
       (grids/table-grid
        :data (formula-of [mission all-flights selected-teams]
                (->> all-flights
@@ -195,7 +195,7 @@
                           (->> flight
                                :package
                                (mission/package-name mission))))
-                   ;; Not enough space for these
+                   ;; Not enough space for these. Maybe some sort of dropdown?
                    ;; {:title "Squadron"
                    ;;  :formatter (constantly "TODO")}
                    ;; {:title "Airbase"
@@ -218,8 +218,6 @@
                                                                           (row-color rownum))]
                                            {:background contrast
                                             :color      color}))})}
-                   #_(col "Mission"
-                          (mission/flight-mission-name mission flight))
                    (col "T/O"
                         (fn [_ flight]
                           (->> flight :waypoints first :depart format-time)))
@@ -370,17 +368,21 @@
                          t)))))))))))))))
 
 (defn overlay
-  [{:keys [checked-flights highlighted-flight mission] :as state}]
-  (svg/g
-   :section "flights-overlay"
-   (svg/g
-    :section "checked-flight-paths"
-    (for-tpl [flight (cell= (disj checked-flights highlighted-flight))]
-      (flight-path-overlay flight state))
-    (when-tpl highlighted-flight
-      (svg/g
-       :section "highlighted-flight-path"
-       (flight-path-overlay highlighted-flight state))))))
+  [{:keys [checked-flights highlighted-flight mission selected-teams] :as state}]
+  (let [displayed-flights (formula-of [checked-flights highlighted-flight mission selected-teams]
+                            (->> checked-flights
+                                 (filter #(selected-teams (:owner %)))
+                                 set))]
+    (svg/g
+     :section "flights-overlay"
+     (svg/g
+      :section "checked-flight-paths"
+      (for-tpl [flight (cell= (disj displayed-flights highlighted-flight))]
+        (flight-path-overlay flight state))
+      (when-tpl highlighted-flight
+        (svg/g
+         :section "highlighted-flight-path"
+         (flight-path-overlay highlighted-flight state)))))))
 
 (defn create
   [mission map-zoom]
