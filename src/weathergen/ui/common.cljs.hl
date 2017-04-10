@@ -251,7 +251,8 @@
       (add-watch (:value attrs)
                  (-> (gensym) str keyword)
                  (fn [_ _ _ n]
-                   (-> i js/jQuery (.minicolors "value" (to-hex-str n)))))
+                   (when n
+                     (-> i js/jQuery (.minicolors "value" (to-hex-str n))))))
       (when-dom i
         #(-> i js/jQuery (.minicolors #js {"theme" "weathergen"
                                            "show" (fn []
