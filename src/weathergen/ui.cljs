@@ -55,6 +55,7 @@
             [weathergen.ui.grids :as grids]
             [weathergen.ui.layers.flights]
             [weathergen.ui.trees :as trees]
+            [weathergen.ui.tabs :as tabs]
             [weathergen.util :as util]
             ;;[weathergen.ui.slickgrid :as slickgrid]
             [weathergen.wind :as wind]
@@ -3617,7 +3618,18 @@
   [{:keys []}]
   (control-section
    :title "Test"
-   (let [color (cell (comm/to-hex-str "blue"))]
+   (tabs/tabs
+    :selected (cell :one)
+    :tabs [{:title "One"
+            :id :one
+            :ui (div "This is one")}
+           {:title "Two"
+            :id :two
+            :ui (div "This is two")}
+           {:title "Three"
+            :id :three
+            :ui (div "This is three")}])
+   #_(let [color (cell (comm/to-hex-str "blue"))]
      (vector
       (inl
        (comm/color-picker
@@ -4082,7 +4094,7 @@
    ;; important to give up. So I hacked it this way. Maybe some day
    ;; I'll figure out how to fix this.
    (link :href "lib/jquery-minicolors/jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
-   (script :href "lib/jquery-minicolors/jquery.minicolors.min.js" :type "text/javascript")
+   (script :src "lib/jquery-minicolors/jquery.minicolors.min.js" :type "text/javascript")
    (link :href "select2.css" :rel "stylesheet" :type "text/css")
    (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "fonts/open-sans-condensed/open-sans-condensed.css"
@@ -4172,7 +4184,7 @@
            "×")))))
     contents)))
 
-(def sections
+(def section-ctor
   {:serialization-controls serialization-controls
    :step-controls step-controls
    :display-controls display-controls
@@ -4190,28 +4202,32 @@
    :test-section test-section})
 
 (defn weather-page
-  [& section-infos]
+  "Emits an app page. `section-infos` is a seq of maps, one for each
+  tab, with keys `:title`, `:id`, and `:sections`. The sections are a
+  seq of keys into `section-ctor` and the parameters for that
+  section."
+  [section-infos]
   (html
    (head)
    (body
-    (let [right-width 575               ; Min width of controls column
-          portrait? (formula-of
-                      [map-size window-size]
-                      (let [[grid-width grid-height] map-size
-                            [window-width window-height] window-size]
-                        (< window-width (+ grid-width right-width -10))))]
+    (let [right-width 575 ; Min width of controls column
+          portrait?   (formula-of
+                        [map-size window-size]
+                        (let [[grid-width grid-height]     map-size
+                              [window-width window-height] window-size]
+                          (< window-width (+ grid-width right-width -10))))]
       (div
        :css (formula-of
-              {portrait? portrait?
+              {portrait?                    portrait?
                [window-width window-height] window-size}
-              {:display "flex"
+              {:display        "flex"
                :flex-direction (if portrait? "column" "row")
                ;; These next plus the overflow/height in the columns are
                ;; what let the two sides scroll separately
-               :overflow (if portrait? "show" "hidden")
-               :height (if portrait?
-                         "100%"
-                         (str (- window-height 90) "px"))})
+               :overflow       (if portrait? "show" "hidden")
+               :height         (if portrait?
+                                 "100%"
+                                 (str (- window-height 90) "px"))})
        (div
         :class "left-column"
         :css (formula-of
@@ -4219,7 +4235,7 @@
                (if portrait?
                  {}
                  {:overflow "auto"
-                  :height "auto"}))
+                  :height   "auto"}))
         (button-bar)
         (grid :display-params display-params
               :weather-data weather-data
@@ -4236,22 +4252,27 @@
         :class "right-column"
         :css (formula-of
                [portrait?]
-               (merge {:display "block"
+               (merge {:display       "block"
                        :align-content "flex-start"
-                       :flex-wrap "wrap"
-                       :flex-grow 1
-                       :min-width (str (- right-width 20) "px")
+                       :flex-wrap     "wrap"
+                       :flex-grow     1
+                       :min-width     (str (- right-width 20) "px")
                        ;;  This one weird trick keeps the column from expanding
                        ;;  past where it should. Yay CSS.
-                       :width 0}
+                       :width         0}
                       (when-not portrait?
                         {:overflow "auto"
-                         :height "auto"})))
-        (for [[section opts] (partition 2 section-infos)
-              :let [ctor (sections section)]]
-          (with-time
-            (str "Rendering " section)
-            (ctor opts))))))
+                         :height   "auto"})))
+        (tabs/tabs
+         :selected (cell (-> section-infos first :id))
+         :tabs (for [{:keys [title id sections]} section-infos]
+                 {:title title
+                  :id    id
+                  :ui    (for [[section opts] (partition 2 sections)
+                               :let           [ctor (section-ctor section)]]
+                           (with-time
+                             (str "Rendering " section)
+                             (ctor opts)))})))))
     (debug-info))))
 
 #_(with-init!

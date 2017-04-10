@@ -20,18 +20,24 @@
          recommended."]))
 
 (ui/weather-page
- :serialization-controls {}
- :air-forces-section {}
- ;;:oob-section {}
- :flights-section {}
- :step-controls {:mode :edit}
- :display-controls {}
- :weather-parameters {}
- :forecast-section {:forecast-link? true}
- ;;:flightpath-controls {}
- :weather-type-configuration {}
- :cloud-controls {}
- :wind-stability-parameters {}
- :weather-override-parameters {}
- :advanced-controls {}
- :test-section {})
+ [{:title    "Air Picture"
+   :id       :air-picture
+   :sections [:air-forces-section {}
+              ;;:oob-section {}
+              :flights-section {}]}
+  {:title    "Weather"
+   :id       :weather
+   :sections [:serialization-controls {}
+              :step-controls {:mode :edit}
+              :display-controls {}
+              :weather-parameters {}
+              :forecast-section {:forecast-link? true}
+              ;;:flightpath-controls {}
+              :weather-type-configuration {}
+              :cloud-controls {}
+              :wind-stability-parameters {}
+              :weather-override-parameters {}
+              :advanced-controls {}]}
+  {:title    "Test and Debug"
+   :id       :test
+   :sections [:test-section {}]}])
