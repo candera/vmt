@@ -1,0 +1,66 @@
+(ns weathergen.ui.buttons
+  "A library of button controls."
+  (:require [weathergen.ui.common :as comm]
+            [taoensso.timbre :as log
+             :refer-macros (log trace debug info warn error fatal report
+                                logf tracef debugf infof warnf errorf fatalf reportf
+                                spy get-env log-env)])
+  (:require-macros
+   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
+
+(defn image-button-style
+  [pressed?]
+  {:border-style (if pressed? "inset" "outset")
+   :border-color "#ddd"
+   :border-radius "6px"
+   :padding "2px"
+   ;; :width "16px"
+   ;; :height "16px"
+   :background (if pressed? "lightgrey" "white")
+   :border-width "2px"
+   :vertical-align "middle"})
+
+(defelem image-button
+  [attrs]
+  (let [down (cell false)
+        css (:css attrs)
+        attrs (dissoc attrs :css)]
+    (img
+     :css (formula-of
+            [down]
+            (merge (image-button-style down)
+                   css))
+     :mousedown (fn [e]
+                  (let [up (fn up-fn [e]
+                             (.removeEventListener js/document "mouseup" up-fn)
+                             (reset! down false))]
+                    (.addEventListener js/document "mouseup" up))
+                  (reset! down true))
+     ;; Overriding dragstart stops the browser from trying
+     ;; to drag and drop SVG as images, which would
+     ;; interfere with our functionality.
+     :dragstart (constantly false)
+     attrs)))
+
+(comm/register-class!
+ ::div-button
+ [{:border-width    "0.5px"
+   :border-style    "solid"
+   :border-color    "#d0d0d0"
+   :background      "linear-gradient(white, white 75%, #ededed 100%)"
+   :font-family     "Lucida Grande, Lucida Sans Unicode, Tahoma, sans-serif"
+   :font-size       "72%"
+   :margin          "2px"
+   :padding         "3px"
+   :border-radius   "4px"
+   :text-decoration "none"
+   :color           "black"}
+  [:&:active
+   {:background "linear-gradient(#c0c0c0, #f0f0f0)"}]])
+
+(defelem a-button
+  "Renders a plain button, but using an anchor tag to better enable styling."
+  [attrs content]
+  (a (merge {:class (comm/class-for ::div-button)}
+            attrs)
+     content))

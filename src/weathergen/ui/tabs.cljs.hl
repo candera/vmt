@@ -1,0 +1,45 @@
+(ns weathergen.ui.tabs
+  "Homegrown tab controls."
+  (:require [weathergen.ui.common :as comm :refer [inl]])
+  (:require-macros
+   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
+
+(defelem tabs
+  "Renders a tab control. `selected` is a cell containing the ID of
+  the currently selected tab. `tabs` is a vector maps describing the
+  tabs.
+
+  Keys include:
+
+  `:id` - Unique ID for the tab.
+  `:title` - Title for the tab.
+  `:ui` - Content for the tab.
+  "
+  [attrs _]
+  (let [{:keys [selected tabs]} attrs]
+    (div
+     (div
+      :css {:margin-bottom "7px"
+            :border-bottom "1px solid lightgray"}
+      (for [{:keys [title id]} tabs]
+        (inl
+         :click #(reset! selected id)
+         :css (formula-of [selected]
+                {:background (when (= selected id) "black")
+                 :color      (if (= selected id)
+                               "white"
+                               "#737373")
+                 :font-size  "120%"
+                 :padding    (if (= selected id)
+                               "0 10px"
+                               0)
+                 :margin     (if (= selected id)
+                               0
+                               "0 10px")
+                 :cursor     "pointer"})
+         title)))
+     (for [{:keys [id ui]} tabs]
+       (div
+        :css {:padding "0 3px"}
+        :toggle (cell= (= id selected))
+        ui)))))
