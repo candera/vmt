@@ -13,6 +13,7 @@
             [weathergen.falcon.constants :as c]
             [weathergen.falcon.files.images :as im]
             [weathergen.falcon.files.mission :as mission]
+            [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [colors control-section format-time inl pre-cell styled team-color]]
             [weathergen.ui.grids :as grids]
             [weathergen.util :as util])
@@ -97,8 +98,9 @@
              :value (formula-of [mission-category-colors] (mission-category-colors id))
              :change #(swap! mission-category-colors assoc id @%)))
            (inl :css {:width "70px"} name))))
-       (button :click #(reset! mission-category-colors default-mission-category-colors)
-               "Reset to defaults"))
+       (buttons/a-button
+        :click #(reset! mission-category-colors default-mission-category-colors)
+        "Reset to defaults"))
       (div
        :css {:margin-bottom "5px"}
        (for-tpl [team (cell= (mission/teams mission))]
@@ -178,7 +180,7 @@
                                                                          flight
                                                                          mission-category-colors)))
                                         :change #(swap! display assoc-in [@camp-id :color] @%)))
-                                      (comm/image-button
+                                      (buttons/image-button
                                        :src "images/ellipsis.svg"
                                        :width "12px"
                                        :height "12px"

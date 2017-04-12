@@ -36,25 +36,6 @@
          ~@body))
       ~@cells)))
 
-(defmacro formula-of$
-  "EXPERIMENTAL. May remove.
-
-  Emits a form that will produce a cell using the formula over the
-  specified input cells. Avoids some of the code-walking problems of
-  the Hoplon macros. Binds `cells` in the body to symbols starting
-  with `$`.
-
- E.g.
-  (formula-of [x y z] (+ $x $y $z))"
-  [cells & body]
-  `((javelin.core/formula
-     (fn ~(->> cells
-               (map name)
-               (map #(str "$" %))
-               (mapv symbol))
-       ~@body))
-    ~@cells))
-
 (defmacro defformula
   [name cells & body]
   `(def ~name (formula-of ~cells ~@body)))

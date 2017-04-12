@@ -2,7 +2,9 @@
   "Things used across various UI libraries."
   (:require [cljsjs.tinycolor]
             [clojure.pprint :as pp]
+            [clojure.string :as str]
             [garden.core :refer [css]]
+            [garden.selectors :as css-sel]
             [goog.string :as gstring]
             [goog.string.format]
             [hoplon.svg :as svg]
@@ -14,7 +16,7 @@
             [weathergen.falcon.files.mission :as mission]
             [weathergen.filesystem :as fs])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-bbox with-time formula-of formula-of$]]))
+   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
 
 ;; This is a massive hack, and I have no idea what we're going to do if some other library decides to
 ;; say `module.exports` in its code.
@@ -59,6 +61,17 @@
   [team type]
   (get-in colors [:team type (mission/team-color team)]))
 
+(def class-for
+  "Given a keyword, returns a string safe to use as a css class name."
+  (memoize
+   (fn [kw]
+     (-> kw str (subs 1) (str/replace #"[^a-zA-Z0-9]" "-")))))
+
+(defn class-selector-for
+  "Given a keyword, returns a garden class selector usable with class-for."
+  [kw]
+  (->> kw class-for (str ".") css-sel/selector))
+
 (def registered-styles (atom #{}))
 
 (defn register-styles!
@@ -67,8 +80,26 @@
   (when-not (contains? @registered-styles key)
     (let [head (aget (.getElementsByTagName js/document "head") 0)
           styles (cell= (css garden))]
-      (.appendChild head (style :type "text/css" styles))
-      (swap! registered-styles conj key))))
+      (when-dom head
+        #(do
+           (.log js/console "appending style to head" head)
+           (.appendChild head (style :type "text/css" styles))
+           (.log js/console "appended" key)
+           (swap! registered-styles conj key))))))
+
+(defn register-class!
+  "Adds a style to the head of a document for abstract class `key`.
+  `key` should be a namespaced keyword that can then be used as the
+  `:class` of an element via `class-for`. `garden` is the tail of a
+  garden style statement, i.e. everything except the seelctor.
+
+  Example:
+
+  (register-class!
+    ::foobar
+    [{:background \"blue\"} [:&:hover {:background \"red\"}]])"
+  [key garden]
+  (register-styles! key (into [(class-selector-for key)] garden)))
 
 (defn contrasting
   "Returns a color that contrasts well with the specified color.
@@ -146,11 +177,11 @@
         x           (cell= (* r* alpha))
         y           (cell= (* r* alpha))]
     (svg/path
-     :d (formula-of$ [x y]
+     :d (formula-of [x y]
           (gstring/format "M%f,%f L%f,%f L%f,%f Z"
-                          0 (- $y)
-                          $x $y
-                          (- $x) $y))
+                          0 (- y)
+                          x y
+                          (- x) y))
      attrs)))
 
 (defn pre-cell
@@ -197,40 +228,6 @@
                   day
                   hour
                   minute))
-
-(defn image-button-style
-  [pressed?]
-  {:border-style (if pressed? "inset" "outset")
-   :border-color "#ddd"
-   :border-radius "6px"
-   :padding "2px"
-   ;; :width "16px"
-   ;; :height "16px"
-   :background (if pressed? "lightgrey" "white")
-   :border-width "2px"
-   :vertical-align "middle"})
-
-(defelem image-button
-  [attrs]
-  (let [down (cell false)
-        css (:css attrs)
-        attrs (dissoc attrs :css)]
-    (img
-     :css (formula-of
-            [down]
-            (merge (image-button-style down)
-                   css))
-     :mousedown (fn [e]
-                  (let [up (fn up-fn [e]
-                             (.removeEventListener js/document "mouseup" up-fn)
-                             (reset! down false))]
-                    (.addEventListener js/document "mouseup" up))
-                  (reset! down true))
-     ;; Overriding dragstart stops the browser from trying
-     ;; to drag and drop SVG as images, which would
-     ;; interfere with our functionality.
-     :dragstart (constantly false)
-     attrs)))
 
 (defelem color-picker
   [attrs _]
@@ -332,4 +329,3 @@
                                  )))
                      (.readAsArrayBuffer reader blob))))
         (.toDataURL canvas)))))
-

@@ -11,7 +11,7 @@
             [hoplon.core
              :as h
              :refer [a
-                     br button
+                     br
                      cond-tpl
                      defelem div do!
                      fieldset for-tpl
@@ -47,6 +47,7 @@
             [weathergen.math :as math]
             [weathergen.model :as model]
             [weathergen.twx :as twx]
+            [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [app-dir
                                                    colors control-section
                                                    get-image
@@ -71,7 +72,7 @@
                                 spy get-env log-env)])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-bbox with-time formula-of formula-of$]])
+   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]])
   (:refer-clojure :exclude [load-file]))
 
 ;;; Constants
@@ -321,7 +322,6 @@
 (defc checked-airbases #{})
 
 (defc highlighted-airbase nil)
-
 
 (add-watch mission
            :reset-object-data-on-mission-change
@@ -2866,7 +2866,7 @@
     [["Seed"             [:seed] {:ui (div
                                        :css {:white-space "nowrap"}
                                        (edit-field weather-params [:seed])
-                                       (button
+                                       (buttons/a-button
                                         :css {:width "75px"}
                                         :click #(swap! weather-params
                                                        assoc
@@ -2906,7 +2906,7 @@
            (tr (td "Wind spd/hdg")
                (td (edit-field weather-params [:wind-stability-areas @index :wind :speed]))
                (td (edit-field weather-params [:wind-stability-areas @index :wind :heading])))))
-         (comm/image-button
+         (buttons/image-button
           :src "images/trash.png"
           :width "16px"
           :title "Remove"
@@ -2926,9 +2926,9 @@
           :height "16px"
           :css (formula-of
                 [area]
-                (comm/image-button-style (:editing? area))))
+                (buttons/image-button-style (:editing? area))))
          (hr)))))
-   (button
+   (buttons/a-button
     :click #(swap! weather-params
                    update
                    :wind-stability-areas
@@ -3027,7 +3027,7 @@
                    (td (time-entry weather-params [:weather-overrides @index k]))))
              (checkbox "Exclude from forecast?" :exclude-from-forecast?
                        {:row-attrs {:toggle (cell= (:animate? override))}}))))
-         (comm/image-button
+         (buttons/image-button
           :src "images/trash.png"
           :width "16px"
           :title "Remove"
@@ -3047,8 +3047,8 @@
           :height "16px"
           :css (formula-of
                 {{:keys [editing?]} override}
-                (comm/image-button-style editing?)))))))
-   (button
+                (buttons/image-button-style editing?)))))))
+   (buttons/a-button
     :click #(swap! weather-params
                    (fn [wp]
                      (update wp
@@ -3233,11 +3233,11 @@
    :title (with-help [:clouds :overview] "Clouds and contrails")
    :id (gensym)
    (help-icon [:clouds :buttons])
-   (button
+   (buttons/a-button
     :css {:margin-right "3px"}
     :click #(reset! cloud-params (random-cloud-params))
     "Randomize")
-   (button
+   (buttons/a-button
     :click #(save-twx @cloud-params
                       (:direction @movement-params)
                       (get-in @display-params [:multi-save :mission-name]))
@@ -3363,7 +3363,7 @@
        (tr (td (with-help [:weather-params :time :falcon-time]
                  "Falcon time: "))
            (td (cell= (-> weather-params :time :max format-time)))
-           (td (button
+           (td (buttons/a-button
                 :click #(jump-to-time* (-> @weather-params :time :max))
                 "Jump to")))
        [])
@@ -3374,10 +3374,10 @@
        (tr (td (with-help [:displayed-time]
                  "Time"))
            (td (time-entry time-params [:displayed]))
-           (td (button
+           (td (buttons/a-button
                 :click jump-to-time
                 "Jump to")
-               (button
+               (buttons/a-button
                 :click set-time
                 "Set to"))))
      (tr (map td [(with-help [:step]
@@ -3389,10 +3389,10 @@
                    :update #(swap! movement-params assoc :step %)
                    :placeholder "e.g. 60"
                    :fmt str)]))))
-   (button :title "Step back in time"
-           :click #(move -1)
-           "<< Step Back")
-   (button
+   (buttons/a-button :title "Step back in time"
+                   :click #(move -1)
+                   "<< Step Back")
+   (buttons/a-button
     :title (cell= (if (:looping? movement-params)
                     "Stop weather animation"
                     "Animate weather"))
@@ -3400,28 +3400,29 @@
               (recompute @weather-params))
     (span
      :css (formula-of
-           [movement-params]
-           (if (:looping? movement-params)
-             {:border "5px solid black"
-              :transform ""
-              :display "inline-block"
-              :margin-top "2px"}
-             {:border-left "5px solid transparent"
-              :border-right "5px solid transparent"
-              :border-top "7px solid black"
-              :border-bottom ""
-              :display "inline-block"
-              :transform "rotate(-90deg)"}))
+            [movement-params]
+            (if (:looping? movement-params)
+              {:border "5px solid black"
+               :transform ""
+               :display "inline-block"
+               :margin-top "2px"}
+              {:border-left "5px solid transparent"
+               :border-right "5px solid transparent"
+               :border-top "7px solid black"
+               :border-bottom ""
+               :display "inline-block"
+               :transform "rotate(-90deg)"}))
      ""))
    (formula-of
-    [weather-params]
-    (if (and (-> weather-params :time :max)
-             (<= (-> weather-params :time :max model/falcon-time->minutes)
-                 (-> weather-params :time :current model/falcon-time->minutes)))
-      []
-      (button :title "Step forward in time"
-              :click #(move 1)
-              "Step Forward >>")))))
+     [weather-params]
+     (if (and (-> weather-params :time :max)
+              (<= (-> weather-params :time :max model/falcon-time->minutes)
+                  (-> weather-params :time :current model/falcon-time->minutes)))
+       []
+       (buttons/a-button
+        :title "Step forward in time"
+        :click #(move 1)
+        "Step Forward >>")))))
 
 (defn serialization-controls
   [_]
@@ -3461,13 +3462,12 @@
        #_(help-icon [:display-controls :save-single-file-buttons])
        (div
         :class "button-container"
-        (a :click #(save-fmap @weather-params @weather-data)
-           :class "button"
-           "Save Current as FMAP"))
+        (buttons/a-button
+         :click #(save-fmap @weather-params @weather-data)
+         "Save Current as FMAP"))
        (div
         :class "button-container"
-        (a
-         :class "button"
+        (buttons/a-button
          :click #(save-twx @cloud-params
                            (:direction @movement-params)
                            (get-in @display-params
@@ -3475,17 +3475,16 @@
          "Save .TWX"))
        (div
         :class "button-container"
-        (a
-         :class "button"
+        (buttons/a-button
          :click save-settings
          "Save Settings"))
        (div
         :class "button-container"
-        (a :class "button" :click load-settings "Load Settings"))))
+        (buttons/a-button :click load-settings "Load Settings"))))
      (control-subsection
       :title (with-help [:serialization-controls :multi-save :overview]
                "Save weather package")
-      (let [row (fn [label help-path edit]
+      (let [row (fn [label help-path edit & more]
                   (div
                    :css {:display "flex"
                          :flex-direction "row"
@@ -3496,7 +3495,8 @@
                           :margin-left "3px"}
                     (with-help help-path
                       label))
-                   edit))]
+                   edit
+                   more))]
         [(row "Mission:"
               [:serialization-controls :multi-save :mission-name]
               (let [l (path-lens display-params [:multi-save :mission-name])]
@@ -3518,13 +3518,21 @@
                         ;; relatively-positioned error image in the
                         ;; text box to the left.
                         :z-index 2}
-                  (comm/image-button :src "images/file-open.png"
-                                     :width "14px"
-                                     :title "Load Mission File (.cam/.tac)"
-                                     :click load-mission))]))
+                  (buttons/image-button :src "images/file-open.png"
+                                        :width "14px"
+                                        :title "Load Mission File (.cam/.tac)"
+                                        :click load-mission))]))
          (row "From:"
               [:serialization-controls :multi-save :from]
-              (time-entry display-params [:multi-save :from]))
+              (time-entry display-params [:multi-save :from])
+              (buttons/a-button
+               :css {:margin-left "14px"}
+               :toggle (cell= (some? mission))
+               :click #(swap! display-params
+                              assoc-in
+                              [:multi-save :from]
+                              (mission/mission-time @mission))
+               "Set to mission time"))
          (row "To:"
               [:serialization-controls :multi-save :to]
               (time-entry display-params [:multi-save :to]))
@@ -3538,39 +3546,39 @@
                :placeholder "60"))])
       (let [progress (cell nil)
             cancelling? (cell false)]
-        [(button :css (formula-of
-                        [progress cancelling?]
-                        {:width "105px"
-                         :background
-                         (if (and (not cancelling?) (some? progress))
-                           (let [pct (long (* 100 progress))]
-                             (gstring/format "linear-gradient(to right, lightblue, lightblue %f%%, white %f%%)"
-                                             pct pct))
-                           "white")})
-                 :class "button"
-                 :click (fn []
-                          (if @progress
-                            (dosync
-                             (reset! cancelling? true))
-                            (do
-                              (reset! cancelling? false)
-                              (multi-download {:weather-params @weather-params
-                                               :cloud-params @cloud-params
-                                               :weather-direction (:direction @movement-params)
-                                               :mission-name (get-in @display-params [:multi-save :mission-name])
-                                               :from (get-in @display-params [:multi-save :from])
-                                               :to (get-in @display-params [:multi-save :to])
-                                               :step (get-in @display-params [:multi-save :step])
-                                               :progress progress
-                                               :cancel cancelling?
-                                               :nx (-> @weather-params :cell-count first)
-                                               :ny (-> @weather-params :cell-count second)}))))
-                 (formula-of
-                   [progress cancelling?]
-                   (cond
-                     (and progress cancelling?) "Cancelling..."
-                     progress "Cancel"
-                     :else "Save Package")))])))))
+        [(buttons/a-button
+          :css (formula-of
+                 [progress cancelling?]
+                 {:width "105px"
+                  :background
+                  (if (and (not cancelling?) (some? progress))
+                    (let [pct (long (* 100 progress))]
+                      (gstring/format "linear-gradient(to right, lightblue, lightblue %f%%, white %f%%)"
+                                      pct pct))
+                    "white")})
+          :click (fn []
+                   (if @progress
+                     (dosync
+                      (reset! cancelling? true))
+                     (do
+                       (reset! cancelling? false)
+                       (multi-download {:weather-params @weather-params
+                                        :cloud-params @cloud-params
+                                        :weather-direction (:direction @movement-params)
+                                        :mission-name (get-in @display-params [:multi-save :mission-name])
+                                        :from (get-in @display-params [:multi-save :from])
+                                        :to (get-in @display-params [:multi-save :to])
+                                        :step (get-in @display-params [:multi-save :step])
+                                        :progress progress
+                                        :cancel cancelling?
+                                        :nx (-> @weather-params :cell-count first)
+                                        :ny (-> @weather-params :cell-count second)}))))
+          (formula-of
+            [progress cancelling?]
+            (cond
+              (and progress cancelling?) "Cancelling..."
+              progress "Cancel"
+              :else "Save Package")))])))))
 
 (defn debug-info
   []
@@ -3622,7 +3630,8 @@
     :selected (cell :one)
     :tabs [{:title "One"
             :id :one
-            :ui (div "This is one")}
+            :ui (div "This is one"
+                     (hoplon.core/button "button"))}
            {:title "Two"
             :id :two
             :ui (div "This is two")}
@@ -3779,7 +3788,7 @@
                                               [:label :editing?]
                                               true))
                              label)))
-                        (comm/image-button
+                        (buttons/image-button
                          :css {:width "12px"
                                :height "12px"}
                          :src (formula-of
@@ -3815,14 +3824,14 @@
                       :value (-> path :scale (* 100) long cell=)
                       :change #(swap! path assoc :scale (/ @% 100.0)))))
                 (tr (td
-                     (comm/image-button
+                     (buttons/image-button
                       :src "images/trash.png"
                       :click #(swap! display-params
                                      update
                                      :flight-paths
                                      (fn [paths]
                                        (remove-nth paths index)))))))))))))))
-   (button :click load-dtc "Load DTC")))
+   (buttons/a-button :click load-dtc "Load DTC")))
 
 
 (defelem select2
@@ -3873,10 +3882,12 @@
          :css {:margin-bottom "3px"}
          (legend "Squadron Types")
          (row
-          (button :click #(reset! included-squadron-types @all-squadron-types)
-                  "Check all")
-          (button :click #(reset! included-squadron-types #{})
-                  "Uncheck all"))
+          (buttons/a-button
+           :click #(reset! included-squadron-types @all-squadron-types)
+           "Check all")
+          (buttons/a-button
+           :click #(reset! included-squadron-types #{})
+           "Uncheck all"))
          (div
           :css {:display "flex"
                 :flex-wrap "wrap"
@@ -3895,19 +3906,24 @@
                                  (swap! included-squadron-types (if @val disj conj) @squadron-type))))
              (label squadron-type)))))
         (row
-         (button :click #(reset! expand-state :all-expanded)
-                 "Expand all")
-         (button :click #(reset! expand-state :all-collapsed)
-                 "Collapse all")
-         (button :click #(reset! expand-state [:expand-through-level 1])
-                 "Collapse to airbases"))
+         (buttons/a-button
+          :click #(reset! expand-state :all-expanded)
+          "Expand all")
+         (buttons/a-button
+          :click #(reset! expand-state :all-collapsed)
+          "Collapse all")
+         (buttons/a-button
+          :click #(reset! expand-state [:expand-through-level 1])
+          "Collapse to airbases"))
         (row
-         (button :click #(reset! checked-airbases @listed-airbases)
-                 "Check all")
+         (buttons/a-button
+          :click #(reset! checked-airbases @listed-airbases)
+          "Check all")
          ;; Bit of an asymmetry here, but to me, it seems less surprising that uncheck all should
          ;; clear the map, even if some of the checked airbases are not currently displayed.
-         (button :click #(reset! checked-airbases #{})
-                 "Uncheck all"))
+         (buttons/a-button
+          :click #(reset! checked-airbases #{})
+          "Uncheck all"))
         (row
          :css {:overflow "scroll"
                :font-family "monospace"

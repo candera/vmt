@@ -268,23 +268,6 @@ rect.inclement {
     color: white
 }
 
-.button {
-    border: 0.5px solid black;
-    background: white;
-    font-family:  "Lucida Grande","Lucida Sans Unicode", Tahoma, sans-serif;
-    font-size: 72%;
-    margin: 2px;
-    padding: 3px;
-    border-radius: 4px;
-    text-decoration: none;
-    color: black;
-    border-color: #d0d0d0;
-}
-
-.button:active {
-    background: linear-gradient(#a4bcf1, #6688ff);
-}
-
 .button-container {
     padding-bottom: 3px;
 }
