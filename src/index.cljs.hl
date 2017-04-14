@@ -20,7 +20,10 @@
          recommended."]))
 
 (ui/weather-page
- [{:title    "Air Picture"
+ [{:title "Load Mission"
+   :id :load-mission
+   :sections [:load-mission-section {}]}
+  {:title    "Air Picture"
    :id       :air-picture
    :sections [:air-forces-section {}
               ;;:oob-section {}

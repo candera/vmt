@@ -516,9 +516,12 @@
 
 (defn campaign-dir
   "Return the path to the campaign directory."
-  [installation theater]
-  (fs/path-combine (:data-dir installation)
-                   (:campaign-dir theater)))
+  ([mission]
+   (let [{:keys [installation theater]} mission]
+     (campaign-dir installation theater)))
+  ([installation theater]
+   (fs/path-combine (:data-dir installation)
+                    (:campaign-dir theater))))
 
 (defn object-dir
   "Return the path to the objects directory."
@@ -1857,6 +1860,16 @@
   Attack, etc."
   [mission squadron]
   (->> squadron (unit-class-entry mission) :name))
+
+(defn mission-time
+  "Returns the current time in the virtual world."
+  [mission]
+  (->> mission :campaign-info :current-time))
+
+(defn theater-name
+  "Returns the display name of the theater."
+  [mission]
+  (get-in mission [:theater :name]))
 
 ;; Bunch of ideas:
 ;;

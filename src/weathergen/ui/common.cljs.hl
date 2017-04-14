@@ -288,6 +288,24 @@
   [image-descriptor]
   (fs/path-combine app-dir "cache" "images" (str (im/cache-key image-descriptor) ".png")))
 
+(defn save-blob-async
+  "Asynchronously saves `blob` to `path`."
+  [blob path]
+  ;; While it would seem like there must be a better way to do this, I
+  ;; haven't found it
+  (let [reader (js/FileReader.)]
+    (-> reader
+        .-onload
+        (set! (fn []
+                (->> reader
+                     .-result
+                     js/Buffer.
+                     (fs/save-binary path))
+                ;; Might need this - no idea what it does.
+                ;;   deferred.resolve();
+                )))
+    (.readAsArrayBuffer reader blob)))
+
 (defn get-image
   "Return a URL for the image identified by `image-descriptor`."
   [mission image-descriptor]
@@ -316,16 +334,5 @@
         ;; Async - cache for later use
         (.toBlob canvas
                  (fn [blob]
-                   (let [reader (js/FileReader.)]
-                     (-> reader
-                         .-onload
-                         (set! (fn []
-                                 (->> reader
-                                      .-result
-                                      js/Buffer.
-                                      (fs/save-binary path))
-                                 ;; Might need this - no idea what it does.
-                                 ;;   deferred.resolve();
-                                 )))
-                     (.readAsArrayBuffer reader blob))))
+                   (save-blob-async blob path)))
         (.toDataURL canvas)))))

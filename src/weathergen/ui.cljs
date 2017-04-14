@@ -595,10 +595,10 @@
 
 (defn mission-name-base
   "Compute the extensionless name of the mission file, or default to
-  'weathergen'."
+  'vmt'."
   [mission-name]
   (if (empty? mission-name)
-    "weathergen"
+    "vmt"
     (let [i (.lastIndexOf mission-name ".")]
       (if (neg? i)
         mission-name
@@ -658,7 +658,7 @@
 
 (defn settings-filename
   [mission-name]
-  (str (mission-name-base mission-name) ".wgs.edn"))
+  (str (mission-name-base mission-name) ".vmtw"))
 
 (defn save-settings
   [_]
@@ -783,24 +783,36 @@
   "Prompts the user for a mission file to load, and loads it."
   []
   (when-let [[path] (-> electron
-                      .-remote
-                      .-dialog
-                      (.showOpenDialog
-                       #js {:title "Select a campaign or tactical engagement file"
-                            :openFile true
-                            :filters #js [#js {:name "Campaign file"
-                                               :extensions #js ["cam"]}
-                                          #js {:name "Tactical engagement file"
-                                               :extensions #js ["tac"]}]}))]
+                        .-remote
+                        .-dialog
+                        (.showOpenDialog
+                         #js {:title "Select a campaign or tactical engagement file"
+                              :openFile true
+                              :filters #js [#js {:name "Campaign file"
+                                                 :extensions #js ["cam"]}
+                                            #js {:name "Tactical engagement file"
+                                                 :extensions #js ["tac"]}]}))]
     (with-time
       "load-mission"
       (dosync
-       ;; TODO: We'll have to keep this information elsewhere when we
-       ;; refactor away from being WeatherGen
-       (swap! display-params assoc-in [:multi-save :mission-name] (fs/basename path))
        (reset! mission
                (with-time "read-mission"
-                 (mission/read-mission path)))))))
+                 (mission/read-mission path)))
+       ;; TODO: We'll have to keep this information elsewhere when we
+       ;; refactor away from being WeatherGen
+       (let [current (mission/mission-time @mission)]
+         (swap! display-params
+                update
+                :multi-save
+                (fn [ms]
+                  (assoc ms
+                         :mission-name (fs/basename path)
+                         :from current
+                         :to (model/add-time current (* 60 6)))))
+         (swap! weather-params
+                assoc-in
+                [:time :current]
+                current))))))
 
 (def zipbuilder-worker
   (let [worker (js/Worker. "worker.js")
@@ -820,37 +832,34 @@
                (async/>! output-ch (async/<! result-ch))
                (recur)))}))
 
-(defn multi-download
+(defn save-weather-files
   [{:keys [weather-params cloud-params weather-direction mission-name
-           nx ny from to step progress cancel]}]
+           nx ny from to step save-file progress cancel campaign-dir]}]
   (let [cells (for [x (range nx)
                     y (range ny)]
                 [x y])
         start (model/falcon-time->minutes from)
         end (model/falcon-time->minutes to)
         steps (-> end (- start) (/ step) long inc)
-        zip (js/JSZip.)
-        folder (.folder zip "WeatherMapsUpdates")]
+        updates-dir (fs/path-combine campaign-dir "WeatherMapsUpdates")
+        save-blob (fn [blob path]
+                    (reset! save-file path)
+                    (comm/save-blob-async blob
+                                          (fs/path-combine
+                                           campaign-dir
+                                           path)))]
     (go-loop [t start
               first-done? false]
       (let [p (-> t (- start) (/ (- end start)) (min 1))]
         (log/debug "progress" p)
         (reset! progress p))
       (if (< end t)
-        (-> zip
-            (.file (twx-filename mission-name)
-                   (twx-blob cloud-params weather-direction)
-                   #js {:binary true})
-            (.file (settings-filename mission-name)
-                   (settings-blob)
-                   #js {:binary true})
-            (.generateAsync (if safari?
-                              ;; https://github.com/Stuk/jszip/issues/279
-                              #js {:type "blob" :mimeType "application/octet-stream"}
-                              #js {:type "blob"}))
-            (.then (fn [blob]
-                     (save-data blob (str (mission-name-base mission-name) ".zip"))
-                     (reset! progress nil))))
+        (do
+          (save-blob (twx-blob cloud-params weather-direction)
+                     (twx-filename mission-name))
+          (save-blob (settings-blob)
+                     (settings-filename mission-name))
+          (reset! progress nil))
         (do
           (async/>! (:command-ch zipbuilder-worker)
                     (-> weather-params
@@ -860,14 +869,12 @@
           (let [data (async/<! (:output-ch zipbuilder-worker))
                 blob (fmap/get-blob data nx ny)]
             (when-not first-done?
-              (.file zip
-                     (str (mission-name-base mission-name) ".fmap")
-                     blob
-                     #js {:binary true}))
-            (.file folder
-                   (fmap-filename (model/minutes->falcon-time t))
-                   blob
-                   #js {:binary true}))
+              (save-blob blob
+                         (str (mission-name-base mission-name) ".fmap")))
+            (save-blob blob
+                       (fs/path-combine
+                        "WeatherMapsUpdates"
+                        (fmap-filename (model/minutes->falcon-time t)))))
           (if @cancel
             (reset! progress nil)
             (recur (+ t step) true)))))))
@@ -2694,12 +2701,16 @@
                                              js/Number
                                              (convert-pressure @unit-c)))))
 
-(defn time-entry
-  [c path]
+(defelem time-entry
+  "Defines a time-edit box with against `path` into map cell `source`."
+  [attrs _]
   ;; TODO: Make fancier
-  (time-edit
-   :source (formula-of [c] (get-in c path))
-   :update #(swap! c assoc-in path %)))
+  (let [{:keys [path source]} attrs]
+    (time-edit
+     (-> attrs
+         (dissoc :path)
+         (assoc :source (formula-of [source] (get-in source path)))
+         (assoc :update #(swap! source assoc-in path %))))))
 
 (defn button-bar
   []
@@ -3024,7 +3035,8 @@
                (tr :toggle (cell= (:animate? override))
                    (td (with-help [:weather-overrides k]
                          label))
-                   (td (time-entry weather-params [:weather-overrides @index k]))))
+                   (td (time-entry :source weather-params
+                                   :path [:weather-overrides @index k]))))
              (checkbox "Exclude from forecast?" :exclude-from-forecast?
                        {:row-attrs {:toggle (cell= (:animate? override))}}))))
          (buttons/image-button
@@ -3370,10 +3382,12 @@
      (if (= mode :browse)
        (tr (td (with-help  [:weather-params :time :browse-time]
                  "Time"))
-           (td (time-entry weather-params [:time :current])))
+           (td (time-entry :source weather-params
+                           :path [:time :current])))
        (tr (td (with-help [:displayed-time]
                  "Time"))
-           (td (time-entry time-params [:displayed]))
+           (td (time-entry :source time-params
+                           :path [:displayed]))
            (td (buttons/a-button
                 :click jump-to-time
                 "Jump to")
@@ -3428,7 +3442,7 @@
   [_]
   (let [inline (fn [css & contents]
                  (apply div
-                        :css (merge {:display "inline-block"
+                        :css (merge {:display      "inline-block"
                                      :margin-right "5px"}
                                     css)
                         contents))]
@@ -3438,7 +3452,7 @@
      (if-not safari?
        []
        (let [p* #(p :css {:margin-bottom "3px"
-                          :margin-top "3px"}
+                          :margin-top    "3px"}
                     %&)]
          (div
           :css {:font-size "80%"}
@@ -3456,7 +3470,7 @@
       :title (with-help [:serialization-controls :save-single-files]
                "Load/Save individual files")
       (div
-       :css {:display "flex"
+       :css {:display        "flex"
              :flex-direction "row"
              :vertical-align "middle"}
        #_(help-icon [:display-controls :save-single-file-buttons])
@@ -3482,16 +3496,17 @@
         :class "button-container"
         (buttons/a-button :click load-settings "Load Settings"))))
      (control-subsection
+      :toggle (cell= (some? mission))
       :title (with-help [:serialization-controls :multi-save :overview]
-               "Save weather package")
+               "Save mission weather files")
       (let [row (fn [label help-path edit & more]
                   (div
-                   :css {:display "flex"
+                   :css {:display        "flex"
                          :flex-direction "row"
-                         :margin "0 2px 3px 2px"}
+                         :margin         "0 2px 3px 2px"}
                    (div
                     :css {:white-space "nowrap"
-                          :width "50px"
+                          :width       "50px"
                           :margin-left "3px"}
                     (with-help help-path
                       label))
@@ -3500,31 +3515,11 @@
         [(row "Mission:"
               [:serialization-controls :multi-save :mission-name]
               (let [l (path-lens display-params [:multi-save :mission-name])]
-                [(validating-edit
-                  :conform (fn [v]
-                             (formula-of
-                               [v]
-                               (let [valid? (not-empty v)]
-                                 {:valid? valid?
-                                  :message (when-not valid?
-                                             "Mission name should be set when saving a weather package. It will default to 'weathergen'.")
-                                  :value v})))
-                  :source l
-                  :placeholder "Name of mission file")
-                 (div
-                  :css {:margin-left "8px"
-                        ;; Weird fix for Chrome bug, where clicking
-                        ;; was getting eaten (I think) by the
-                        ;; relatively-positioned error image in the
-                        ;; text box to the left.
-                        :z-index 2}
-                  (buttons/image-button :src "images/file-open.png"
-                                        :width "14px"
-                                        :title "Load Mission File (.cam/.tac)"
-                                        :click load-mission))]))
+                (div (cell= (or l "No Mission Loaded")))))
          (row "From:"
               [:serialization-controls :multi-save :from]
-              (time-entry display-params [:multi-save :from])
+              (time-entry :source display-params
+                          :path [:multi-save :from])
               (buttons/a-button
                :css {:margin-left "14px"}
                :toggle (cell= (some? mission))
@@ -3535,7 +3530,8 @@
                "Set to mission time"))
          (row "To:"
               [:serialization-controls :multi-save :to]
-              (time-entry display-params [:multi-save :to]))
+              (time-entry :source display-params
+                          :path [:multi-save :to]))
          (row "Step:"
               [:serialization-controls :multi-save :step]
               (validating-edit
@@ -3543,42 +3539,54 @@
                :source (path-lens display-params [:multi-save :step])
                :conform conform-positive-integer
                :fmt str
-               :placeholder "60"))])
-      (let [progress (cell nil)
-            cancelling? (cell false)]
-        [(buttons/a-button
-          :css (formula-of
-                 [progress cancelling?]
-                 {:width "105px"
-                  :background
-                  (if (and (not cancelling?) (some? progress))
-                    (let [pct (long (* 100 progress))]
-                      (gstring/format "linear-gradient(to right, lightblue, lightblue %f%%, white %f%%)"
-                                      pct pct))
-                    "white")})
-          :click (fn []
-                   (if @progress
-                     (dosync
-                      (reset! cancelling? true))
-                     (do
-                       (reset! cancelling? false)
-                       (multi-download {:weather-params @weather-params
-                                        :cloud-params @cloud-params
-                                        :weather-direction (:direction @movement-params)
-                                        :mission-name (get-in @display-params [:multi-save :mission-name])
-                                        :from (get-in @display-params [:multi-save :from])
-                                        :to (get-in @display-params [:multi-save :to])
-                                        :step (get-in @display-params [:multi-save :step])
-                                        :progress progress
-                                        :cancel cancelling?
-                                        :nx (-> @weather-params :cell-count first)
-                                        :ny (-> @weather-params :cell-count second)}))))
-          (formula-of
-            [progress cancelling?]
-            (cond
-              (and progress cancelling?) "Cancelling..."
-              progress "Cancel"
-              :else "Save Package")))])))))
+               :placeholder "60"))
+         (let [progress    (cell nil)
+               cancelling? (cell false)
+               save-file   (cell nil)]
+           [(buttons/a-button
+             :css (formula-of
+                    [progress cancelling?]
+                    {:width      "115px"
+                     :display    "inline-block"
+                     :text-align "center"
+                     :background
+                     (when (and (not cancelling?) (some? progress))
+                       (let [pct (long (* 100 progress))]
+                         (gstring/format "linear-gradient(to right, lightblue, lightblue %f%%, white %f%%)"
+                                         pct pct)))})
+             :click (fn []
+                      (if @progress
+                        (dosync
+                         (reset! cancelling? true))
+                        (do
+                          (reset! cancelling? false)
+                          (reset! save-file nil)
+                          (save-weather-files {:weather-params    @weather-params
+                                               :cloud-params      @cloud-params
+                                               :weather-direction (:direction @movement-params)
+                                               :campaign-dir      (mission/campaign-dir @mission)
+                                               :mission-name      (get-in @display-params [:multi-save :mission-name])
+                                               :from              (get-in @display-params [:multi-save :from])
+                                               :to                (get-in @display-params [:multi-save :to])
+                                               :step              (get-in @display-params [:multi-save :step])
+                                               :progress          progress
+                                               :cancel            cancelling?
+                                               :save-file         save-file
+                                               :nx                (-> @weather-params :cell-count first)
+                                               :ny                (-> @weather-params :cell-count second)}))))
+             (formula-of
+               [progress cancelling?]
+               (cond
+                 (and progress cancelling?) "Cancelling..."
+                 progress                   "Cancel"
+                 :else                      "Save Weather Files")))
+            (when-tpl (cell= (and progress save-file))
+              (inl :css {:margin-left "5px"}
+                   (span :css {:margin-right "5px"}
+                         "Saving")
+                   (span :css {:font-family "monospace"
+                               :font-size   "120%"}
+                         save-file)))])])))))
 
 (defn debug-info
   []
@@ -4095,6 +4103,36 @@
                    (li
                     (span (cell= (:name unit)))))))))))))))))
 
+;; TODO: Will probably get rid of this once we have a sepaate load mission window
+(defn load-mission-section
+  "Returns UI for the load mission section."
+  [_]
+  (control-section
+   :title "Load Mission"
+   (div
+    :css {:padding "3px"}
+    (buttons/a-button :click load-mission
+                      :title "Load Mission File (.cam/.tac)"
+                      "Load Mission File (.cam/.tac)")
+    (div
+     :css {:padding "5px"}
+     (if-tpl mission
+       (div
+        :css {:padding "3px"}
+        (div :css {:text-decoration "underline"
+                   :font-size "110%"}
+             "Loaded mission")
+        (div (span :css {:font-weight "bold"}
+                   "Theater: ")
+             (cell= (mission/theater-name mission)))
+        (div (span :css {:font-weight "bold"}
+                   "Mission: ")
+             (cell= (get-in display-params [:multi-save :mission-name]))))
+       (div :css {:font-size "110%"
+                  :font-style "italic"}
+            "No mission loaded."))))))
+
+
 ;;; General layout
 
 (defn head
@@ -4201,7 +4239,8 @@
     contents)))
 
 (def section-ctor
-  {:serialization-controls serialization-controls
+  {:load-mission-section load-mission-section
+   :serialization-controls serialization-controls
    :step-controls step-controls
    :display-controls display-controls
    :weather-parameters weather-parameters

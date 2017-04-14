@@ -42,8 +42,8 @@
       name as the mission (.cam or .tac) file, but with the extension
       changed as appropriate. For instance, if you're making a mission
       called 'oca-strike.tac', save the TWX file as 'oca-strike.twx'.
-      The filename will use the mission name from the 'Save weather
-      package' section if present.")
+      The filename will use the mission name of the loaded mission
+      section if possible.")
 
        (dl
         (dt "Save Current As FMAP")
@@ -58,21 +58,21 @@
         .twx extension.")
 
         (dt "Save Settings")
-        (dd "Saves a .wgs.edn file with all the values from the
+        (dd "Saves a .vmtw file with all the values from the
         WeatherGen application. Use this to preserve the state of
         WeatherGen so you can later pick up where you left off.")
 
         (dt "Load Settings")
-        (dd "Loads a previously saved .wgs.edn file. Note that
+        (dd "Loads a previously saved .vmtw file. Note that
         this will overwrite any settings currently in use - be sure to
         save first if necessary."))])
 
     :multi-save
     {:overview
      (fn []
-       [(p "Use this feature to generate a weather package (a zip
-        file) containing multiple weather-related files. The package
-        will contain the following files:")
+       [(p "Use this feature to save all weather-related files for the
+        mission. Requires that a mission be loaded. The following
+        files will be saved:")
         (ul
          (li (b (i "mission-name") ".fmap")
              " - "
@@ -102,8 +102,7 @@
      :mission-name
      #(p "The name of the mission file (.cam or .tac) for which
      weather is being generated. This value will be used to name the
-     generated .twx and .fmap files. Use the open file button to the
-     right to choose the mission file from the filesystem.")}}
+     generated .twx and .fmap files.")}}
 
    :display-controls
    {:map
