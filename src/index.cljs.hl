@@ -1,46 +1,76 @@
 (page "index.html"
-  (:require [weathergen.ui :as ui]
-            [cljs.js]))
+  (:require [weathergen.ipc :as ipc]
+            [weathergen.ui :as ui]
+            [weathergen.ui.buttons :as buttons]
+            [weathergen.ui.common :as comm]))
 
-(reset! ui/weather-params
-        ui/default-weather-params)
+(def electron (js/require "electron"))
 
-(when ui/safari?
-  (swap! ui/messages conj
-         ["Due to bugs related to downloading files in Safari, Safari
-  is not recommended for use with WeatherGen. To use Safari, make use
-  of the workarounds detailed below. Use of Chrome is recommended."]))
+(defc progress-messages [])
 
-(when ui/ie?
-  (swap! ui/messages conj
-         ["Unfortunately, the weather design features of
-         WeatherGen (i.e. this page) do not currently work correctly
-         in Internet Explorer. Shared forecasts work fine, so forecast
-         links can be shared with pilots using IE. Use of Chrome is
-         recommended."]))
+(defmethod ipc/on-message "progress-message"
+  [_ event msg]
+  (swap! progress-messages conj msg))
 
-(ui/weather-page
- [{:title "Load Mission"
-   :id :load-mission
-   :sections [:load-mission-section {}]}
-  {:title    "Air Picture"
-   :id       :air-picture
-   :sections [:air-forces-section {}
-              ;;:oob-section {}
-              :flights-section {}]}
-  {:title    "Weather"
-   :id       :weather
-   :sections [:serialization-controls {}
-              :step-controls {:mode :edit}
-              :display-controls {}
-              :weather-parameters {}
-              :forecast-section {:forecast-link? true}
-              ;;:flightpath-controls {}
-              :weather-type-configuration {}
-              :cloud-controls {}
-              :wind-stability-parameters {}
-              :weather-override-parameters {}
-              :advanced-controls {}]}
-  {:title    "Test and Debug"
-   :id       :test
-   :sections [:test-section {}]}])
+(defmethod ipc/on-message "mission-load-complete"
+  [_ event]
+  (swap! progress-messages conj "Mission loaded"))
+
+(defn load-mission
+  []
+  (when-let [[path] (-> electron
+                        .-remote
+                        .-dialog
+                        (.showOpenDialog
+                         #js {:title "Select a campaign or tactical engagement file"
+                              :openFile true
+                              :filters #js [#js {:name "Campaign file"
+                                                 :extensions #js ["cam"]}
+                                            #js {:name "Tactical engagement file"
+                                                 :extensions #js ["tac"]}]}))]
+    (reset! progress-messages ["Loading mission..."])
+    (ipc/send-to-main "open-mission" path)))
+
+(defn load-briefing
+  []
+  (js/alert "Coming soon!"))
+
+(html
+ (ui/head)
+ (body
+  :css {:margin "8px"
+        :height "100%"}
+  (div
+   :css {:display "flex"
+         :flex-direction "column"
+         :max-height "357px"}
+   (ui/titlebar)
+   (div
+    :css {:font-size "150%"}
+    (buttons/a-button
+     :css {:display "inline-block"
+           :margin  "5px 10px"}
+     :click load-mission
+     "Load mission (.cam/.tac)")
+    (buttons/a-button
+     :css {:display "inline-block"
+           :margin  "5px 10px"}
+     :click load-briefing
+     "Load briefing (.vmtb)"))
+   (with-let [elem (div
+                    :css {:overflow-y "auto"
+                          :overflow-x "hidden"
+                          :flex 1
+                          :font-size "150%"
+                          :border "solid 1px black"
+                          :height "782px"
+                          :margin-left "10px"
+                          :padding "4px"}
+              (for-tpl [message progress-messages]
+                (div message)))]
+   (add-watch progress-messages
+              ::scroll-notifications
+              (fn [_ _ _ _]
+                (with-timeout 0
+                  (-> elem .-scrollTop (set! (.-scrollHeight elem))))))))))
+

@@ -12,6 +12,7 @@
             [weathergen.falcon.files.images :as im]
             [weathergen.filesystem :as fs]
             [weathergen.lzss :as lzss]
+            [weathergen.progress :as progress]
             [weathergen.util :as util]))
 
 ;;; Database accessors
@@ -487,6 +488,20 @@
        (str/upper-case (extension file-name))
        :unknown))
 
+(def file-type-description
+  {:campaign-info "campaign info"
+   :objectives "objectives"
+   :objective-deltas "objective deltas"
+   :units "units"
+   :teams "teams"
+   :events "events"
+   :primary-objectives "primary objectives"
+   :pilots "pilots"
+   :persistent-objects "persistent objects"
+   :weather "weather"
+   :version "version"
+   :victory-conditions "victory conditions"})
+
 (defmulti read-embedded-file*
   (fn [type entry buf database]
     type))
@@ -496,6 +511,7 @@
   (log/debug "read-embedded-file"
              :type type
              :file-name (:file-name entry))
+  (progress/report (str "Reading " (get file-type-description type "data")))
   (read-embedded-file* type entry buf database))
 
 (def directory-entry
@@ -1870,6 +1886,11 @@
   "Returns the display name of the theater."
   [mission]
   (get-in mission [:theater :name]))
+
+(defn mission-name
+  "Returns the display name of the mission."
+  [mission]
+  (-> mission :path fs/basename))
 
 ;; Bunch of ideas:
 ;;

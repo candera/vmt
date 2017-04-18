@@ -122,3 +122,8 @@
   (let [file (io/file path)]
     {:size (.length file)
      :modified (.lastModified file)}))
+
+(defn basename
+  "Given a path, return its basename."
+  [path]
+  (throw (ex-info "Not implemented" {:reason :not-implemented})))

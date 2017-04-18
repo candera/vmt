@@ -44,8 +44,10 @@
             [weathergen.filesystem :as fs]
             [weathergen.fmap :as fmap]
             [weathergen.help :as help]
+            [weathergen.ipc  :as ipc]
             [weathergen.math :as math]
             [weathergen.model :as model]
+            [weathergen.progress :as progress]
             [weathergen.twx :as twx]
             [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [app-dir
@@ -105,6 +107,8 @@
 (def electron (js/require "electron")
   #_(when (= "nodejs" cljs.core/*target*)
       (js/require "electron")))
+
+(def ipcRenderer (.-ipcRenderer electron))
 
 ;;; State
 
@@ -781,23 +785,14 @@
 ;; TODO: probably going to need to run this on a worker.
 (defn load-mission
   "Prompts the user for a mission file to load, and loads it."
-  []
-  (when-let [[path] (-> electron
-                        .-remote
-                        .-dialog
-                        (.showOpenDialog
-                         #js {:title "Select a campaign or tactical engagement file"
-                              :openFile true
-                              :filters #js [#js {:name "Campaign file"
-                                                 :extensions #js ["cam"]}
-                                            #js {:name "Tactical engagement file"
-                                                 :extensions #js ["tac"]}]}))]
-    (with-time
-      "load-mission"
+  [path]
+  (with-time
+    "load-mission"
+    (let [mission-data (with-time "read-mission"
+                         (mission/read-mission path))]
       (dosync
-       (reset! mission
-               (with-time "read-mission"
-                 (mission/read-mission path)))
+       (progress/report "Preparing view")
+       (reset! mission mission-data)
        ;; TODO: We'll have to keep this information elsewhere when we
        ;; refactor away from being WeatherGen
        (let [current (mission/mission-time @mission)]
@@ -4104,33 +4099,28 @@
                     (span (cell= (:name unit)))))))))))))))))
 
 ;; TODO: Will probably get rid of this once we have a sepaate load mission window
-(defn load-mission-section
+(defn mission-info-section
   "Returns UI for the load mission section."
   [_]
   (control-section
-   :title "Load Mission"
+   :title "Mission Info"
    (div
-    :css {:padding "3px"}
-    (buttons/a-button :click load-mission
-                      :title "Load Mission File (.cam/.tac)"
-                      "Load Mission File (.cam/.tac)")
-    (div
-     :css {:padding "5px"}
-     (if-tpl mission
-       (div
-        :css {:padding "3px"}
-        (div :css {:text-decoration "underline"
-                   :font-size "110%"}
-             "Loaded mission")
-        (div (span :css {:font-weight "bold"}
-                   "Theater: ")
-             (cell= (mission/theater-name mission)))
-        (div (span :css {:font-weight "bold"}
-                   "Mission: ")
-             (cell= (get-in display-params [:multi-save :mission-name]))))
-       (div :css {:font-size "110%"
-                  :font-style "italic"}
-            "No mission loaded."))))))
+    :css {:padding "5px"}
+    (if-tpl mission
+      (div
+       :css {:padding "3px"}
+       (div :css {:text-decoration "underline"
+                  :font-size "110%"}
+            "Loaded mission")
+       (div (span :css {:font-weight "bold"}
+                  "Theater: ")
+            (cell= (mission/theater-name mission)))
+       (div (span :css {:font-weight "bold"}
+                  "Mission: ")
+            (cell= (mission/mission-name mission))))
+      (div :css {:font-size "110%"
+                 :font-style "italic"}
+           "No mission loaded.")))))
 
 
 ;;; General layout
@@ -4138,7 +4128,12 @@
 (defn head
   []
   (h/head
-   (title "WeatherGen")
+   (title (formula-of [mission]
+            (if-not mission
+              "Virtual Mission Tools"
+              (str (mission/theater-name mission)
+                   " - "
+                   (mission/mission-name mission)))))
    ;; (link :href "lib/slickgrid/slick.grid.css" :rel "stylesheet" :title "main" :type "text/css")
    ;; (link :href "lib/slickgrid/slick-default-theme.css" :rel "stylesheet" :title "main" :type "text/css")
 
@@ -4184,62 +4179,59 @@
      ;;slickgrid/styles
      ))))
 
-(defelem body
-  [{:keys [] :as attrs}
-   contents]
-  (h/body
-   :css {:margin "8px"}
-   (div
-    :id "app"
-    (div :id "titlebar"
-         (div :id "words"
-              (span :id "title"
-                    "WeatherGen")
-              (span :id "byline"
-                    "by"
-                    (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
-                       :target "_blank"
-                       "Tyrant"))
-              (span :id "helpstring"
-                    "Help? Bug? Feature request? Click"
-                    (a :href "help.html"
-                       :target "_blank"
-                       "here")
-                    "."))
-         (a :href "http://firstfighterwing.com"
-            :target "_blank"
-            (img :id "winglogo"
-                 :src "images/1stVFW_Insignia-64.png")))
-    ;; Messages
-    (formula-of
-     [messages]
-     (for [message messages]
-       (let [visible? (cell true)]
+(defn message-display
+  []
+  (formula-of
+    [messages]
+    (for [message messages]
+      (let [visible? (cell true)]
+        (div
+         :fade-toggle visible?
+         :css {:border "double"
+               :border-color "black"
+               :background "#945594"
+               :color "white"
+               :position "relative"
+               :margin-bottom "3px"}
          (div
-          :fade-toggle visible?
-          :css {:border "double"
-                :border-color "black"
-                :background "#945594"
-                :color "white"
-                :position "relative"
-                :margin-bottom "3px"}
-          (div
-           :css {:display "inline-block"
-                 :padding-right "5px"}
-           message)
-          (div
-           :css {:position "absolute"
-                 :font-size "150%"
-                 :font-weight "bold"
-                 :top "-8px"
-                 :right "5px"
-                 :cursor "pointer"}
-           :click #(reset! visible? false)
-           "×")))))
-    contents)))
+          :css {:display "inline-block"
+                :padding-right "5px"}
+          message)
+         (div
+          :css {:position "absolute"
+                :font-size "150%"
+                :font-weight "bold"
+                :top "-8px"
+                :right "5px"
+                :cursor "pointer"}
+          :click #(reset! visible? false)
+          "×"))))))
+
+(defn titlebar
+  "Returns UI that renders the titlebar."
+  []
+  (div :id "titlebar"
+       (div :id "words"
+            (span :id "title"
+                  "Virtual Mission Tools")
+            (span :id "byline"
+                  "by"
+                  (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
+                     :target "_blank"
+                     "Tyrant"))
+            (span :id "helpstring"
+                  "Help? Bug? Feature request? Click"
+                  (a :href "help.html"
+                     :target "_blank"
+                     "here")
+                  "."))
+       (a :href "http://firstfighterwing.com"
+          :target "_blank"
+          (img :id "winglogo"
+               :src "images/1stVFW_Insignia-64.png"))))
 
 (def section-ctor
-  {:load-mission-section load-mission-section
+  {:mission-info-section mission-info-section
    :serialization-controls serialization-controls
    :step-controls step-controls
    :display-controls display-controls
@@ -4264,70 +4256,75 @@
   [section-infos]
   (html
    (head)
-   (body
-    (let [right-width 575 ; Min width of controls column
-          portrait?   (formula-of
-                        [map-size window-size]
-                        (let [[grid-width grid-height]     map-size
-                              [window-width window-height] window-size]
-                          (< window-width (+ grid-width right-width -10))))]
-      (div
-       :css (formula-of
-              {portrait?                    portrait?
-               [window-width window-height] window-size}
-              {:display        "flex"
-               :flex-direction (if portrait? "column" "row")
-               ;; These next plus the overflow/height in the columns are
-               ;; what let the two sides scroll separately
-               :overflow       (if portrait? "show" "hidden")
-               :height         (if portrait?
-                                 "100%"
-                                 (str (- window-height 90) "px"))})
+   (h/body
+    {:css {:margin "8px"}}
+    (div
+     :id "app"
+     (titlebar)
+     (message-display)
+     (let [right-width 575              ; Min width of controls column
+           portrait?   (formula-of
+                         [map-size window-size]
+                         (let [[grid-width grid-height]     map-size
+                               [window-width window-height] window-size]
+                           (< window-width (+ grid-width right-width -10))))]
        (div
-        :class "left-column"
         :css (formula-of
-               [portrait?]
-               (if portrait?
-                 {}
-                 {:overflow "auto"
-                  :height   "auto"}))
-        (button-bar)
-        (grid :display-params display-params
-              :weather-data weather-data
-              :selected-cell selected-cell
-              :wind-stability-areas wind-stability-areas
-              :weather-overrides weather-overrides
-              :computing computing
-              :pressure-unit pressure-unit
-              ;; TODO: Make these reactive, although they never
-              ;; change, so maybe not
-              :nx (first (:cell-count @weather-params))
-              :ny (second (:cell-count @weather-params))))
-       (div
-        :class "right-column"
-        :css (formula-of
-               [portrait?]
-               (merge {:display       "block"
-                       :align-content "flex-start"
-                       :flex-wrap     "wrap"
-                       :flex-grow     1
-                       :min-width     (str (- right-width 20) "px")
-                       ;;  This one weird trick keeps the column from expanding
-                       ;;  past where it should. Yay CSS.
-                       :width         0}
-                      (when-not portrait?
-                        {:overflow "auto"
-                         :height   "auto"})))
-        (tabs/tabs
-         :selected (cell (-> section-infos first :id))
-         :tabs (for [{:keys [title id sections]} section-infos]
-                 {:title title
-                  :id    id
-                  :ui    (for [[section opts] (partition 2 sections)
-                               :let           [ctor (section-ctor section)]]
-                           (with-time
-                             (str "Rendering " section)
-                             (ctor opts)))})))))
+               {portrait?                    portrait?
+                [window-width window-height] window-size}
+               {:display        "flex"
+                :flex-direction (if portrait? "column" "row")
+                ;; These next plus the overflow/height in the columns are
+                ;; what let the two sides scroll separately
+                :overflow       (if portrait? "show" "hidden")
+                :height         (if portrait?
+                                  "100%"
+                                  (str (- window-height 90) "px"))})
+        (div
+         :class "left-column"
+         :css (formula-of
+                [portrait?]
+                (if portrait?
+                  {}
+                  {:overflow "auto"
+                   :height   "auto"}))
+         (button-bar)
+         (grid :display-params display-params
+               :weather-data weather-data
+               :selected-cell selected-cell
+               :wind-stability-areas wind-stability-areas
+               :weather-overrides weather-overrides
+               :computing computing
+               :pressure-unit pressure-unit
+               ;; TODO: Make these reactive, although they never
+               ;; change, so maybe not
+               :nx (first (:cell-count @weather-params))
+               :ny (second (:cell-count @weather-params))))
+        (div
+         :class "right-column"
+         :css (formula-of
+                [portrait?]
+                (merge {:display       "block"
+                        :align-content "flex-start"
+                        :flex-wrap     "wrap"
+                        :flex-grow     1
+                        :min-width     (str (- right-width 20) "px")
+                        ;;  This one weird trick keeps the column from expanding
+                        ;;  past where it should. Yay CSS.
+                        :width         0}
+                       (when-not portrait?
+                         {:overflow "auto"
+                          :height   "auto"})))
+         (tabs/tabs
+          :selected (cell (-> section-infos first :id))
+          :tabs (for [{:keys [title id sections]} section-infos]
+                  {:title title
+                   :id    id
+                   :ui    (for [[section opts] (partition 2 sections)
+                                :let           [ctor (section-ctor section)]]
+                            (with-time
+                              (str "Rendering " section)
+                              (ctor opts)))}))))))
     (debug-info))))
 
 #_(with-init!
@@ -4340,3 +4337,10 @@
         (log/debug "Trying again")
         (async/<! (async/timeout 500))
         (recur)))))
+
+(defn handle-open-mission
+  "Handles the open-mission message from the main process that
+  triggers loading a mission."
+  [_ path]
+)
+
