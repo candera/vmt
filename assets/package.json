@@ -1,11 +1,11 @@
 {
-  "name": "Virtual Mission Tools - by Tyrant",
-  "version": "0.1.0",
-  "main": "main.js",
-  "devDependencies": {
-    "electron": "^1.6.2"
-  },
-  "dependencies": {
-    "@claviska/jquery-minicolors": "^2.2.4"
-  }
+    "name": "Virtual Mission Tools",
+    "version": "0.1.0",
+    "main": "main.js",
+    "devDependencies": {
+        "electron": "^1.6.2"
+    },
+    "dependencies": {
+        "@claviska/jquery-minicolors": "^2.2.4"
+    }
 }
