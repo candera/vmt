@@ -38,9 +38,10 @@
             [weathergen.database :as db]
             [weathergen.dtc :as dtc]
             [weathergen.encoding :refer [encode decode] :as encoding]
+            [weathergen.falcon.constants :as c]
             [weathergen.falcon.files.images :as im]
             [weathergen.falcon.files.mission :as mission]
-            [weathergen.falcon.constants :as c]
+            [weathergen.falcon.install :as install]
             [weathergen.filesystem :as fs]
             [weathergen.fmap :as fmap]
             [weathergen.help :as help]
@@ -48,10 +49,10 @@
             [weathergen.math :as math]
             [weathergen.model :as model]
             [weathergen.progress :as progress]
+            [weathergen.settings :as settings]
             [weathergen.twx :as twx]
             [weathergen.ui.buttons :as buttons]
-            [weathergen.ui.common :as comm :refer [app-dir
-                                                   colors control-section
+            [weathergen.ui.common :as comm :refer [colors control-section
                                                    get-image
                                                    format-time inl pre-cell
                                                    styled team-color triangle]]
@@ -109,6 +110,8 @@
       (js/require "electron")))
 
 (def ipcRenderer (.-ipcRenderer electron))
+
+(def zlib (js/require "zlib"))
 
 ;;; State
 
@@ -277,8 +280,8 @@
                                         (- window-height 140)))]
                   [dim dim])))
 
-(defc display-params {:opacity    0.75
-                      :display    nil #_:type
+(defc display-params {:opacity    0.33
+                      :display    :type
                       :map        :korea
                       :mouse-mode :select
                       :overlay    nil #_:wind
@@ -336,8 +339,11 @@
 
 ;; Zoom and pan for the map
 
+(defc settings (settings/load-settings))
+;; TODO: Add a watch to save them back out
+
 ;; This is how much zoom you get for each "click" of the mousewheel
-(defc zoom-speed 0.95)
+(defc= zoom-speed (or (:zoom-speed settings) 0.95))
 (defc map-zoom 1)
 (defc map-pan {:x 0 :y 0})
 
@@ -353,14 +359,6 @@
 ;;; Components
 
 (def flight-paths-layer (weathergen.ui.layers.flights/create mission map-zoom))
-
-;;; Load the settings file
-(def settings-path (fs/path-combine app-dir "settings.edn"))
-(when (fs/exists? settings-path)
-  (let [settings (-> settings-path fs/file-text reader/read-string)]
-    (when-let [speed (:zoom-speed settings)]
-      (reset! zoom-speed speed))))
-
 
 ;;; Formulas
 
@@ -782,16 +780,15 @@
                        :scale 0.5})))))
    {:extensions ".ini"}))
 
-;; TODO: probably going to need to run this on a worker.
 (defn load-mission
-  "Prompts the user for a mission file to load, and loads it."
+  "Loads a mission (.cam/.tac) mission file."
   [path]
   (with-time
     "load-mission"
     (let [mission-data (with-time "read-mission"
                          (mission/read-mission path))]
       (dosync
-       (progress/report "Preparing view")
+       (progress/report "Preparing views")
        (reset! mission mission-data)
        ;; TODO: We'll have to keep this information elsewhere when we
        ;; refactor away from being WeatherGen
@@ -808,6 +805,19 @@
                 assoc-in
                 [:time :current]
                 current))))))
+
+(defn load-briefing
+  "Loads a briefing (.vmtb) file given a path to a briefing and a map
+  from installation names to their directories."
+  [installations path]
+  (progress/report "Reading briefing file")
+  (let [{:keys [revision installation briefing]} (-> path fs/file-text reader/read-string)
+        install-dir (get installations installation)]
+    (let [mission-data (mission/briefing->mission install-dir briefing)]
+      (progress/report "Preparing views")
+      (reset! mission mission-data)
+      ;; TODO: Set up weather data, blah blah
+      )))
 
 (def zipbuilder-worker
   (let [worker (js/Worker. "worker.js")
@@ -873,6 +883,39 @@
           (if @cancel
             (reset! progress nil)
             (recur (+ t step) true)))))))
+
+(defn compress
+  "Compresses a buffer, returing a new buffer with the compressed
+  data."
+  [buf]
+  (.gzipSync zlib buf))
+
+(defn decompress
+  "Decompresses a buffer, returning a new buffer with the expanded
+  data."
+  [buf]
+  (.gunzipSync zlib buf))
+
+(defn save-briefing
+  "Prompts the user for a path and saves a briefing file to it."
+  [_]
+  (when-let [path (-> electron
+                      .-remote
+                      .-dialog
+                      (.showSaveDialog
+                       #js {:title "Save a briefing file"
+                            :defaultPath (fs/path-combine (mission/campaign-dir @mission)
+                                                          (str (mission/mission-name @mission)
+                                                               ".vmtb"))
+                            :filters #js [#js {:name "VMT Briefing"
+                                               :extension #js ["vmtb"]}]}))]
+    (log/debug "save-briefing" :path path)
+    (->> {:revision revision
+          :briefing (mission/mission->briefing @mission)}
+         encode
+         js/Buffer.from
+         compress
+         (fs/save-binary path))))
 
 
 ;;; Help
@@ -1295,7 +1338,7 @@
         (table
          :class "info-grid"
          (thead
-          (tr (td1(with-help [:forecast :time] "Day/Time"))
+          (tr (td1 (with-help [:forecast :time] "Weather Time"))
               (td1 (with-help [:forecast :type] "Type"))
               (td1 (with-help [:forecast :pressure] "Press"))
               (td2 (with-help [:forecast :temperature] "Temp"))
@@ -4098,9 +4141,8 @@
                    (li
                     (span (cell= (:name unit)))))))))))))))))
 
-;; TODO: Will probably get rid of this once we have a sepaate load mission window
 (defn mission-info-section
-  "Returns UI for the load mission section."
+  "Returns UI for the mission info section."
   [_]
   (control-section
    :title "Mission Info"
@@ -4117,10 +4159,24 @@
             (cell= (mission/theater-name mission)))
        (div (span :css {:font-weight "bold"}
                   "Mission: ")
-            (cell= (mission/mission-name mission))))
+            (cell= (mission/mission-name mission)))
+       (div (span :css {:font-weight "bold"}
+                  "Falcon Time: ")
+            (cell= (-> mission mission/mission-time format-time))))
       (div :css {:font-size "110%"
                  :font-style "italic"}
            "No mission loaded.")))))
+
+(defn save-briefing-section
+  "Returns UI for the save briefing section."
+  [_]
+  (control-section
+   :title "Save Mission Briefing"
+   (div
+    :css {:padding "5px"}
+    (buttons/a-button
+     :click save-briefing
+     "Save Briefing (.vmtb)"))))
 
 
 ;;; General layout
@@ -4232,6 +4288,7 @@
 
 (def section-ctor
   {:mission-info-section mission-info-section
+   :save-briefing-section save-briefing-section
    :serialization-controls serialization-controls
    :step-controls step-controls
    :display-controls display-controls
@@ -4338,9 +4395,4 @@
         (async/<! (async/timeout 500))
         (recur)))))
 
-(defn handle-open-mission
-  "Handles the open-mission message from the main process that
-  triggers loading a mission."
-  [_ path]
-)
 

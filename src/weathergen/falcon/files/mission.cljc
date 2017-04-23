@@ -471,35 +471,38 @@
   (let [i (str/last-index-of file-name ".")]
     (subs file-name i)))
 
+(def file-types
+  {".CMP" :campaign-info
+   ".OBJ" :objectives
+   ".OBD" :objective-deltas
+   ".UNI" :units
+   ".TEA" :teams
+   ".EVT" :events
+   ".POL" :primary-objectives
+   ".PLT" :pilots
+   ".PST" :persistent-objects
+   ".WTH" :weather
+   ".VER" :version
+   ".TE"  :victory-conditions})
+
 (defn file-type
   [file-name]
-  (get {".CMP" :campaign-info
-        ".OBJ" :objectives
-        ".OBD" :objective-deltas
-        ".UNI" :units
-        ".TEA" :teams
-        ".EVT" :events
-        ".POL" :primary-objectives
-        ".PLT" :pilots
-        ".PST" :persistent-objects
-        ".WTH" :weather
-        ".VER" :version
-        ".TE"  :victory-conditions}
+  (get file-types
        (str/upper-case (extension file-name))
        :unknown))
 
 (def file-type-description
-  {:campaign-info "campaign info"
-   :objectives "objectives"
-   :objective-deltas "objective deltas"
-   :units "units"
-   :teams "teams"
-   :events "events"
+  {:campaign-info      "campaign info"
+   :objectives         "objectives"
+   :objective-deltas   "objective deltas"
+   :units              "units"
+   :teams              "teams"
+   :events             "events"
    :primary-objectives "primary objectives"
-   :pilots "pilots"
+   :pilots             "pilots"
    :persistent-objects "persistent objects"
-   :weather "weather"
-   :version "version"
+   :weather            "weather"
+   :version            "version"
    :victory-conditions "victory conditions"})
 
 (defmulti read-embedded-file*
@@ -670,6 +673,11 @@
                               path))
        first))
 
+(defn theater-name
+  "Returns the display name of the theater."
+  [mission]
+  (get-in mission [:theater :name]))
+
 (defn load-initial-database
   "Load the files in known locations needed to process a mission in a
   given theater."
@@ -767,6 +775,54 @@
                         :names          names
                         :installation   installation
                         :theater        theater})]
+    (-> mission
+        (assoc :map-image (im/make-descriptor mission
+                                              "resource/campmap"
+                                              "BIG_MAP_ID")))))
+
+(defn mission->briefing
+  "Converts a mission to a 'briefing', which is a serializable version
+  of the mission, containing everything needed to rehydrate the
+  mission later."
+  [mission]
+  (merge {:theater-name (theater-name mission)
+          :extension    (-> mission :path extension)}
+         (select-keys mission (vals file-types))))
+
+(defn briefing->mission
+  "Loads a mission given a briefing (see `mission->briefing`)."
+  [install-dir briefing]
+  (let [{:keys [theater-name]} briefing
+        installation           (load-installation install-dir)
+        theater                (->> installation
+                                    :theaters
+                                    (filter #(= theater-name (:name %))))
+        _                      (when-not theater
+                                 (throw (ex-info (str "Theater " theater-name " does not seem to be installed.")
+                                                 {:reason       ::theater-not-found
+                                                  :install-dir  install-dir
+                                                  :theater-name theater-name})))
+        strings                (read-strings-file (campaign-dir installation theater))
+        database               (assoc (load-initial-database installation theater)
+                                      :strings strings)
+        {:keys [scenario]}     (->> briefing :campaign-info)
+        names                  (read-strings (campaign-dir installation theater)
+                                             theater-name)
+        database               (assoc (load-initial-database installation theater)
+                                      :strings strings)
+        scenario-path          (fs/path-combine (campaign-dir installation theater)
+                                                (str scenario (:extension briefing)))
+        scenario-files         (read-embedded-files scenario-path database)
+        mission                (merge database
+                                      briefing
+                                      ;; TODO: Figure out if we need to merge persistent objects
+                                      {:objectives     (merge-objective-deltas
+                                                        (:objectives scenario-files)
+                                                        (:objective-deltas briefing))
+                                       :scenario-files scenario-files
+                                       :names          names
+                                       :installation   installation
+                                       :theater        theater})]
     (-> mission
         (assoc :map-image (im/make-descriptor mission
                                               "resource/campmap"
@@ -1881,11 +1937,6 @@
   "Returns the current time in the virtual world."
   [mission]
   (->> mission :campaign-info :current-time))
-
-(defn theater-name
-  "Returns the display name of the theater."
-  [mission]
-  (get-in mission [:theater :name]))
 
 (defn mission-name
   "Returns the display name of the mission."

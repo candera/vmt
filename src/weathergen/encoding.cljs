@@ -1,7 +1,7 @@
 (ns weathergen.encoding
   "A library for encoding values for use across web worker
   boundaries."
-  (:require [cljsjs.pako]
+  (:require ;;[cljsjs.pako]
             [cognitect.transit :as transit]
             [goog.crypt.base64 :as base64])
   (:require-macros [weathergen.cljs.macros :refer [with-time]]))
@@ -27,13 +27,11 @@
 
 (defn encode
   [val]
-  (with-time "Encoding"
-    (transit/write encoder val)))
+  (transit/write encoder val))
 
 (defn decode
   [val]
-  (with-time "Decoding"
-    (transit/read decoder val)))
+  (transit/read decoder val))
 
 (defn data->base64
   [data]

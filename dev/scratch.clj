@@ -2377,3 +2377,32 @@ type: 0x64 -> image
 (->> @balkans :teams (map #(-> % :team (select-keys [:name :who :flags]))))
 
 (->> @smpu :objectives (map :owner) distinct)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def b (mission/mission->briefing @smpu))
+
+(require '[cognitect.transit :as transit])
+(->> b weathergen.encoding/encode (spit "/tmp/briefing.json"))
+
+(def b2 (-> "/tmp/briefing.edn" clojure.java.io/reader java.io.PushbackReader. read))
+
+(require 'clojure.data)
+(def d (clojure.data/diff b b2))
+
+(map count (butlast d))
+
+(->> (with-out-str (pprint (first d))) (spit "/tmp/missing.edn"))
+
+(-> @smpu
+    :units
+    pprint
+    (->> (spit "/tmp/units.edn")))
+
+(let [n 1
+      k :campaign-info]
+ (butlast (clojure.data/diff (->> b
+                                  :campaign-info)
+                             (->> b2
+                                  :campaign-info))))
+

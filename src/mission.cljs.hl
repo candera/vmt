@@ -2,16 +2,31 @@
   (:require [weathergen.ipc :as ipc]
             [weathergen.progress :as progress]
             [weathergen.ui :as ui]
-            #_[cljs.js]))
+            [taoensso.timbre :as log
+             :refer-macros (log trace debug info warn error fatal report
+                                logf tracef debugf infof warnf errorf fatalf reportf
+                                spy get-env log-env)]))
 
 (def electron (js/require "electron"))
 
 (defmethod ipc/on-message "open-mission"
-  [_ event path]
-  (.log js/console "opening mission" path)
-  (binding [progress/*reporter* #(ipc/send-to-main "progress-message" %)]
-    (ui/load-mission path))
-  (ipc/send-to-main "mission-load-complete"))
+  [_ event installations path]
+  (try
+    (binding [progress/*reporter* #(ipc/send-to-main "progress-message" %)]
+      (ui/load-mission path))
+    (ipc/send-to-main "load-complete")
+    (catch :default e
+      (log/error e "Load failed" :stack (.-stack e))
+      (ipc/send-to-main "load-failed" e))))
+
+(defmethod ipc/on-message "open-briefing"
+  [_ event installations path]
+  (try
+    (binding [progress/*reporter* #(ipc/send-to-main "progress-message" %)]
+      (ui/load-briefing installations path))
+    (catch :default e
+      (log/error e "Load failed" :stack (.-stack e))
+      (ipc/send-to-main "load-failed" (.-stack e)))))
 
 (reset! ui/weather-params
         ui/default-weather-params)
@@ -31,9 +46,10 @@
          recommended."]))
 
 (ui/weather-page
- [{:title "Mission Info"
+ [{:title "Mission"
    :id :mission-info
-   :sections [:mission-info-section {}]}
+   :sections [:mission-info-section {}
+              :save-briefing-section {}]}
   {:title    "Air Picture"
    :id       :air-picture
    :sections [:air-forces-section {}

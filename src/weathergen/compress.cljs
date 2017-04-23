@@ -1,0 +1,3 @@
+(ns weathergen.compress
+  )
+

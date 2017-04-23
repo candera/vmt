@@ -1,6 +1,7 @@
 (ns weathergen.ipc
   "A library for communicating between the various processes that make
-  up the application.")
+  up the application."
+  (:require [weathergen.encoding :refer [encode decode]]))
 
 (def electron (js/require "electron"))
 (def channel "weathergen-ipc")
@@ -10,14 +11,15 @@
 (defn send-to-main
   "Sends a message from a renderer process to the main process."
   [type & args]
-  (apply (-> electron .-ipcRenderer .-send) channel type args))
+  (.log js/console "send-to-main" type args)
+  (apply (-> electron .-ipcRenderer .-send) channel type (map encode args)))
 
 (defn send-to-renderer
   "Sends a message from the main process to a renderer process."
   [window type & args]
   (let [wc (.-webContents window)
         send (.-send wc)]
-    (.apply send wc (->> args (into [channel type]) clj->js))))
+    (.apply send wc (->> args (map encode) (into [channel type]) clj->js))))
 
 (def ipc
   (if (= "renderer" (.-type js/process))
@@ -27,4 +29,4 @@
 (.on ipc
      channel
      (fn [event & [type & args]]
-       (apply on-message type event args)))
+       (apply on-message type event (map decode args))))

@@ -1,5 +1,6 @@
 (ns app.main
-  (:require [weathergen.ipc :as ipc]))
+  (:require [weathergen.ipc :as ipc]
+            [weathergen.falcon.install :as install]))
 
 (def electron      (js/require "electron"))
 (def app           (.-app electron))
@@ -28,21 +29,28 @@
 
 (def mission-windows (atom {}))
 
-(defn mk-window [w h frame? show?]
-  (BrowserWindow. #js {:width w :height h :frame frame? :show show?}))
+(def installations (atom {}))
 
-(defmethod ipc/on-message "open-mission"
-  [_ event path]
+(defn mk-window [w h frame? show?]
+  (BrowserWindow. #js {:width w :height h :frame frame? :show show? :icon "images/1stVFW_Insignia.png"}))
+
+(defn open
+  "Kicks off a renderer opening the thing at `path`. `mode` tells us
+  whether it's a `:briefing` or a `:mission`."
+  [path mode]
   (let [mission-window (mk-window 1300 800 true false)]
-    (.log js/console "open-mission message received in main process")
     (swap! mission-windows assoc (-> mission-window .-webContents .-id) mission-window)
     (load-page mission-window "mission.html")
     (-> mission-window
         .-webContents
         (.on "did-finish-load"
-             #(ipc/send-to-renderer mission-window
-                                    "open-mission"
-                                    path)))
+             (fn []
+               (.show mission-window)
+               (ipc/send-to-renderer mission-window
+                                     (mode {:briefing "open-briefing"
+                                            :mission  "open-mission"})
+                                     @installations
+                                     path))))
     (-> mission-window
         .-webContents
         (.on "new-window"
@@ -54,14 +62,27 @@
                (.preventDefault e))))
     (.on mission-window "closed" #(swap! mission-windows dissoc path))))
 
+(defmethod ipc/on-message "open-mission"
+  [_ event path]
+  (open path :mission))
+
+(defmethod ipc/on-message "open-briefing"
+  [_ event path]
+  (open path :briefing))
+
 (defmethod ipc/on-message "progress-message"
   [_ event message]
   (ipc/send-to-renderer @app-window "progress-message" message))
 
-(defmethod ipc/on-message "mission-load-complete"
+(defmethod ipc/on-message "load-complete"
   [_ event]
   (->> event .-sender .-id (get @mission-windows) .show)
-  (ipc/send-to-renderer @app-window "mission-load-complete"))
+  (ipc/send-to-renderer @app-window "load-complete"))
+
+(defmethod ipc/on-message "load-failed"
+  [_ event err]
+  (.log js/console "Load failed" err)
+  (ipc/send-to-renderer @app-window "load-failed" err))
 
 (defn init-browser []
   (reset! app-window (mk-window 800 400 true false))
@@ -76,9 +97,13 @@
     ;; TODO: Anything we want to do differently?
     )
   (.on @app-window "closed" #(reset! app-window nil))
-)
+  )
 
+;; TODO: Maybe show splash screen
 (defn init []
   (.on app "window-all-closed" #(when-not (= js/process.platform "darwin") (.quit app)))
-  (.on app "ready" init-browser)
+  (.on app "ready" #(install/locate-installations
+                     (fn [installs]
+                       (reset! installations installs)
+                       (init-browser))))
   (set! *main-cli-fn* (fn [] nil)))

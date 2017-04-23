@@ -65,9 +65,17 @@
       p)))
 
 (defn basename
-  "Given a path, return its basename."
-  [path]
-  (.basename pathlib path))
+  "Given a path, return its basename. `opts` includes
+  `:omit-extension?`, which, if true, will return the path without the
+  file extension."
+  ([path] (basename path {}))
+  ([path opts]
+   (let [{:keys [omit-extension?]} opts]
+     (let [b (.basename pathlib path)]
+       (if-not omit-extension?
+         b
+         (let [e (.extname pathlib b)]
+           (subs b 0 (- (count b) (count e)))))))))
 
 (defn file-buf
   "Returns a DataView wrapping the contents of the file at `path`."

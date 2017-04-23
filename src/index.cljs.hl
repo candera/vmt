@@ -2,19 +2,32 @@
   (:require [weathergen.ipc :as ipc]
             [weathergen.ui :as ui]
             [weathergen.ui.buttons :as buttons]
-            [weathergen.ui.common :as comm]))
+            [weathergen.ui.common :as comm])
+  (:require-macros
+   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
 
 (def electron (js/require "electron"))
 
+(defc loading? false)
 (defc progress-messages [])
+(defc load-failed? false)
 
 (defmethod ipc/on-message "progress-message"
   [_ event msg]
   (swap! progress-messages conj msg))
 
-(defmethod ipc/on-message "mission-load-complete"
+(defmethod ipc/on-message "load-complete"
   [_ event]
-  (swap! progress-messages conj "Mission loaded"))
+  (dosync
+   (swap! progress-messages conj "Load complete")
+   (reset! loading? false)))
+
+(defmethod ipc/on-message "load-failed"
+  [_ _ err]
+  (.log js/console "Received load failure from mission window." err)
+  (swap! progress-messages conj "Load failed")
+  (reset! loading? false)
+  (reset! load-failed? true))
 
 (defn load-mission
   []
@@ -28,49 +41,90 @@
                                                  :extensions #js ["cam"]}
                                             #js {:name "Tactical engagement file"
                                                  :extensions #js ["tac"]}]}))]
-    (reset! progress-messages ["Loading mission..."])
+    (dosync
+     (reset! loading? true)
+     (reset! load-failed? false)
+     (reset! progress-messages ["Setting up to load mission"]))
     (ipc/send-to-main "open-mission" path)))
 
 (defn load-briefing
   []
-  (js/alert "Coming soon!"))
+  (when-let [[path] (-> electron
+                        .-remote
+                        .-dialog
+                        (.showOpenDialog
+                         #js {:title "Select a campaign or tactical engagement file"
+                              :openFile true
+                              :filters #js [#js {:name "VMT Briefing"
+                                                 :extensions #js ["vmtb"]}]}))]
+    (dosync
+     (reset! loading? true)
+     (reset! load-failed? false)
+     (reset! progress-messages ["Setting up to load briefing"]))
+    (ipc/send-to-main "open-briefing" path)))
 
 (html
  (ui/head)
  (body
-  :css {:margin "8px"
-        :height "100%"}
+  :css {:margin "0"}
   (div
-   :css {:display "flex"
+   :css {:display        "flex"
          :flex-direction "column"
-         :max-height "357px"}
-   (ui/titlebar)
+         :height         "100vh"}
+   (div
+    :css {:padding "8px 8px 0"}
+    (ui/titlebar))
    (div
     :css {:font-size "150%"}
     (buttons/a-button
      :css {:display "inline-block"
            :margin  "5px 10px"}
+     :disabled loading?
      :click load-mission
      "Load mission (.cam/.tac)")
     (buttons/a-button
      :css {:display "inline-block"
            :margin  "5px 10px"}
+     :disabled loading?
      :click load-briefing
      "Load briefing (.vmtb)"))
    (with-let [elem (div
                     :css {:overflow-y "auto"
                           :overflow-x "hidden"
-                          :flex 1
-                          :font-size "150%"
-                          :border "solid 1px black"
-                          :height "782px"
-                          :margin-left "10px"
-                          :padding "4px"}
-              (for-tpl [message progress-messages]
-                (div message)))]
-   (add-watch progress-messages
-              ::scroll-notifications
-              (fn [_ _ _ _]
-                (with-timeout 0
-                  (-> elem .-scrollTop (set! (.-scrollHeight elem))))))))))
+                          :flex       1
+                          :font-size  "150%"
+                          :border     "solid 1px black"
+                          :margin     "0 10px 20px 10px"
+                          :padding    "4px"}
+                    (for-tpl [message (cell= (butlast progress-messages))]
+                      (div (span :css {:font-weight "bold"
+                                       :color       "green"
+                                       :width       "24px"
+                                       :display     "inline-block"}
+                                 "✓")
+                           message))
+                    (let [last-message (cell= (last progress-messages))]
+                      (div
+                       (if-tpl loading?
+                         (img :css {:width          "24px"
+                                    :vertical-align "middle"
+                                    :margin-top     "-5px"}
+                              :src "images/spinner.gif")
+                         (span :css (formula-of [load-failed?]
+                                      {:font-weight "bold"
+                                       :color       (if load-failed?
+                                                      "red"
+                                                      "green")
+                                       :width       "24px"
+                                       :display     "inline-block"})
+                               (cond-tpl
+                                 (cell= (not last-message)) ""
+                                 load-failed? "✗"
+                                 :else "✓")))
+                       last-message)))]
+     (add-watch progress-messages
+                ::scroll-notifications
+                (fn [_ _ _ _]
+                  (with-timeout 0
+                    (-> elem .-scrollTop (set! (.-scrollHeight elem))))))))))
 

@@ -14,7 +14,8 @@
                                 spy get-env log-env)]
             [weathergen.falcon.files.images :as im]
             [weathergen.falcon.files.mission :as mission]
-            [weathergen.filesystem :as fs])
+            [weathergen.filesystem :as fs]
+            [weathergen.settings :refer [app-dir]])
   (:require-macros
    [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
 
@@ -24,14 +25,6 @@
   #_(if (= "nodejs" cljs.core/*target*)
     (.-exports js/module)
     js/tinycolor))
-
-(def app-dir
-  (-> "electron"
-      js/require
-      .-remote
-      .-app
-      (.getPath "appData")
-      (fs/path-combine "craigandera.org" "VMT")))
 
 (def colors
   {:invalid       "#c70505"
