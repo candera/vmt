@@ -1,21 +1,22 @@
 (def project 'weathergen)
 
 (set-env!
- :dependencies '[[org.clojure/clojure       "1.9.0-alpha14"]
-                 [org.clojure/clojurescript "1.9.456"]
-                 [adzerk/boot-cljs          "1.7.228-2"]
-                 [adzerk/boot-reload        "0.5.0"]
+ :dependencies '[[org.clojure/clojure       "1.9.0-alpha15"]
+                 [org.clojure/clojurescript "1.9.521"]
+                 [adzerk/boot-cljs          "2.0.0"]
+                 [adzerk/boot-reload        "0.5.1"]
                  ;; [adzerk/boot-cljs-repl     "0.3.3"]
                  ;;[hoplon/javelin "3.9.0"]
-                 [hoplon/hoplon             "7.0.0-SNAPSHOT"]
-                 [org.clojure/core.async    "0.2.395"
+                 [hoplon/hoplon             "6.0.0-alpha17"]
+                 [org.clojure/core.async    "0.3.442"
                   :exclusions [org.clojure/tools.reader]]
                  [tailrecursion/boot-jetty  "0.1.3"]
                  [cljsjs/jquery-ui "1.11.4-0"]
                  [org.clojure/data.csv "0.1.3"]
                  ;; TODO: Update to later version
                  [com.cognitect/transit-cljs "0.8.239"]
-                 [com.taoensso/timbre "4.8.0"]
+                 [com.cognitect/transit-clj "0.8.300" :scope "test"]
+                 [com.taoensso/timbre "4.10.0"]
                  ;;[secretary "1.2.3"]
                  ;;[funcool/cuerdas "2.0.0"]
                  ;;[com.cemerick/url "0.1.1"]
@@ -23,7 +24,7 @@
                  ;; CLJS REPL dependencies
                  [com.cemerick/piggieback "0.2.1" :scope "test"]
                  [weasel "0.7.0" :scope "test"]
-                 [org.clojure/tools.nrepl "0.2.12" :scope "test"]
+                 [org.clojure/tools.nrepl "0.2.13" :scope "test"]
 
                  [cljsjs/filesaverjs "1.3.3-0"]
                  ;; Had to download as the cljsjs one is pretty far out of date
