@@ -94,6 +94,11 @@
                       {:reason :file-open-failed
                        :path path})))))
 
+(defn file-buffer
+  "Reads the contents of file at `path` as a Node Buffer."
+  [path]
+  (->> path normalize case-desensitize (.readFileSync filesystem)))
+
 (defn file-text
   "Returns a string with the contents of the file at `path`."
   [path]

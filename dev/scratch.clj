@@ -2406,3 +2406,5 @@ type: 0x64 -> image
                              (->> b2
                                   :campaign-info))))
 
+(-> "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 23 55 48.cam.vmtb"
+    )

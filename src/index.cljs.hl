@@ -10,7 +10,7 @@
 
 (defc loading? false)
 (defc progress-messages [])
-(defc load-failed? false)
+(defc load-error nil)
 
 (defmethod ipc/on-message "progress-message"
   [_ event msg]
@@ -24,10 +24,8 @@
 
 (defmethod ipc/on-message "load-failed"
   [_ _ err]
-  (.log js/console "Received load failure from mission window." err)
-  (swap! progress-messages conj "Load failed")
   (reset! loading? false)
-  (reset! load-failed? true))
+  (reset! load-error err))
 
 (defn load-mission
   []
@@ -43,7 +41,7 @@
                                                  :extensions #js ["tac"]}]}))]
     (dosync
      (reset! loading? true)
-     (reset! load-failed? false)
+     (reset! load-error nil)
      (reset! progress-messages ["Setting up to load mission"]))
     (ipc/send-to-main "open-mission" path)))
 
@@ -59,7 +57,7 @@
                                                  :extensions #js ["vmtb"]}]}))]
     (dosync
      (reset! loading? true)
-     (reset! load-failed? false)
+     (reset! load-error nil)
      (reset! progress-messages ["Setting up to load briefing"]))
     (ipc/send-to-main "open-briefing" path)))
 
@@ -90,7 +88,7 @@
      "Load briefing (.vmtb)"))
    (with-let [elem (div
                     :css {:overflow-y "auto"
-                          :overflow-x "hidden"
+                          :overflow-x "auto"
                           :flex       1
                           :font-size  "150%"
                           :border     "solid 1px black"
@@ -110,21 +108,34 @@
                                     :vertical-align "middle"
                                     :margin-top     "-5px"}
                               :src "images/spinner.gif")
-                         (span :css (formula-of [load-failed?]
+                         (span :css (formula-of [load-error]
                                       {:font-weight "bold"
-                                       :color       (if load-failed?
+                                       :color       (if load-error
                                                       "red"
                                                       "green")
                                        :width       "24px"
                                        :display     "inline-block"})
                                (cond-tpl
                                  (cell= (not last-message)) ""
-                                 load-failed? "✗"
+                                 load-error "✗"
                                  :else "✓")))
-                       last-message)))]
+                       last-message
+                       (when-tpl load-error
+                         (let [show? (cell false)]
+                           [(span
+                             :css {:color "blue"
+                                   :text-decoration "underline"
+                                   :font-size "70%"
+                                   :margin-left "5px"}
+                             :click #(swap! show? not)
+                             (if-tpl show?
+                               "Hide error details"
+                               "Show error details"))
+                            (pre :toggle show?
+                                 :css {:padding-left "10px"}
+                                 load-error)])))))]
      (add-watch progress-messages
                 ::scroll-notifications
                 (fn [_ _ _ _]
                   (with-timeout 0
                     (-> elem .-scrollTop (set! (.-scrollHeight elem))))))))))
-

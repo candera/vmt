@@ -11,7 +11,6 @@
 (defn send-to-main
   "Sends a message from a renderer process to the main process."
   [type & args]
-  (.log js/console "send-to-main" type args)
   (apply (-> electron .-ipcRenderer .-send) channel type (map encode args)))
 
 (defn send-to-renderer

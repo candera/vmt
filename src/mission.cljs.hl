@@ -13,17 +13,19 @@
   [_ event installations path]
   (try
     (binding [progress/*reporter* #(ipc/send-to-main "progress-message" %)]
-      (ui/load-mission path))
+      (log/debug "open-mission" :installations installations :path path)
+      (ui/load-mission installations path))
     (ipc/send-to-main "load-complete")
     (catch :default e
       (log/error e "Load failed" :stack (.-stack e))
-      (ipc/send-to-main "load-failed" e))))
+      (ipc/send-to-main "load-failed" (.-stack e)))))
 
 (defmethod ipc/on-message "open-briefing"
   [_ event installations path]
   (try
     (binding [progress/*reporter* #(ipc/send-to-main "progress-message" %)]
-      (ui/load-briefing installations path))
+      (ui/load-briefing installations path)
+      (ipc/send-to-main "load-complete"))
     (catch :default e
       (log/error e "Load failed" :stack (.-stack e))
       (ipc/send-to-main "load-failed" (.-stack e)))))

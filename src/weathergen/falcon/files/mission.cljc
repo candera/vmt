@@ -303,6 +303,7 @@
   function that given an index that will yield the string at that
   index."
   [dir name]
+  (log/debug "read-strings" :dir dir :name name)
   (let [idx-buf (fs/file-buf (fs/path-combine dir (str name ".idx")))
         wch-buf (fs/file-buf (fs/path-combine dir (str name ".wch")))]
     (binding [octet.buffer/*byte-order* :little-endian]
@@ -673,8 +674,8 @@
                               path))
        first))
 
-(defn theater-name
-  "Returns the display name of the theater."
+(defn theaterdef-name
+  "Returns the display name of the theater as given in the theaterdef file."
   [mission]
   (get-in mission [:theater :name]))
 
@@ -748,7 +749,7 @@
 (defn read-mission
   "Given a path to a mission (.cam/.tac/.trn) file, read,
   parse, and return it."
-  [path]
+  [installs path]
   (let [install-dir   (find-install-dir path)
         installation  (load-installation install-dir)
         theater       (find-theater installation path)
@@ -774,6 +775,19 @@
                         :path           path
                         :names          names
                         :installation   installation
+                        ;; Installations are the names of the
+                        ;; installations this mission might be in.
+                        ;; E.g. 4.33 UI and 4.33. We have to get help
+                        ;; from the user, since there's no way to tell
+                        ;; a priori
+                        :installs installs
+                        :candidate-installs (->> installs
+                                                 (filter (fn [[name dir]]
+                                                           ;; This one weird trick is for directory identity
+                                                           (and (fs/ancestor? dir install-dir)
+                                                                (fs/ancestor? install-dir dir))))
+                                                 (mapv key))
+                        :mission-name   (fs/basename path)
                         :theater        theater})]
     (-> mission
         (assoc :map-image (im/make-descriptor mission
@@ -785,44 +799,47 @@
   of the mission, containing everything needed to rehydrate the
   mission later."
   [mission]
-  (merge {:theater-name (theater-name mission)
-          :extension    (-> mission :path extension)}
+  (merge {:theaterdef-name (theaterdef-name mission)
+          :extension       (-> mission :path extension)}
          (select-keys mission (vals file-types))))
 
 (defn briefing->mission
   "Loads a mission given a briefing (see `mission->briefing`)."
   [install-dir briefing]
-  (let [{:keys [theater-name]} briefing
-        installation           (load-installation install-dir)
-        theater                (->> installation
-                                    :theaters
-                                    (filter #(= theater-name (:name %))))
-        _                      (when-not theater
-                                 (throw (ex-info (str "Theater " theater-name " does not seem to be installed.")
-                                                 {:reason       ::theater-not-found
-                                                  :install-dir  install-dir
-                                                  :theater-name theater-name})))
-        strings                (read-strings-file (campaign-dir installation theater))
-        database               (assoc (load-initial-database installation theater)
-                                      :strings strings)
-        {:keys [scenario]}     (->> briefing :campaign-info)
-        names                  (read-strings (campaign-dir installation theater)
-                                             theater-name)
-        database               (assoc (load-initial-database installation theater)
-                                      :strings strings)
-        scenario-path          (fs/path-combine (campaign-dir installation theater)
-                                                (str scenario (:extension briefing)))
-        scenario-files         (read-embedded-files scenario-path database)
-        mission                (merge database
-                                      briefing
-                                      ;; TODO: Figure out if we need to merge persistent objects
-                                      {:objectives     (merge-objective-deltas
-                                                        (:objectives scenario-files)
-                                                        (:objective-deltas briefing))
-                                       :scenario-files scenario-files
-                                       :names          names
-                                       :installation   installation
-                                       :theater        theater})]
+  (let [{:keys [theaterdef-name]} briefing
+        installation              (load-installation install-dir)
+        theater                   (->> installation
+                                       :theaters
+                                       (filter #(= theaterdef-name (:name %)))
+                                       first)
+        _                         (when-not theater
+                                    (throw (ex-info (str "Theater " theaterdef-name
+                                                         " does not seem to be installed.")
+                                                    {:reason          ::theater-not-found
+                                                     :install-dir     install-dir
+                                                     :theaterdef-name theaterdef-name})))
+        strings                   (read-strings-file (campaign-dir installation theater))
+        database                  (assoc (load-initial-database installation theater)
+                                         :strings strings)
+        {:keys [theater-name
+                scenario]}        (->> briefing :campaign-info)
+        names                     (read-strings (campaign-dir installation theater)
+                                                theater-name)
+        database                  (assoc (load-initial-database installation theater)
+                                         :strings strings)
+        scenario-path             (fs/path-combine (campaign-dir installation theater)
+                                                   (str scenario (:extension briefing)))
+        scenario-files            (read-embedded-files scenario-path database)
+        mission                   (merge database
+                                         briefing
+                                         ;; TODO: Figure out if we need to merge persistent objects
+                                         {:objectives     (merge-objective-deltas
+                                                           (:objectives scenario-files)
+                                                           (:objective-deltas briefing))
+                                          :scenario-files scenario-files
+                                          :names          names
+                                          :installation   installation
+                                          :theater        theater})]
     (-> mission
         (assoc :map-image (im/make-descriptor mission
                                               "resource/campmap"
@@ -1941,7 +1958,7 @@
 (defn mission-name
   "Returns the display name of the mission."
   [mission]
-  (-> mission :path fs/basename))
+  (-> mission :mission-name))
 
 ;; Bunch of ideas:
 ;;

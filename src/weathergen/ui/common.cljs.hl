@@ -75,9 +75,7 @@
           styles (cell= (css garden))]
       (when-dom head
         #(do
-           (.log js/console "appending style to head" head)
            (.appendChild head (style :type "text/css" styles))
-           (.log js/console "appended" key)
            (swap! registered-styles conj key))))))
 
 (defn register-class!

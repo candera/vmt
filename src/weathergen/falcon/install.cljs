@@ -7,44 +7,6 @@
 
 (def win32? (-> "os" js/require .platform (= "win32")))
 
-#_(def install-dir (atom nil))
-
-#_(defn- locate-install-dir-windows
-  [version cb]
- (let [Registry (js/require "winreg")
-       key64 (Registry. {:hive (.-HKLM Registry)}
-                        :key (str "SOFTWARE\\Wow6432Node\\Benchmark Sims\\" version))
-       key32 (Registry. {:hive (.-HKLM Registry)
-                         :key (str "SOFTWARE\\Benchmark Sims\\" version)})]
-   (.get key64 "baseDir"
-         (fn [err result]
-           (if-not err
-             (cb (.-value result))
-             (.get key32 "baseDir"
-                   (fn [err result]
-                     (if err
-                       (do
-                         (log/error "Could not read install dir from registry.")
-                         (cb nil))
-                       (cb (.-value result))))))))))
-
-#_(defn locate-install-dir
-  "Uses the Windows registry to locate the BMS install directory for
-  the given version. Calls `cb` with the path when located, or `nil`
-  if it could not be found."
-  [version cb]
-  (cond
-    @install-dir
-    (cb @install-dir)
-
-    win32?
-    (locate-install-dir-windows version cb)
-
-    :else
-    (let [dir (get-in (settings/load-settings) [:install-dir version])]
-      (reset! install-dir dir)
-      (cb dir))))
-
 (def installations (atom nil))
 
 (defn- reg-read-installations
@@ -96,8 +58,3 @@
       :else
       (cb nil))))
 
-#_(if win32?
-  (do
-    (defc install-dir nil)
-    (locate-install-dir install-dir "4.33 U1"))
-  (defc= install-dir ))

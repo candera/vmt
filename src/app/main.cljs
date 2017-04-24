@@ -32,7 +32,12 @@
 (def installations (atom {}))
 
 (defn mk-window [w h frame? show?]
-  (BrowserWindow. #js {:width w :height h :frame frame? :show show? :icon "images/1stVFW_Insignia.png"}))
+  (BrowserWindow. #js {:width w
+                       :height h
+                       :frame frame?
+                       :show show?
+                       :icon "images/1stVFW_Insignia.png"
+                       :center true}))
 
 (defn open
   "Kicks off a renderer opening the thing at `path`. `mode` tells us
@@ -45,7 +50,8 @@
         .-webContents
         (.on "did-finish-load"
              (fn []
-               (.show mission-window)
+               (when (-> js/process.env (aget "VMT_DEV_OPEN_WINDOW_EARLY") some?)
+                 (.show mission-window))
                (ipc/send-to-renderer mission-window
                                      (mode {:briefing "open-briefing"
                                             :mission  "open-mission"})
@@ -85,7 +91,7 @@
   (ipc/send-to-renderer @app-window "load-failed" err))
 
 (defn init-browser []
-  (reset! app-window (mk-window 800 400 true false))
+  (reset! app-window (mk-window 800 600 true false))
   (load-page @app-window "index.html")
   (-> @app-window .-webContents (.on "did-finish-load" (fn [] (.show @app-window))))
   ;; Shows how to make a child window that's always on top of the app window:

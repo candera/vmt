@@ -1,5 +1,6 @@
 {
-    "name": "Virtual Mission Tools",
+    "name": "vmt",
+    "productName": "Virtual Mission Tools",
     "version": "0.1.0",
     "main": "main.js",
     "devDependencies": {

@@ -782,11 +782,11 @@
 
 (defn load-mission
   "Loads a mission (.cam/.tac) mission file."
-  [path]
+  [installs path]
   (with-time
     "load-mission"
     (let [mission-data (with-time "read-mission"
-                         (mission/read-mission path))]
+                         (mission/read-mission installs path))]
       (dosync
        (progress/report "Preparing views")
        (reset! mission mission-data)
@@ -806,18 +806,73 @@
                 [:time :current]
                 current))))))
 
+(defn compress
+  "Compresses a buffer, returing a new buffer with the compressed
+  data."
+  [buf]
+  (.gzipSync zlib buf))
+
+(defn decompress
+  "Decompresses a buffer, returning a new buffer with the expanded
+  data."
+  [buf]
+  (.gunzipSync zlib buf))
+
+(def StringDecoder (.-StringDecoder (js/require "string_decoder")))
+
+(defn- buf->string
+  "Converts a buffer to a string."
+  [buf]
+  (.write (StringDecoder.) buf))
+
+(defn- string->buf
+  "Converts a buffer to a string."
+  [s]
+  (js/Buffer.from s))
+
 (defn load-briefing
   "Loads a briefing (.vmtb) file given a path to a briefing and a map
   from installation names to their directories."
   [installations path]
   (progress/report "Reading briefing file")
-  (let [{:keys [revision installation briefing]} (-> path fs/file-text reader/read-string)
-        install-dir (get installations installation)]
+  (let [{:keys [revision install-id briefing]} (->> path
+                                                    fs/file-buffer
+                                                    decompress
+                                                    decode)
+        install-dir (get installations install-id)]
+    (log/debug "load-briefing"
+               :installations installations
+               :install-id install-id
+               :install-dir install-dir
+               :revision revision
+               :briefing? (some? briefing))
+    (progress/report (str "Loading mission from install at " install-dir))
     (let [mission-data (mission/briefing->mission install-dir briefing)]
       (progress/report "Preparing views")
       (reset! mission mission-data)
       ;; TODO: Set up weather data, blah blah
       )))
+
+(defn save-briefing
+  "Prompts the user for a path and saves a briefing file to it."
+  [install-id]
+  (when-let [path (-> electron
+                      .-remote
+                      .-dialog
+                      (.showSaveDialog
+                       #js {:title "Save a briefing file"
+                            :defaultPath (fs/path-combine (mission/campaign-dir @mission)
+                                                          (str (mission/mission-name @mission)
+                                                               ".vmtb"))
+                            :filters #js [#js {:name "VMT Briefing"
+                                               :extension #js ["vmtb"]}]}))]
+    (log/debug "save-briefing" :path path)
+    (->> {:revision revision
+          :install-id install-id
+          :briefing (mission/mission->briefing @mission)}
+         encode
+         compress
+         (fs/save-binary path))))
 
 (def zipbuilder-worker
   (let [worker (js/Worker. "worker.js")
@@ -884,38 +939,6 @@
             (reset! progress nil)
             (recur (+ t step) true)))))))
 
-(defn compress
-  "Compresses a buffer, returing a new buffer with the compressed
-  data."
-  [buf]
-  (.gzipSync zlib buf))
-
-(defn decompress
-  "Decompresses a buffer, returning a new buffer with the expanded
-  data."
-  [buf]
-  (.gunzipSync zlib buf))
-
-(defn save-briefing
-  "Prompts the user for a path and saves a briefing file to it."
-  [_]
-  (when-let [path (-> electron
-                      .-remote
-                      .-dialog
-                      (.showSaveDialog
-                       #js {:title "Save a briefing file"
-                            :defaultPath (fs/path-combine (mission/campaign-dir @mission)
-                                                          (str (mission/mission-name @mission)
-                                                               ".vmtb"))
-                            :filters #js [#js {:name "VMT Briefing"
-                                               :extension #js ["vmtb"]}]}))]
-    (log/debug "save-briefing" :path path)
-    (->> {:revision revision
-          :briefing (mission/mission->briefing @mission)}
-         encode
-         js/Buffer.from
-         compress
-         (fs/save-binary path))))
 
 
 ;;; Help
@@ -4156,7 +4179,7 @@
             "Loaded mission")
        (div (span :css {:font-weight "bold"}
                   "Theater: ")
-            (cell= (mission/theater-name mission)))
+            (cell= (mission/theaterdef-name mission)))
        (div (span :css {:font-weight "bold"}
                   "Mission: ")
             (cell= (mission/mission-name mission)))
@@ -4174,10 +4197,22 @@
    :title "Save Mission Briefing"
    (div
     :css {:padding "5px"}
-    (buttons/a-button
-     :click save-briefing
-     "Save Briefing (.vmtb)"))))
+    (div
+     (cond-tpl
+       (-> mission :candidate-installs count (= 1) cell=)
+       (div (span "Briefing will be saved for installation: ")
+            (span :css {:font-family "monospace"
+                        :font-size "120%"}
+                  (cell= (-> mission :candidate-installs first))))
 
+       (-> mission :candidate-installs count zero? cell=)
+       "Cannot find a matching installation of Falcon BMS for this mission."
+
+       :else "Two or more installed copies of Falcon BMS point at the same directory. Cannot save briefing due to ambiguity. TODO: Tyrant should fix this. :)"))
+    (buttons/a-button
+     :toggle (-> mission :candidate-installs count (= 1) cell=)
+     :click #(save-briefing (-> @mission :candidate-installs first))
+     "Save Briefing (.vmtb)"))))
 
 ;;; General layout
 
@@ -4187,7 +4222,7 @@
    (title (formula-of [mission]
             (if-not mission
               "Virtual Mission Tools"
-              (str (mission/theater-name mission)
+              (str (mission/theaterdef-name mission)
                    " - "
                    (mission/mission-name mission)))))
    ;; (link :href "lib/slickgrid/slick.grid.css" :rel "stylesheet" :title "main" :type "text/css")
@@ -4394,5 +4429,3 @@
         (log/debug "Trying again")
         (async/<! (async/timeout 500))
         (recur)))))
-
-
