@@ -7,5 +7,5 @@ echo "Using Electron version ${ELECTRON_VERSION}"
 echo "Building Mac app"
 electron-packager target/ --electron-version=$ELECTRON_VERSION --out package/ --overwrite --platform=darwin --icon "assets/images/1stVFW_Insignia.icns"
 echo "Building Windows exe"
-electron-packager target/ --electron-version=$ELECTRON_VERSION --out=package/ --overwrite --platform=win32 --arch=ia32,x64 --icon="assets/images/win/1stVFW_Insignia.ico" #--asar=true
+electron-packager target/ --electron-version=$ELECTRON_VERSION --out=package/ --overwrite --platform=win32 --arch=ia32,x64 --icon="assets/images/1stVFW_Insignia.ico" #--asar=true
 
