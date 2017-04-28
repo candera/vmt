@@ -126,3 +126,11 @@
                       ;; (taoensso.timbre/debug "watch fired, updating bbox")
                       (hoplon.core/with-timeout 0 (update-bbox#)))))
        ~@body)))
+
+(defmacro with-attr-bindings
+  "Meant to be used as the immediate child of a defelem. Extracts
+  `keys` from `attr`, binds them, and dissocates them from `attrs`."
+  [attrs keys & body]
+  `(let [{:keys ~keys} ~attrs
+         ~attrs (apply dissoc ~attrs ~keys)]
+     ~@body))

@@ -2405,6 +2405,17 @@ type: 0x64 -> image
                                   :campaign-info)
                              (->> b2
                                   :campaign-info))))
+(do
+  (require '[cognitect.transit :as transit]
+           '[clojure.java.io :as io])
+  (-> "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 23 55 48.cam.vmtb"
+      io/input-stream
+      java.util.zip.GZIPInputStream.
+      (transit/reader :json)
+      transit/read
+      (->> (def briefing))))
 
-(-> "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 23 55 48.cam.vmtb"
-    )
+(def m (mission/briefing->mission {"Falcon BMS 4.33 U1" "/Users/candera/falcon/4.33.3"}
+                                  (:briefing briefing)))
+
+

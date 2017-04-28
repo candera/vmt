@@ -1,6 +1,7 @@
 (ns weathergen.ui.layers.flights
   "Responsible for drawing the flight path layer and the associated controls."
-  (:require [goog.string :as gstring]
+  (:require [clojure.set :as set]
+            [goog.string :as gstring]
             [goog.string.format]
             [hoplon.storage-atom :refer [local-storage]]
             [hoplon.svg :as svg]
@@ -69,7 +70,8 @@
        colors))
 
 (defn controls
-  [{:keys [all-flights checked-flights display highlighted-flight mission selected-teams]}]
+  [{:keys [all-flights checked-flights display highlighted-flight
+           mission selected-teams visible-teams]}]
   (control-section
    :title "Flights"
    (cond-tpl
@@ -101,39 +103,14 @@
        (buttons/a-button
         :click #(reset! mission-category-colors default-mission-category-colors)
         "Reset to defaults"))
-      (div
-       :css {:margin-bottom "5px"}
-       (for-tpl [team (cell= (mission/teams mission))]
-         (inl
-          :css (formula-of [team]
-                 {:margin-right "3px"
-                  :padding      "3px"
-                  :border       (str "2px solid " (team-color team :dark-text))
-                  :text-align   "center"})
-          (img :css {:border "solid 1px black"}
-               :src (formula-of [mission team]
-                      (comm/get-image
-                       mission
-                       (mission/team-flag mission
-                                          team
-                                          :big-vert))))
-          (div
-           :css {:text-align "center"}
-           (span :css (cell= {:color (team-color team :dark-text)})
-                 (->> team :team :who (mission/team-name mission) cell=)))
-          (div
-           :css {:text-align "center"}
-           (let [val (cell= (contains? selected-teams (mission/team-number team)))]
-             (input :css {:margin "auto"}
-                    :type "checkbox"
-                    :value val
-                    :change #(swap! selected-teams (if @val disj conj) (mission/team-number @team))))))))
+      (comm/team-selector
+       :mission mission
+       :selected-teams selected-teams
+       :selectable-teams visible-teams)
       (grids/table-grid
        :data (formula-of [mission all-flights selected-teams]
                (->> all-flights
-                    (filter #(->> %
-                                  :owner
-                                  selected-teams))))
+                    (filter #(contains? selected-teams (:owner %)))))
        :when-empty (text "No flights to show")
        :row-attrs (fn [flight rownum]
                     (when (and flight rownum)
@@ -388,26 +365,34 @@
          (flight-path-overlay highlighted-flight state)))))))
 
 (defn create
-  [mission map-zoom]
-  (let [state {:mission mission
-               :map-zoom map-zoom
-               :checked-flights (cell #{})
+  [mission map-zoom visible-teams]
+  (let [state {:mission            mission
+               :map-zoom           map-zoom
+               :checked-flights    (cell #{})
                :highlighted-flight (cell nil)
-               :display (cell {})
-               :all-flights (cell= (some->> mission :units (filter #(= (:type %) :flight))))
-               :selected-teams (cell (->> (mission/last-player-team mission)
-                                          (mission/side mission)
-                                          (mission/teams-for-side mission)))}]
-    (do-watch mission
+               :visible-teams      visible-teams
+               :display            (cell {})
+               :all-flights        (cell= (some->> mission :units (filter #(= (:type %) :flight))))
+               :selected-teams     (cell #{})}
+        watchable (formula-of [mission visible-teams]
+                    [mission visible-teams])]
+    (do-watch watchable
               ::reset-on-mission-change
-              (fn [_ mission]
+              (fn [_ [mission visible-teams]]
                 (dosync
                  (reset! (:display state) {})
                  (reset! (:highlighted-flight state) nil)
                  (reset! (:checked-flights state) #{})
-                 (reset! (:selected-teams state) (->> (mission/last-player-team mission)
-                                                      (mission/side mission)
-                                                      (mission/teams-for-side mission))))))
+                 (reset! (:selected-teams state)
+                         (let [last-allied (->> (mission/last-player-team mission)
+                                                (mission/side mission)
+                                                (mission/teams-for-side mission)
+                                                set)]
+                           (if (->> visible-teams
+                                    (set/intersection last-allied)
+                                    empty?)
+                             visible-teams
+                             last-allied))))))
     (assoc state
            :controls (controls state)
            :overlay (overlay state))))

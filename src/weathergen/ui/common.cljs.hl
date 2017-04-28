@@ -17,7 +17,7 @@
             [weathergen.filesystem :as fs]
             [weathergen.settings :refer [app-dir]])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of]]))
 
 ;; This is a massive hack, and I have no idea what we're going to do if some other library decides to
 ;; say `module.exports` in its code.
@@ -327,3 +327,78 @@
                  (fn [blob]
                    (save-blob-async blob path)))
         (.toDataURL canvas)))))
+
+(defelem team-selector
+  "Draws a grid of flags and checkboxes to pick teams."
+  [attrs _]
+  (with-attr-bindings attrs [mission selected-teams selectable-teams]
+    (div
+     :css {:margin-bottom "5px"}
+     attrs
+     (for-tpl [team (cell= (mission/teams mission))]
+       (inl
+        :css (formula-of [team]
+               {:margin-right   "3px"
+                :padding        "3px"
+                :border         (str "2px solid " (team-color team :dark-text))
+                :text-align     "center"
+                :vertical-align "top"})
+        (img :css {:border "solid 1px black"}
+             :src (formula-of [mission team]
+                    (get-image
+                     mission
+                     (mission/team-flag mission
+                                        team
+                                        :big-vert))))
+        (div
+         :css {:text-align "center"}
+         (span :css (cell= {:color (team-color team :dark-text)})
+               (->> team :team :who (mission/team-name mission) cell=)))
+        (div
+         :css {:text-align "center"
+               :height     "33px"}
+         (let [val      (cell= (contains? selected-teams (mission/team-number team)))
+               enabled? (cell= (contains? selectable-teams (mission/team-number team)))]
+           (input :css {:margin "auto"}
+                  :type "checkbox"
+                  :toggle enabled?
+                  :value val
+                  :change #(swap! selected-teams
+                                  (comp set (if @val disj conj))
+                                  (mission/team-number @team))))))))))
+
+(defelem side-selector
+  "Draws a grid of flags and checkboxes to pick sides."
+  [attrs _]
+  (with-attr-bindings attrs [mission selected-sides]
+    (div
+     :css {:margin-bottom "5px"}
+     attrs
+     (for-tpl [side (cell= (mission/sides mission))]
+       (inl
+        :css (formula-of [side]
+               {:margin-right "3px"
+                :padding      "3px"
+                :border       (str "2px solid " (team-color side :dark-text))
+                :text-align   "center"})
+        (for-tpl [team (cell= (mission/teams-for-side mission side))]
+          (img :css {:border        "solid 1px black"
+                     :padding-right "2px"}
+               :src (formula-of [mission team]
+                      (get-image
+                       mission
+                       (mission/team-flag mission
+                                          team
+                                          :big-vert)))))
+        (div
+         :css {:text-align "center"}
+         (side-label :mission mission :side side))
+        (div
+         :css {:text-align "center"}
+         (let [val (cell= (contains? selected-sides (mission/team-number side)))]
+          (input :css {:margin "auto"}
+                 :type "checkbox"
+                 :value val
+                 :change #(swap! selected-sides
+                                 (comp set (if @val disj conj))
+                                 (mission/team-number @side))))))))))

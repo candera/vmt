@@ -13,7 +13,7 @@
              :refer [a
                      br
                      cond-tpl
-                     defelem div do!
+                     defelem div do! do-watch
                      fieldset for-tpl
                      hr html
                      if-tpl img input
@@ -356,9 +356,41 @@
        :width (/ nx map-zoom)
        :height (/ ny map-zoom)})))
 
+;; Either :edit or :briefing - :edit is for mission
+;; creators. :briefing is for pilots just viewing it.
+(defc display-mode :edit)
+
+;; Contains the team numbers of the sides that are visible when in
+;; briefing mode.
+(defc visible-sides nil)
+(def effective-visible-sides
+  (formula-of [mission visible-sides display-mode]
+    (cond
+      (not mission)
+      #{}
+
+      (not visible-sides)
+      (->> mission mission/sides set)
+
+      (= :edit display-mode)
+      (->> mission mission/sides set)
+
+      :else
+      visible-sides)))
+
+(def visible-teams
+  (formula-of [mission effective-visible-sides]
+    (set
+     (if (and mission effective-visible-sides)
+       (->> mission
+            mission/teams
+            (filter #(->> % (mission/side mission) effective-visible-sides))
+            (map mission/team-number))
+       (mission/teams mission)))))
+
 ;;; Components
 
-(def flight-paths-layer (weathergen.ui.layers.flights/create mission map-zoom))
+(def flight-paths-layer (weathergen.ui.layers.flights/create mission map-zoom visible-teams))
 
 ;;; Formulas
 
@@ -793,6 +825,11 @@
        ;; TODO: We'll have to keep this information elsewhere when we
        ;; refactor away from being WeatherGen
        (let [current (mission/mission-time @mission)]
+         (reset! visible-sides
+                 (->> mission-data
+                      mission/last-player-team
+                      (mission/side mission-data)
+                      hash-set))
          (swap! display-params
                 update
                 :multi-save
@@ -835,41 +872,50 @@
   from installation names to their directories."
   [installations path]
   (progress/report "Reading briefing file")
-  (let [{:keys [revision install-id briefing]} (->> path
-                                                    fs/file-buffer
-                                                    decompress
-                                                    decode)
-        install-dir (get installations install-id)]
+  (let [{:keys [revision install-id briefing] :as vmtb}
+        (->> path
+             fs/file-buffer
+             decompress
+             decode)]
     (log/debug "load-briefing"
                :installations installations
-               :install-id install-id
-               :install-dir install-dir
                :revision revision
                :briefing? (some? briefing))
-    (progress/report (str "Loading mission from install at " install-dir))
-    (let [mission-data (mission/briefing->mission install-dir briefing)]
+    (progress/report (str "Loading briefing from " path))
+    (let [mission-data (mission/briefing->mission installations briefing)]
       (progress/report "Preparing views")
-      (reset! mission mission-data)
+      (dosync
+       (reset! display-mode :briefing)
+       (reset! mission mission-data)
+       (reset! visible-sides (:visible-sides vmtb))
+       (reset! weather-params (-> vmtb :weather :weather-params))
+       (reset! cloud-params (-> vmtb :weather :cloud-params))
+       (reset! movement-params (-> vmtb :weather :movement-params))
+       (reset! display-params (-> vmtb :weather :display-params)))
       ;; TODO: Set up weather data, blah blah
       )))
 
 (defn save-briefing
   "Prompts the user for a path and saves a briefing file to it."
-  [install-id]
+  [install-id visible-sides]
   (when-let [path (-> electron
                       .-remote
                       .-dialog
                       (.showSaveDialog
-                       #js {:title "Save a briefing file"
+                       #js {:title       "Save a briefing file"
                             :defaultPath (fs/path-combine (mission/campaign-dir @mission)
                                                           (str (mission/mission-name @mission)
                                                                ".vmtb"))
-                            :filters #js [#js {:name "VMT Briefing"
-                                               :extension #js ["vmtb"]}]}))]
+                            :filters     #js [#js {:name      "VMT Briefing"
+                                                   :extension #js ["vmtb"]}]}))]
     (log/debug "save-briefing" :path path)
-    (->> {:revision revision
-          :install-id install-id
-          :briefing (mission/mission->briefing @mission)}
+    (->> {:revision      revision
+          :briefing      (mission/mission->briefing @mission install-id)
+          :weather       {:weather-params  @weather-params
+                          :cloud-params    @cloud-params
+                          :movement-params @movement-params
+                          :display-params  @display-params}
+          :visible-sides visible-sides}
          encode
          compress
          (fs/save-binary path))))
@@ -3707,6 +3753,9 @@
            {:title "Three"
             :id :three
             :ui (div "This is three")}])
+   (pre-cell "visible-sides" visible-sides)
+   (pre-cell "effective-visible-sides" effective-visible-sides)
+   (pre-cell "visible-teams" visible-teams)
    #_(let [color (cell (comm/to-hex-str "blue"))]
      (vector
       (inl
@@ -4195,6 +4244,7 @@
   [_]
   (control-section
    :title "Save Mission Briefing"
+   :toggle (cell= (= display-mode :edit))
    (div
     :css {:padding "5px"}
     (div
@@ -4202,16 +4252,30 @@
        (-> mission :candidate-installs count (= 1) cell=)
        (div (span "Briefing will be saved for installation: ")
             (span :css {:font-family "monospace"
-                        :font-size "120%"}
+                        :font-size   "120%"}
                   (cell= (-> mission :candidate-installs first))))
 
        (-> mission :candidate-installs count zero? cell=)
        "Cannot find a matching installation of Falcon BMS for this mission."
 
        :else "Two or more installed copies of Falcon BMS point at the same directory. Cannot save briefing due to ambiguity. TODO: Tyrant should fix this. :)"))
+    (div
+     :css {:border        "1px solid black"
+           :margin-top    "10px"
+           :margin-bottom "10px"}
+     (div
+      :css {:color         "white"
+            :background    "black"
+            :margin-bottom "5px"
+            :padding       "2px"}
+      "Visibility")
+     (comm/side-selector
+      :css {:padding "0 0 5px 5px"}
+      :mission mission
+      :selected-sides visible-sides))
     (buttons/a-button
      :toggle (-> mission :candidate-installs count (= 1) cell=)
-     :click #(save-briefing (-> @mission :candidate-installs first))
+     :click #(save-briefing (-> @mission :candidate-installs first) @visible-sides)
      "Save Briefing (.vmtb)"))))
 
 ;;; General layout
