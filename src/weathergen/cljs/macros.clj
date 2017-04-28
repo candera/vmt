@@ -132,5 +132,5 @@
   `keys` from `attr`, binds them, and dissocates them from `attrs`."
   [attrs keys & body]
   `(let [{:keys ~keys} ~attrs
-         ~attrs (apply dissoc ~attrs ~keys)]
+         ~attrs (dissoc ~attrs ~@(map keyword keys))]
      ~@body))

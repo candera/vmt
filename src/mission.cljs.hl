@@ -52,18 +52,19 @@
    :id :mission-info
    :sections [:mission-info-section {}
               :save-briefing-section {}]}
-  {:title    "Air Picture"
-   :id       :air-picture
-   :sections [:air-forces-section {}
-              ;;:oob-section {}
-              :flights-section {}]}
+  {:title    "Air Forces"
+   :id       :air-forces
+   :sections [:air-forces-section {}]}
+  {:title    "Flights"
+   :id       :flights
+   :sections [:flights-section {}]}
   {:title    "Weather"
    :id       :weather
    :sections [:serialization-controls {}
-              :step-controls {:mode :edit}
+              :step-controls {}
               :display-controls {}
               :weather-parameters {}
-              :forecast-section {:forecast-link? true}
+              :forecast-section {:forecast-link? false}
               ;;:flightpath-controls {}
               :weather-type-configuration {}
               :cloud-controls {}

@@ -75,7 +75,7 @@
                                 spy get-env log-env)])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]])
+   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of]])
   (:refer-clojure :exclude [load-file]))
 
 ;;; Constants
@@ -290,7 +290,7 @@
                       :multi-save {:mission-name nil
                                    :from {:day 1 :hour 5 :minute 0}
                                    :to {:day 1 :hour 10 :minute 0}
-                                   :step 60}})
+                                   :step 15}})
 
 (defc selected-cell nil)
 
@@ -321,7 +321,7 @@
 
 (defc mission nil)
 
-(defc hide-empty-airbases? false)
+(defc hide-empty-airbases? true)
 (defc hide-inoperable-airbases? false)
 
 (defc included-squadron-types #{})
@@ -405,18 +405,19 @@
 (defc= weather-overrides
   (:weather-overrides weather-params))
 
-(defc= forecast (when selected-cell
-                  (let [result (model/forecast
-                                (:coordinates selected-cell)
-                                (if-let [max-time (-> weather-params :time :max)]
-                                  (model/jump-to-time weather-params
-                                                      movement-params
-                                                      max-time)
-                                  weather-params)
-                                movement-params
-                                60
-                                6)]
-                    result)))
+(def forecast (formula-of [selected-cell weather-params movement-params]
+                (with-time "computing forecast"
+                  (when selected-cell
+                    (model/forecast
+                     (:coordinates selected-cell)
+                     (if-let [max-time (-> weather-params :time :max)]
+                       (model/jump-to-time weather-params
+                                           movement-params
+                                           max-time)
+                       weather-params)
+                     movement-params
+                     60
+                     6)))))
 
 (defc= airbases (->> (db/airbases (:map display-params))
                      (map :name)
@@ -522,8 +523,8 @@
                (reset! weather-data-params params))
             (when (:looping? @movement-params)
               (async/<! (async/timeout 500))
-              (if (= (-> @weather-data-params :time :current)
-                     (-> @weather-data-params :time :max))
+              (if (= (-> @weather-data-params :time :current model/falcon-time->minutes)
+                     (-> @weather-data-params :time :max model/falcon-time->minutes))
                 (move (->> @movement-params :step (/ (* -60 6)) Math/floor))
                 (move 1))))
           (let [[val port] (async/alts! (vec chs))]
@@ -567,18 +568,7 @@
      (swap! time-params
             assoc
             :displayed
-            (:current time))
-     (swap! display-params
-            update
-            :multi-save
-            (fn [{:keys [from to] :as ms}]
-              (assoc ms
-                     :from (:current time)
-                     :to (-> to
-                             model/falcon-time->minutes
-                             (- (model/falcon-time->minutes from))
-                             (+ (model/falcon-time->minutes (:current time)))
-                             model/minutes->falcon-time)))))))
+            (:current time)))))
 
 (defn jump-to-time*
   [t]
@@ -595,7 +585,13 @@
 (defn jump-to-time
   "Adjust the time coordinate to match the displayed time."
   []
-  (jump-to-time* (:displayed @time-params)))
+  (let [desired  (:displayed @time-params)
+        max-time (-> @weather-params :time :max)]
+    (when (or (= :edit @display-mode)
+            (not max-time)
+            (<= (model/falcon-time->minutes desired)
+                (model/falcon-time->minutes max-time)))
+      (jump-to-time* (:displayed @time-params)))))
 
 (defn set-time
   "Adjust the time coordinate so that the current time is adjusted to
@@ -607,23 +603,14 @@
          (:displayed @time-params)))
 
 (defn change-location
-  [airbase]
+  [mission airbase]
   (if (empty? airbase)
     (reset! selected-cell nil)
     (reset! selected-cell {:location airbase
-                           :coordinates (coords/airbase-coordinates
-                                         @cell-count
-                                         (:map @display-params)
-                                         airbase)})))
-
-(defn change-theater
-  [theater]
-  (dosync
-   (swap! selected-cell
-          #(if (= :named @location-type)
-             nil
-             %))
-   (swap! display-params assoc :map theater)))
+                           :coordinates (-> mission
+                                            (coords/fgrid->weather (:x airbase) (:y airbase))
+                                            ((juxt :x :y))
+                                            (->> (mapv long)))})))
 
 ;;; Serialization
 
@@ -768,21 +755,21 @@
      (let [data (-> contents
                     reader/read-string
                     (model/upgrade revision))
-           ;; Conversions for the upgrade from the first public
-           ;; release to the second
-           data (cond-> data
-                  (-> data :display-params :multi-save nil?)
-                  (assoc-in [:display-params :multi-save]
-                            {:mission-name nil
-                             :from         (-> data :weather-params :time :current)
-                             :to           (-> data :weather-params :time :current (model/add-time (* 6 60)))
-                             :step         (-> data :movement-params :step)}))]
+           t    (mission/mission-time @mission)]
        (dosync
-        (let [{:keys [time]} (reset! weather-params (:weather-params data))]
-          (reset! display-params (:display-params data))
-          (reset! movement-params (:movement-params data))
-          (swap! time-params assoc :displayed (:current time))))))
-   {:extensions ".edn"}))
+        (reset! weather-params (-> data
+                                   :weather-params
+                                   (assoc-in [:time :current] t)))
+        (reset! display-params (-> data
+                                   :display-params
+                                   (assoc :multi-save
+                                          {:mission-name nil
+                                           :from         t
+                                           :to           (model/add-time t (* 6 60))
+                                           :step         (-> data :movement-params :step)})))
+        (reset! movement-params (:movement-params data))
+        (swap! time-params assoc :displayed t))))
+   {:extensions ".vmtw"}))
 
 (defn load-dtc
   [_]
@@ -812,6 +799,28 @@
                        :scale 0.5})))))
    {:extensions ".ini"}))
 
+;; React to a mission load by updating various other dependent
+;; settings.
+(do-watch mission
+          (fn [_ mission]
+            (when mission
+              (let [current (mission/mission-time mission)]
+                (swap! display-params
+                       update
+                       :multi-save
+                       (fn [ms]
+                         (assoc ms
+                                :from current
+                                :to (model/add-time current (* 60 6)))))
+                (swap! weather-params
+                       model/jump-to-time
+                       @movement-params
+                       current)
+                (swap! time-params
+                       assoc-in
+                       [:displayed]
+                       current)))))
+
 (defn load-mission
   "Loads a mission (.cam/.tac) mission file."
   [installs path]
@@ -829,19 +838,7 @@
                  (->> mission-data
                       mission/last-player-team
                       (mission/side mission-data)
-                      hash-set))
-         (swap! display-params
-                update
-                :multi-save
-                (fn [ms]
-                  (assoc ms
-                         :mission-name (fs/basename path)
-                         :from current
-                         :to (model/add-time current (* 60 6)))))
-         (swap! weather-params
-                assoc-in
-                [:time :current]
-                current))))))
+                      hash-set)))))))
 
 (defn compress
   "Compresses a buffer, returing a new buffer with the compressed
@@ -891,9 +888,8 @@
        (reset! weather-params (-> vmtb :weather :weather-params))
        (reset! cloud-params (-> vmtb :weather :cloud-params))
        (reset! movement-params (-> vmtb :weather :movement-params))
-       (reset! display-params (-> vmtb :weather :display-params)))
-      ;; TODO: Set up weather data, blah blah
-      )))
+       (reset! display-params (-> vmtb :weather :display-params))
+       (swap! weather-params assoc-in [:time :max] (mission/mission-time mission-data))))))
 
 (defn save-briefing
   "Prompts the user for a path and saves a briefing file to it."
@@ -1345,7 +1341,7 @@
      children)))
 
 (defn forecast-section
-  [{:keys [forecast-link? limit-time?]
+  [{:keys [limit-time?]
     :as opts}]
   (control-section
    :title (with-help [:forecast :overview] "Forecast")
@@ -1355,80 +1351,86 @@
     (div
      (label :for "locations"
             "Forecast for:")
+     ;; formula-of
+     ;; [location-type
+     ;;  mission
+     ;;  selected-cell]
+     (let [airbases (->> mission
+                         mission/oob-air
+                         (sort-by #(mission/objective-name mission %))
+                         cell=)]
+       (cell-let [{:keys [coordinates]} selected-cell
+                  [x y] coordinates]
+         (select
+          :id "locations"
+          :change #(change-location @mission (nth @airbases (util/str->long @%)))
+          (option :selected (cell= (not= :named location-type))
+                  :value ""
+                  (formula-of [location-type x y]
+                    (case location-type
+                      :coordinates (str "Location " (format-coords x y))
+                      :named ""
+                      :none "None selected")))
+          (for-tpl [indexed (cell= (map-indexed vector airbases))]
+            (cell-let [[index ab] indexed]
+              (option :value index
+                      :selected (cell= (= ab (:location selected-cell)))
+                      (cell= (mission/objective-name mission ab))))))))
+     (vector
+      (a :css {:margin-left "5px"}
+         :href (formula-of
+                 [weather-params
+                  display-params
+                  movement-params
+                  cloud-params]
+                 (str "http://firstfighterwing.com/weathergen/forecast.html?data="
+                      (with-time "encoding shareable forecast"
+                        (encoding/data->base64
+                         {:weather-params weather-params
+                          :display-params display-params
+                          :movement-params movement-params
+                          :cloud-params cloud-params}))))
+         :target "_blank"
+         "Shareable Forecast")
+      (help-icon [:forecast :share]))
      (formula-of
-      [location-type
-       airbases
-       selected-cell]
-      (let [[x y] (:coordinates selected-cell)]
-        (select
-         :id "locations"
-         :change #(change-location @%)
-         (option :selected (not= :named location-type)
-                 :value ""
-                 (case location-type
-                   :coordinates (str "Location " (format-coords x y))
-                   :named ""
-                   :none "None selected"))
-         (for [ab airbases]
-           (option :value ab
-                   :selected (= ab (:location selected-cell))
-                   ab)))))
-     (if-not forecast-link?
-       []
-       [(a :css {:margin-left "5px"}
-           :href (formula-of
-                  [weather-params
-                   display-params
-                   movement-params
-                   cloud-params]
-                  (str "forecast.html?data="
-                       (with-time "encoding shareable forecast"
-                         (encoding/data->base64
-                          {:weather-params weather-params
-                           :display-params display-params
-                           :movement-params movement-params
-                           :cloud-params cloud-params}))))
-           :target "_blank"
-           "Shareable Forecast")
-        (help-icon [:forecast :share])])
-     (formula-of
-      [pressure-unit
-       forecast
-       cloud-params]
-      (let [td1 (fn [& args] (apply td
-                                    :css {:padding-right "3px"
-                                          :padding-left "3px"}
-                                    args))
-            td2 (fn [& args] (apply td
-                                    :css {:padding-right "3px"
-                                          :padding-left "3px"
-                                          :text-align "center"}
-                                    args))]
-        (table
-         :class "info-grid"
-         (thead
-          (tr (td1 (with-help [:forecast :time] "Weather Time"))
-              (td1 (with-help [:forecast :type] "Type"))
-              (td1 (with-help [:forecast :pressure] "Press"))
-              (td2 (with-help [:forecast :temperature] "Temp"))
-              (td2 (with-help [:forecast :wind] "Wind"))
-              (td2 (with-help [:forecast :visibility] "Vis"))
-              (td1 (with-help [:forecast :precipitation] "Precip"))
-              (td1 (with-help [:forecast :cloud] "Cloud"))))
-         (tbody
-          (if-not forecast
-            (tr (td :colspan 8
-                    "No location is selected. Choose a location from the list, or click on the weather map to select one."))
-            (for [[time weather] forecast
-                  :let [{:keys [pressure temperature wind type]} weather]]
-              (tr (td1 (format-time time))
-                  (td1 (format-type type))
-                  (td1 (format-pressure pressure pressure-unit))
-                  (td2 (format-temperature temperature))
-                  (td1 (format-wind wind))
-                  (td2 (format-visibility (get-in cloud-params [:visibility type])))
-                  (td1 (format-precipitation temperature type))
-                  (td1 (format-cloud cloud-params type)))))))))))))
+       [pressure-unit
+        forecast
+        cloud-params]
+       (let [td1 (fn [& args] (apply td
+                                     :css {:padding-right "3px"
+                                           :padding-left "3px"}
+                                     args))
+             td2 (fn [& args] (apply td
+                                     :css {:padding-right "3px"
+                                           :padding-left "3px"
+                                           :text-align "center"}
+                                     args))]
+         (table
+          :class "info-grid"
+          (thead
+           (tr (td1 (with-help [:forecast :time] "Weather Time"))
+               (td1 (with-help [:forecast :type] "Type"))
+               (td1 (with-help [:forecast :pressure] "Press"))
+               (td2 (with-help [:forecast :temperature] "Temp"))
+               (td2 (with-help [:forecast :wind] "Wind"))
+               (td2 (with-help [:forecast :visibility] "Vis"))
+               (td1 (with-help [:forecast :precipitation] "Precip"))
+               (td1 (with-help [:forecast :cloud] "Cloud"))))
+          (tbody
+           (if-not forecast
+             (tr (td :colspan 8
+                     "No location is selected. Choose a location from the list, or click on the weather map to select one."))
+             (for [[time weather] forecast
+                   :let [{:keys [pressure temperature wind type]} weather]]
+               (tr (td1 (format-time time))
+                   (td1 (format-type type))
+                   (td1 (format-pressure pressure pressure-unit))
+                   (td2 (format-temperature temperature))
+                   (td1 (format-wind wind))
+                   (td2 (format-visibility (get-in cloud-params [:visibility type])))
+                   (td1 (format-precipitation temperature type))
+                   (td1 (format-cloud cloud-params type)))))))))))))
 
 ;;; Grid interaction
 
@@ -2643,103 +2645,106 @@
   Defaults to setting the source cell.
   :width: Width in pixels of the input area.
   :placeholder: Placeholder when input is empty.
-  :css: Styling applied to container div."
-  [{:keys [conform fmt source update width placeholder css] :as attrs}
-   _]
-  (let [attrs (dissoc attrs :source :conform :update :width :fmt :placeholder :css)
-        interim (cell nil)
-        fmt (or fmt str)
-        value (formula-of
-               [interim source]
-               (if interim
-                 interim
-                 (fmt source)))
-        parsed (conform value)
-        update (or update
-                   #(swap! source
-                           (constantly %)))
-        state (cell :set)
-        focused? (cell false)
-        valid? (formula-of
-                [parsed]
-                (empty? (:message parsed)))]
-    (div
-     attrs
-     :css (merge {:position "relative"
-                  :overflow "show"
-                  :white-space "nowrap"
-                  :width (or width "125px")}
-                 css)
-     (let [i (input :type "text"
-                    :placeholder placeholder
-                    :input #(do
-                              (reset! interim @%)
-                              (reset! state :editing)
-                              #_(if (and (:valid? @parsed)
-                                         (= (:value @parsed) @source))
-                                  (dosync
-                                   (reset! state :set)
-                                   (reset! interim nil))
-                                  (reset! state :editing)))
-                    :change #(let [p @parsed]
-                               (when-let [v (:value p)]
+  :css: Styling applied to container div.
+  :align: Specifies text alignment of the input box"
+  [attrs _]
+  (with-attr-bindings attrs [conform fmt source update width placeholder css align]
+    (let [interim  (cell nil)
+          fmt      (or fmt str)
+          value    (formula-of
+                     [interim source]
+                     (if interim
+                       interim
+                       (fmt source)))
+          parsed   (conform value)
+          update   (or update
+                       #(swap! source
+                               (constantly %)))
+          state    (cell :set)
+          focused? (cell false)
+          align    (cell= align)
+          valid?   (formula-of
+                     [parsed]
+                     (empty? (:message parsed)))]
+      (div
+       attrs
+       :css (merge {:position     "relative"
+                    :overflow     "show"
+                    :white-space  "nowrap"
+                    :width        (or width "125px")
+                    :margin-right "3px"}
+                   css)
+       (let [i (input :type "text"
+                      :placeholder placeholder
+                      :input #(do
+                                (reset! interim @%)
+                                (reset! state :editing)
+                                #_(if (and (:valid? @parsed)
+                                           (= (:value @parsed) @source))
+                                    (dosync
+                                     (reset! state :set)
+                                     (reset! interim nil))
+                                    (reset! state :editing)))
+                      :change #(let [p @parsed]
+                                 (when-let [v (:value p)]
+                                   (dosync
+                                    (update v)
+                                    (reset! interim nil)
+                                    (reset! state :set))))
+                      :keyup (fn [e]
+                               (when (= ESCAPE_KEY (.-keyCode e))
                                  (dosync
+                                  (reset! interim nil)
+                                  (reset! state :set))))
+                      :focus #(reset! focused? true)
+                      :blur #(let [p @parsed]
+                               (dosync
+                                (reset! focused? false)
+                                (when-let [v (:value p)]
                                   (update v)
                                   (reset! interim nil)
                                   (reset! state :set))))
-                    :keyup (fn [e]
-                             (when (= ESCAPE_KEY (.-keyCode e))
-                               (dosync
-                                (reset! interim nil)
-                                (reset! state :set))))
-                    :focus #(reset! focused? true)
-                    :blur #(let [p @parsed]
-                             (dosync
-                              (reset! focused? false)
-                              (when-let [v (:value p)]
-                                (update v)
-                                (reset! interim nil)
-                                (reset! state :set))))
-                    :css (formula-of
-                          [state valid?]
-                          {:font-style (if (= state :editing)
-                                         "italic"
-                                         "")
-                           :color (if valid?
-                                    ""
-                                    (colors :invalid))
-                           :background (if valid?
-                                         ""
-                                         (colors :invalid-background))
-                           :width (or width "125px")})
-                    :value value)]
-       [i
-        (img :src "images/error.png"
-             :title (cell= (:message parsed))
-             :click #(.focus i)
-             :css (formula-of
-                   [valid?]
-                   {:position "relative"
-                    :right "20px"
-                    :width "14px"
-                    :margin-left "3px"
-                    :margin-bottom "2px"
-                    :vertical-align "middle"
-                    :opacity (if valid?
-                               "0"
-                               "1")}))])
-     (div
-      :toggle (cell= (and (not valid?) focused?))
-      :css {:position "absolute"
-            :top "24px"
-            :font-size "75%"
-            :background "rgba(221,221,221,0.95)"
-            :border "1px solid #888"
-            :min-width "100%"
-            :max-width "500px"
-            :padding-left "2px"
-            :z-index 1}
-      (cell= (:message parsed))))))
+                      :css (formula-of
+                             [state valid? align]
+                             {:font-style (if (= state :editing)
+                                            "italic"
+                                            "")
+                              :color      (if valid?
+                                            ""
+                                            (colors :invalid))
+                              :background (if valid?
+                                            ""
+                                            (colors :invalid-background))
+                              :width      (or width "125px")
+                              :text-align (when align align)})
+                      :value value)]
+         [i
+          (img :src "images/error.png"
+               :title (cell= (:message parsed))
+               :click #(.focus i)
+               :css (formula-of
+                      [valid?]
+                      {:position       "relative"
+                       :right          "20px"
+                       :width          "14px"
+                       :margin-left    "3px"
+                       :margin-bottom  "2px"
+                       :vertical-align "middle"
+                       :opacity        (if valid?
+                                         "0"
+                                         "1")}))])
+       (div
+        :toggle (cell= (and (not valid?) focused?))
+        :css {:position     "absolute"
+              :top          "24px"
+              :font-size    "75%"
+              :background   "rgba(221,221,221,0.95)"
+              :border       "1px solid #888"
+              :min-width    "100%"
+              :max-width    "500px"
+              :padding-left "2px"
+              :z-index      1}
+        (cell= (:message parsed)))))))
 
 ;; TODO: We could consider using a lens here instead of separate
 ;; source and update
@@ -2823,56 +2828,65 @@
   []
   (div :class "button-bar"
        :css (formula-of
-             [map-size]
-             {:position "relative"
-              :width (-> map-size first (str "px"))
-              :margin "0 0 3px 0"})
+              [map-size]
+              {:position "relative"
+               :width (-> map-size first (str "px"))
+               :margin "0 0 3px 0"})
        #_(button :id "enlarge-grid"
-               :click #(swap! display-params
-                              update
-                              :dimensions
-                              (fn [[x y]]
-                                [(+ x 50) (+ y 50)]))
-               :title "Enlarge grid"
-               (img
-                :css {:width "24px"
-                      :height "24px"}
-                :src "images/bigger.png"))
+                 :click #(swap! display-params
+                                update
+                                :dimensions
+                                (fn [[x y]]
+                                  [(+ x 50) (+ y 50)]))
+                 :title "Enlarge grid"
+                 (img
+                  :css {:width "24px"
+                        :height "24px"}
+                  :src "images/bigger.png"))
        #_(button :id "shrink-grid"
-               :click #(swap! display-params
-                              update
-                              :dimensions
-                              (fn [[x y]]
-                                [(- x 50) (- y 50)]))
-               :title "Shrink grid"
-               (img
-                :css {:width "24px"
-                      :height "24px"}
-                :src "images/smaller.png"))
+                 :click #(swap! display-params
+                                update
+                                :dimensions
+                                (fn [[x y]]
+                                  [(- x 50) (- y 50)]))
+                 :title "Shrink grid"
+                 (img
+                  :css {:width "24px"
+                        :height "24px"}
+                  :src "images/smaller.png"))
        (with-help [:map :legend]
          :css {:margin-left "5px"}
          (span "Map Legend"))
-       (span
+       (div
         :css {:position "absolute"
               :right "27px"
               :bottom "0"}
-        "Day/Time: " (formula-of
-                      [weather-data-params]
-                      (let [t (-> weather-data-params :time :current)]
-                        (if t
-                          (format-time t)
-                          "--/----"))))
+        (span
+         "Mission Time: " (formula-of
+                            [mission]
+                            (let [t (-> mission mission/mission-time)]
+                              (if t
+                                (format-time t)
+                                "--/----"))))
+        (span
+         :css {:margin-left "7px"}
+         "Weather Time: " (formula-of
+                            [weather-data-params]
+                            (let [t (-> weather-data-params :time :current)]
+                              (if t
+                                (format-time t)
+                                "--/----")))))
        (formula-of
-        [computing]
-        (if-not computing
-          []
-          (img :src "images/spinner.gif"
-               :width "24px"
-               :height "24px"
-               :css {:vertical-align "bottom"
-                     :position "absolute"
-                     :right "3px"
-                     :bottom "0"})))))
+         [computing]
+         (if-not computing
+           []
+           (img :src "images/spinner.gif"
+                :width "24px"
+                :height "24px"
+                :css {:vertical-align "bottom"
+                      :position "absolute"
+                      :right "3px"
+                      :bottom "0"})))))
 
 (defn control-layout
   "Lays out controls for a control section. `controls` is a sequence
@@ -2924,62 +2938,54 @@
      (control-layout
       (let [opts {:cell display-params
                   :help-base :display-controls}]
-        (into (if prevent-map-change?
-                []
-                [["Map"
-                  [:map]
-                  (merge opts
-                         {:ui (dropdown {:k :map
-                                         :key->name map-key->name
-                                         :name->key map-name->key
-                                         :change change-theater})})]])
-              [["Display"
-                [:display]
-                (merge opts
-                       {:ui (dropdown {:k :display
-                                       :key->name display-key->name
-                                       :name->key display-name->key})})]
-               ["Overlay"
-                [:overlay]
-                (merge opts {:ui (dropdown {:label "Overlay"
-                                            :k :overlay
-                                            :key->name overlay-key->name
-                                            :name->key overlay-name->key})})]
-               ["Pressure"
-                [:pressure]
-                (merge opts {:ui (select
-                                  :change #(do
-                                             (swap! display-params
-                                                    assoc
+        [["Display"
+          [:display]
+          (merge opts
+                 {:ui (dropdown {:k :display
+                                 :key->name display-key->name
+                                 :name->key display-name->key})})]
+         ["Overlay"
+          [:overlay]
+          (merge opts {:ui (dropdown {:label "Overlay"
+                                      :k :overlay
+                                      :key->name overlay-key->name
+                                      :name->key overlay-name->key})})]
+         ["Pressure"
+          [:pressure]
+          (merge opts {:ui (select
+                            :change #(do
+                                       (swap! display-params
+                                              assoc
+                                              :pressure-unit
+                                              (pressure-unit-name->key @%)))
+                            (for [name (keys pressure-unit-name->key)]
+                              (option
+                               :value name
+                               :selected (cell= (-> display-params
                                                     :pressure-unit
-                                                    (pressure-unit-name->key @%)))
-                                  (for [name (keys pressure-unit-name->key)]
-                                    (option
-                                     :value name
-                                     :selected (cell= (-> display-params
-                                                          :pressure-unit
-                                                          pressure-unit-key->name
-                                                          (= name)))
-                                     name)))})]
-               ["Opacity:"
-                [:opacity]
-                (merge opts {:ui (input {:type "range"
-                                         :min 0
-                                         :max 100
-                                         :value (cell= (-> display-params
-                                                           :opacity
-                                                           (* 100)
-                                                           long))
-                                         :change #(swap! display-params
-                                                         assoc
-                                                         :opacity
-                                                         (/ @% 100.0))})})]]))))))
+                                                    pressure-unit-key->name
+                                                    (= name)))
+                               name)))})]
+         ["Opacity:"
+          [:opacity]
+          (merge opts {:ui (input {:type "range"
+                                   :min 0
+                                   :max 100
+                                   :value (cell= (-> display-params
+                                                     :opacity
+                                                     (* 100)
+                                                     long))
+                                   :change #(swap! display-params
+                                                   assoc
+                                                   :opacity
+                                                   (/ @% 100.0))})})]])))))
 
 (defn weather-parameters
   [_]
   (control-section
    :title "Weather parameters"
    :id "weather-params-section"
+   :toggle (cell= (= display-mode :edit))
    (control-layout
     [["Seed"             [:seed] {:ui (div
                                        :css {:white-space "nowrap"}
@@ -3004,6 +3010,7 @@
   (control-section
    :title (with-help [:wind-stability-areas] "Wind stability regions")
    :id "wind-stability-params-section"
+   :toggle (cell= (= display-mode :edit))
    (let [indexed-wind-stability-areas (->> weather-params
                                            :wind-stability-areas
                                            (map-indexed vector)
@@ -3063,6 +3070,7 @@
   (control-section
    :title (with-help [:weather-overrides :overview] "Weather override regions")
    :id "weather-override-params-section"
+   :toggle (cell= (= display-mode :edit))
    (let [indexed-weather-overrides (formula-of
                                     [weather-params]
                                     (->> weather-params
@@ -3193,6 +3201,7 @@
   (control-section
    :title "Weather type configuration"
    :id "weather-type-configuration-section"
+   :toggle (cell= (= display-mode :edit))
    (table
     :id "category-params"
     (thead
@@ -3351,16 +3360,18 @@
   (control-section
    :title (with-help [:clouds :overview] "Clouds and contrails")
    :id (gensym)
-   (help-icon [:clouds :buttons])
-   (buttons/a-button
-    :css {:margin-right "3px"}
-    :click #(reset! cloud-params (random-cloud-params))
-    "Randomize")
-   (buttons/a-button
-    :click #(save-twx @cloud-params
-                      (:direction @movement-params)
-                      (get-in @display-params [:multi-save :mission-name]))
-    "Save .TWX")
+   (div
+    :toggle (cell= (= display-mode :edit))
+    (help-icon [:clouds :buttons])
+    (buttons/a-button
+     :css {:margin-right "3px"}
+     :click #(reset! cloud-params (random-cloud-params))
+     "Randomize")
+    (buttons/a-button
+     :click #(save-twx @cloud-params
+                       (:direction @movement-params)
+                       (get-in @display-params [:multi-save :mission-name]))
+     "Save .TWX"))
    (table
     (tr (td (with-help [:clouds :cumulus-coverage]
               "Cumulus coverage"))
@@ -3370,6 +3381,7 @@
                            [:cumulus-density])]
           (td (input
                :type "range"
+               :disabled (cell= (= display-mode :briefing))
                :value l
                :min 5
                :max 50
@@ -3382,6 +3394,7 @@
                            [:cumulus-size])]
           (td (input
                :type "range"
+               :disabled (cell= (= display-mode :briefing))
                :value (-> l (* 20) long cell=)
                :min 0
                :max 100
@@ -3411,18 +3424,19 @@
             (type-key->name category))
            (for [column [:visibility :stratus-base :stratus-top :cumulus-base :contrails]]
              (td
-              (let [path [column category]
-                    literal-style {:font-family "monospace"
+              (let [path          [column category]
+                    literal-style {:font-family  "monospace"
                                    :padding-left "3px"
-                                   :padding-top "2px"
-                                   :font-size "93%"}]
+                                   :padding-top  "2px"
+                                   :font-size    "93%"
+                                   :text-align   "center"}]
                 (cond
                   (and (= :stratus-top column)
                        (#{:sunny :fair} category))
                   (div :css literal-style
                        (formula-of
-                        [cloud-params]
-                        (get-in cloud-params [:stratus-base category])))
+                         [cloud-params]
+                         (get-in cloud-params [:stratus-base category])))
 
                   (= [:cumulus-base :sunny] [column category])
                   (div :css literal-style "0")
@@ -3431,8 +3445,8 @@
                   (div
                    :css literal-style
                    (formula-of
-                    [cloud-params]
-                    (:stratus-top cloud-params)))
+                     [cloud-params]
+                     (:stratus-top cloud-params)))
 
                   :else
                   (let [l (path-lens
@@ -3441,25 +3455,38 @@
                              [:stratus-top]
                              path))]
                     (div
-                     :css {:margin-right "5px"}
-                     (validating-edit
-                      :source l
-                      :fmt (if (= column :visibility)
-                             format-visibility
-                             str)
-                      :conform (cloud-param-conformer cloud-params column category)
-                      :placeholder (case column
-                                     :visibility "vis (nm)"
-                                     "altitude")
-                      :width (if (= column :visibility)
-                               "35px"
-                               "55px"))))))))))))))
+                     :css {:margin-right "5px"
+                           :text-align   "right"}
+                     (if-tpl (cell= (= display-mode :briefing))
+                       (div :css (assoc literal-style
+                                        :width
+                                        (if (= column :visibility)
+                                          "35px"
+                                          "55px"))
+                            (formula-of [l]
+                              (if (= column :visibility)
+                                (format-visibility l)
+                                (str l))))
+                       (validating-edit
+                        :source l
+                        :fmt (if (= column :visibility)
+                               format-visibility
+                               str)
+                        :conform (cloud-param-conformer cloud-params column category)
+                        :placeholder (case column
+                                       :visibility "vis (nm)"
+                                       "altitude")
+                        :align "right"
+                        :width (if (= column :visibility)
+                                 "35px"
+                                 "55px")))))))))))))))
 
 (defn advanced-controls
   [_]
   (control-section
    :id "advanced-params-section"
    :title "Advanced configuration"
+   :toggle (cell= (= display-mode :edit))
    (control-layout
     [["X Offset"         [:origin 0] {:help-path [:origin :x]}]
      ["Y Offset"         [:origin 1] {:help-path [:origin :y]}]
@@ -3472,78 +3499,78 @@
      ["Zoom"             [:feature-size]]])))
 
 (defn step-controls
-  [{:keys [mode]}]
-  (control-section
-   :id "time-location-params"
-   :title "Time controls"
-   (table
-    (tbody
-     (if (= mode :browse)
+  [_]
+  (let [mission-time (-> mission mission/mission-time cell=)
+        max-time     (-> weather-params :time :max model/falcon-time->minutes cell=)
+        weather-time (-> weather-params :time :current model/falcon-time->minutes cell=)]
+    (control-section
+     :id "time-location-params"
+     :title "Time controls"
+     (table
+      (tbody
        (tr (td (with-help [:weather-params :time :falcon-time]
                  "Falcon time: "))
-           (td (cell= (-> weather-params :time :max format-time)))
+           (td (-> mission-time format-time cell=))
            (td (buttons/a-button
-                :click #(jump-to-time* (-> @weather-params :time :max))
+                :click #(jump-to-time* @mission-time)
                 "Jump to")))
-       [])
-     (if (= mode :browse)
-       (tr (td (with-help  [:weather-params :time :browse-time]
-                 "Time"))
-           (td (time-entry :source weather-params
-                           :path [:time :current])))
-       (tr (td (with-help [:displayed-time]
-                 "Time"))
-           (td (time-entry :source time-params
-                           :path [:displayed]))
-           (td (buttons/a-button
-                :click jump-to-time
-                "Jump to")
-               (buttons/a-button
-                :click set-time
-                "Set to"))))
-     (tr (map td [(with-help [:step]
-                    "Step interval")
-                  (validating-edit
-                   :width "50px"
-                   :source (cell= (:step movement-params))
-                   :conform conform-positive-integer
-                   :update #(swap! movement-params assoc :step %)
-                   :placeholder "e.g. 60"
-                   :fmt str)]))))
-   (buttons/a-button :title "Step back in time"
-                   :click #(move -1)
-                   "<< Step Back")
-   (buttons/a-button
-    :title (cell= (if (:looping? movement-params)
-                    "Stop weather animation"
-                    "Animate weather"))
-    :click #(when (:looping? (swap! movement-params update :looping? not))
-              (recompute @weather-params))
-    (span
-     :css (formula-of
-            [movement-params]
-            (if (:looping? movement-params)
-              {:border "5px solid black"
-               :transform ""
-               :display "inline-block"
-               :margin-top "2px"}
-              {:border-left "5px solid transparent"
-               :border-right "5px solid transparent"
-               :border-top "7px solid black"
-               :border-bottom ""
-               :display "inline-block"
-               :transform "rotate(-90deg)"}))
-     ""))
-   (formula-of
-     [weather-params]
-     (if (and (-> weather-params :time :max)
-              (<= (-> weather-params :time :max model/falcon-time->minutes)
-                  (-> weather-params :time :current model/falcon-time->minutes)))
-       []
-       (buttons/a-button
-        :title "Step forward in time"
-        :click #(move 1)
-        "Step Forward >>")))))
+       (if-tpl (cell= (= display-mode :browse))
+         (tr (td (with-help  [:weather-params :time :browse-time]
+                   "Time"))
+             (td (time-entry :source weather-params
+                             :path [:time :current])))
+         (tr (td (with-help [:displayed-time]
+                   "Time"))
+             (td (time-entry :source time-params
+                             :path [:displayed]))
+             (td (buttons/a-button
+                  :click jump-to-time
+                  "Jump to")
+                 (buttons/a-button
+                  :toggle (cell= (= display-mode :edit))
+                  :click set-time
+                  "Set to"))))
+       (tr (map td [(with-help [:step]
+                      "Step interval")
+                    (validating-edit
+                     :width "50px"
+                     :source (cell= (:step movement-params))
+                     :conform conform-positive-integer
+                     :update #(swap! movement-params assoc :step %)
+                     :placeholder "e.g. 60"
+                     :fmt str)]))))
+     (buttons/a-button :title "Step back in time"
+                       :click #(move -1)
+                       "<< Step Back")
+     (buttons/a-button
+      :title (cell= (if (:looping? movement-params)
+                      "Stop weather animation"
+                      "Animate weather"))
+      :click #(when (:looping? (swap! movement-params update :looping? not))
+                (recompute @weather-params))
+      (span
+       :css (formula-of
+              [movement-params]
+              (if (:looping? movement-params)
+                {:border     "5px solid black"
+                 :transform  ""
+                 :display    "inline-block"
+                 :margin-top "2px"}
+                {:border-left   "5px solid transparent"
+                 :border-right  "5px solid transparent"
+                 :border-top    "7px solid black"
+                 :border-bottom ""
+                 :display       "inline-block"
+                 :transform     "rotate(-90deg)"}))
+       ""))
+     (buttons/a-button
+      :toggle (formula-of [max-time weather-time display-mode]
+                (or (= display-mode :edit)
+                    (< weather-time max-time)))
+      :title "Step forward in time"
+      :click #(move 1)
+      "Step Forward >>")
+     )))
 
 (defn serialization-controls
   [_]
@@ -3554,6 +3581,7 @@
                                     css)
                         contents))]
     (control-section
+     :toggle (cell= (= display-mode :edit))
      :id "load-save-controls"
      :title "Load/save"
      (if-not safari?
@@ -3753,9 +3781,11 @@
            {:title "Three"
             :id :three
             :ui (div "This is three")}])
-   (pre-cell "visible-sides" visible-sides)
-   (pre-cell "effective-visible-sides" effective-visible-sides)
-   (pre-cell "visible-teams" visible-teams)
+   ;; (pre-cell "visible-sides" visible-sides)
+   ;; (pre-cell "effective-visible-sides" effective-visible-sides)
+   ;; (pre-cell "visible-teams" visible-teams)
+   ;; (pre-cell "display-mode" display-mode)
+   ;; (pre-cell "selected-cell" selected-cell)
    #_(let [color (cell (comm/to-hex-str "blue"))]
      (vector
       (inl
@@ -3973,7 +4003,7 @@
   [_]
   (control-section
    :title "Air Forces"
-   (let [expand-state (cell :all-expanded)
+   (let [expand-state (cell [:expand-through-level 1])
          row (fn [& args] (apply div :class "row" args))]
      (cond-tpl
        (-> mission not cell=)
@@ -4283,12 +4313,14 @@
 (defn head
   []
   (h/head
-   (title (formula-of [mission]
+   (title (formula-of [mission display-mode]
             (if-not mission
               "Virtual Mission Tools"
               (str (mission/theaterdef-name mission)
                    " - "
-                   (mission/mission-name mission)))))
+                   (mission/mission-name mission)
+                   (when (= :briefing display-mode)
+                     ".vmtb")))))
    ;; (link :href "lib/slickgrid/slick.grid.css" :rel "stylesheet" :title "main" :type "text/css")
    ;; (link :href "lib/slickgrid/slick-default-theme.css" :rel "stylesheet" :title "main" :type "text/css")
 
