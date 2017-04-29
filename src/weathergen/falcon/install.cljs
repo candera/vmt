@@ -13,8 +13,9 @@
   [cb]
   (let [Registry (js/require "winreg")
         win64?   (= "x64" (.-arch js/process))
+        base-key "\\SOFTWARE\\Benchmark Sims\\"
         key      (Registry. #js {:hive (.-HKLM Registry)
-                                 :key  "\\SOFTWARE\\Benchmark Sims\\"
+                                 :key  base-key
                                  :arch (when win64? "x86")})]
     ;; OMG how do people program like this?
     (.keys key
@@ -30,7 +31,11 @@
                            (swap! remaining dec)
                            (if err
                              (log/error "Could not read from registry key " (.-path subkey))
-                             (swap! values assoc (.-key subkey) (.-value item)))
+                             (swap! values
+                                    assoc
+                                    (subs (.-key subkey)
+                                          (count base-key))
+                                    (.-value item)))
                            (when (zero? @remaining)
                              (cb @values)))))))))))
 
