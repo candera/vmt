@@ -1,12 +1,13 @@
 {
     "name": "vmt",
-    "productName": "Virtual Mission Tools",
+    "productName": "VMT",
     "version": "0.1.0",
     "main": "main.js",
     "devDependencies": {
         "electron": "^1.6.2"
     },
     "dependencies": {
-        "@claviska/jquery-minicolors": "^2.2.4"
+        "@claviska/jquery-minicolors": "^2.2.4",
+        "winreg": "^1.2.3"
     }
 }

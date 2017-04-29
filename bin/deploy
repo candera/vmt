@@ -3,6 +3,9 @@
 # Die immediately if any command fails
 set -e
 
+source $(dirname $0)/common.sh
+source ~/wangdera-candera-aws-creds.sh
+
 # PROJECT_VERSION=$(head -1 project.clj | grep -oE '\d+\.\d+(\.\d+)?(-SNAPSHOT)?')
 GIT_VERSION=$(git describe --tags)
 GIT_SHA=$(git rev-parse HEAD)
@@ -18,21 +21,39 @@ while [[ "$1" != "" ]]; do
         "--verbose" | "-v")
             set -x
             ;;
+        *)
+            ARGS=$1
+            ;;
     esac
     shift
 done
+
+CHANNEL=$ARGS
+
+if [[ -z $CHANNEL ]]; then
+    echo "Channel not set."
+    exit 1
+fi
 
 if [[ ("$ALLOW_DIRTY" != "yes") && (-n "$(git status --porcelain)") ]]; then
   echo "Project directory has uncommitted changes. Refusing to build."
   exit 1
 fi
 
-cd $(dirname $0)/..
-bin/build $*
-
 echo ${GIT_VERSION} > target/version.txt
 
-echo "Enter password for upload when prompted."
-ncftpput -R -u tyrant@firstfighterwing.com ftp.firstfighterwing.com . target/*
+cd $(dirname $0)/..
+package
 
+cd package
+for filename in *; do
+    zip -r "${filename}.zip" "$filename"/*
+    aws s3 cp "${filename}.zip" s3://org.craigandera.vmt/${CHANNEL}/${GIT_VERSION}/
+done
+
+echo "Download links:"
+
+for filename in *.zip; do
+    echo "https://s3.amazonaws.com/org.craigandera.vmt/${CHANNEL}/${GIT_VERSION}/${filename}"
+done
 

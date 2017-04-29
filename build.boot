@@ -119,23 +119,40 @@
 (deftask electron
   "Compile in a way compatible with electron packaging."
   []
-  (comp
-   (hoplon)
-   ;; Compile everything except main with advanced opts
-   (cljs :ids #{#_"renderer" "worker" "index.html"}
-         :optimizations :simple
-         ;; When I enable advanced optimizations, Electron won't
-         ;; launch. It gives a "nodejs.js" not found error ro some
-         ;; such. I wonder if it's dead code elimination, or some sort
-         ;; of missing extern?
-         ;;:optimizations :advanced
-         :compiler-options {:target :nodejs
-                            :hashbang false})
-   (cljs :ids #{"main"}
-         :optimizations :simple
-         :compiler-options {:target :nodejs
-                            :hashbang false})
-   (target)))
+  (let [source-maps true]
+    (comp
+     (hoplon)
+     (cljs :ids #{"worker" "index.html" "mission.html"}
+           :optimizations #_:advanced #_:whitespace :simple
+           :compiler-options { ;;:target :nodejs
+                              :hashbang false
+                              :parallel-build false
+                              ;;:externs ["js/slickgrid/slickgrid.ext.js"]
+                              }
+           ;;:source-map source-maps
+           )
+     (cljs :ids #{"main"}
+           :optimizations :simple
+           :compiler-options {;; :asset-path "target/main.out"
+                              ;; :closure-defines {'app.main/dev? true}
+                              :target :nodejs
+                              :hashbang false
+                              :parallel-build true})
+     ;; ;; Compile everything except main with advanced opts
+     ;; (cljs :ids #{#_"renderer" "worker" "index.html"}
+     ;;       :optimizations :simple
+     ;;       ;; When I enable advanced optimizations, Electron won't
+     ;;       ;; launch. It gives a "nodejs.js" not found error ro some
+     ;;       ;; such. I wonder if it's dead code elimination, or some sort
+     ;;       ;; of missing extern?
+     ;;       ;;:optimizations :advanced
+     ;;       :compiler-options {:target :nodejs
+     ;;                          :hashbang false})
+     ;; (cljs :ids #{"main"}
+     ;;       :optimizations :simple
+     ;;       :compiler-options {:target :nodejs
+     ;;                          :hashbang false})
+     (target))))
 
 #_(deftask dev-repl
   []
