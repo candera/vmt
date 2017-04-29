@@ -114,7 +114,7 @@
     (let [ancestor   (normalize ancestor)
           descendant (normalize descendant)
           parent     (parent descendant)]
-      (when (and parent descendant)
+      (when (and parent descendant (exists? parent) (exists? descendant))
         (or (= (->> parent   (.statSync filesystem) .-ino)
                (->> ancestor (.statSync filesystem) .-ino))
             (ancestor? ancestor parent))))))

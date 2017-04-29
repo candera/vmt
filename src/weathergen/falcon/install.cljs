@@ -13,9 +13,9 @@
   [cb]
   (let [Registry (js/require "winreg")
         win64?   (= "x64" (.-arch js/process))
-        key      (Registry. {:hive (.-HKLM Registry)
-                             :key  "SOFTWARE\\Benchmark Sims\\"
-                             :arch (when win64? "x86")})]
+        key      (Registry. #js {:hive (.-HKLM Registry)
+                                 :key  "\\SOFTWARE\\Benchmark Sims\\"
+                                 :arch (when win64? "x86")})]
     ;; OMG how do people program like this?
     (.keys key
            (fn [err subkeys]

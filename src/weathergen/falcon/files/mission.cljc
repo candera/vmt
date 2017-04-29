@@ -787,7 +787,9 @@
                         :candidate-installs (->> installs
                                                  (filter (fn [[name dir]]
                                                            ;; This one weird trick is for directory identity
-                                                           (and (fs/ancestor? dir install-dir)
+                                                           (and (fs/exists? dir)
+                                                                (fs/exists? install-dir)
+                                                                (fs/ancestor? dir install-dir)
                                                                 (fs/ancestor? install-dir dir))))
                                                  (mapv key))
                         :mission-name   (fs/basename path)
