@@ -95,10 +95,16 @@
           (apply str)))))
 
 
+(def installs (-> "/Users/candera/Library/Application Support/craigandera.org/VMT/settings.edn"
+                  slurp
+                  read-string
+                  :installations))
+
 (def smpu-old
   (delay
    (log/debug "Reading SMPU...")
    (let [mission (mission/read-mission
+                  installs
                   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/SMPU-Day  3 00 41 48.cam")]
      (log/debug "Done reading.")
      mission)))
@@ -107,6 +113,7 @@
   (delay
    (log/debug "Reading SMPU...")
    (let [mission (mission/read-mission
+                  installs
                   "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 18 15 07.cam")]
      (log/debug "Done reading.")
      mission)))
@@ -117,6 +124,7 @@
   (delay
    (log/debug "Reading save2...")
    (let [mission (mission/read-mission
+                  installs
                   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/save2.cam")]
      (log/debug "Done reading.")
      mission)))
@@ -125,6 +133,7 @@
   (delay
    (log/debug "Reading stratus.tac...")
    (let [mission (mission/read-mission
+                  installs
                   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/stratus.tac")]
      (log/debug "Done reading.")
      mission)))
@@ -133,6 +142,7 @@
   (delay
    (log/debug "Reading te_new.tac...")
    (let [mission (mission/read-mission
+                  installs
                   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/te_new.tac")]
      (log/debug "Done reading.")
      mission)))
@@ -141,6 +151,7 @@
   (delay
    (log/debug "Reading WNPU...")
    (let [mission (mission/read-mission
+                  installs
                   "/Users/candera/falcon/4.33.3/Data/Add-On Korea Strong DPRK/Campaign/WNPU-Day  1 21 07 12.cam")]
      (log/debug "Done reading.")
      mission)))
@@ -149,6 +160,7 @@
   (delay
    (log/debug "Reading ITO...")
    (let [mission (mission/read-mission
+                  installs
                   "/Users/candera/falcon/4.33.3/Data/Add-On Israel/campaign/Solid Truss Start.cam")]
      (log/debug "Done reading.")
      mission)))
@@ -157,6 +169,11 @@
   (delay
    (log/debug "Reading Balkans...")
    (let [mission (mission/read-mission
+                  installs
                   "/Users/candera/falcon/4.33.3/Data/Add-On Balkans/Campaign/Powder Keg Start.cam")]
      (log/debug "Done reading.")
      mission)))
+
+(defn smoke-test
+  []
+  (map mission/mission-name [@balkans @ito @wnpu @te-new @stratus-te @save2 @smpu @smpu-old]))

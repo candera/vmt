@@ -5,7 +5,9 @@
             [taoensso.timbre :as log
              :refer (log trace debug info warn error fatal report
                          logf tracef debugf infof warnf errorf fatalf reportf
-                         spy get-env log-env)]))
+                         spy get-env log-env)])
+  (:import [java.nio.file Files Path])
+  (:refer-clojure :exclude [identical?]))
 
 (def filesystem (java.nio.file.FileSystems/getDefault))
 
@@ -95,6 +97,12 @@
   [path]
   (-> path normalize slurp))
 
+(defn identical?
+  "Returns true if files `a` and `b` are the same file."
+  [a b]
+  (Files/isSameFile (.getPath filesystem a (into-array String nil))
+                    (.getPath filesystem b (into-array String nil))))
+
 (defn ancestor?
   "Returns true if `descendant` is a descendant file of `ancestor`."
   [ancestor descendant]
@@ -126,4 +134,4 @@
 (defn basename
   "Given a path, return its basename."
   [path]
-  (throw (ex-info "Not implemented" {:reason :not-implemented})))
+  (-> path io/file .getName))

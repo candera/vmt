@@ -8,7 +8,7 @@
                                 spy get-env log-env)]
             [weathergen.falcon.constants :as c]
             [weathergen.falcon.files :refer [larray fixed-string lstring bitflags
-                                             constant read-> spec-if]]
+                                             constant read-> read-trace spec-if]]
             [weathergen.falcon.files.images :as im]
             [weathergen.filesystem :as fs]
             [weathergen.lzss :as lzss]
@@ -761,8 +761,6 @@
         {:keys [theater-name scenario]} (->> mission-files :campaign-info)
         names         (read-strings (campaign-dir installation theater)
                                     theater-name)
-        database      (assoc (load-initial-database installation theater)
-                             :strings strings)
         scenario-file (str scenario (extension path))
         scenario-path (fs/path-combine (fs/parent path) scenario-file)
         _              (progress/report (str "Reading scenario file: "
@@ -786,11 +784,9 @@
                         :installs installs
                         :candidate-installs (->> installs
                                                  (filter (fn [[name dir]]
-                                                           ;; This one weird trick is for directory identity
                                                            (and (fs/exists? dir)
                                                                 (fs/exists? install-dir)
-                                                                (fs/ancestor? dir install-dir)
-                                                                (fs/ancestor? install-dir dir))))
+                                                                (fs/identical? dir install-dir))))
                                                  (mapv key))
                         :mission-name   (fs/basename path)
                         :theater        theater})]
@@ -981,7 +977,16 @@
                  :parent       vu-id
                  :first-owner  buf/ubyte
                  :links        (larray buf/ubyte objective-link)
-                 :radar-data   (spec-if :has-radar-data buf/byte pos?
+                 :radar-data   (spec-if :has-radar-data
+                                        buf/byte
+                                        ;; It was crashing in Balkans when a 17
+                                        ;; would appear here, even though the
+                                        ;; FreeFalcon source indicates a non-zero
+                                        ;; number for the present of detection
+                                        ;; ratios. It might be that BMS overloads
+                                        ;; that number to mean something else, or
+                                        ;; just a weirdness in the Balkans databae.
+                                        #(= 1 %) #_pos?
                                         :detect-ratio
                                         (buf/repeat c/NUM_RADAR_ARCS buf/float)
                                         (constant nil))]))

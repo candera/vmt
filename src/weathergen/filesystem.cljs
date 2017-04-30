@@ -6,7 +6,7 @@
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
             [weathergen.util :as util])
-  (:refer-clojure :exclude [exists?]))
+  (:refer-clojure :exclude [exists? identical?]))
 
 ;; So far we only support Node - not much sense in trying to implement
 ;; something in the browser.
@@ -105,6 +105,15 @@
   ;; Not totally sure this will always work...
   (->> path normalize case-desensitize (.readFileSync filesystem) .toString))
 
+
+(defn identical?
+  "Returns true if `a` and `b` are the same file."
+  [a b]
+  (and (exists? a)
+       (exists? b)
+       (= (->> a normalize (.statSync filesystem) .-ino)
+          (->> b normalize (.statSync filesystem) .-ino))))
+
 (defn ancestor?
   "Returns true if `descendant` is a descendant file of `ancestor`."
   [ancestor descendant]
@@ -115,9 +124,9 @@
           descendant (normalize descendant)
           parent     (parent descendant)]
       (when (and parent descendant (exists? parent) (exists? descendant))
-        (or (= (->> parent   (.statSync filesystem) .-ino)
-               (->> ancestor (.statSync filesystem) .-ino))
+        (or (identical? parent ancestor)
             (ancestor? ancestor parent))))))
+
 
 (defn mkdir
   "Creates a directory. Recursively creates the parents if

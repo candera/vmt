@@ -2419,3 +2419,4 @@ type: 0x64 -> image
                                   (:briefing briefing)))
 
 
+(class (mission/read-mission installs "/Users/candera/falcon/4.33.3/Data/Add-On Balkans/Campaign/SAVE2.CAM")) 

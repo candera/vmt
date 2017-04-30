@@ -17,7 +17,7 @@
   (reify
     octet.spec/ISpec
     (read [_ buf pos]
-      (log/debug (str "start: " msg))
+      (log/debug (str "start: " msg "@" pos))
       (let [result (octet.spec/read spec buf pos)]
         (log/debug (str "end: " msg))
         (log/spy result)))))
@@ -98,10 +98,9 @@
           [cljs.core/IFn
            (-invoke [s] s)])
 
-      ;; octet.spec/ISpecDynamicSize
-      ;; (size* [_ data]
-      ;;   (let [data (octet.spec.string/string->bytes data)]
-      ;;     (+ len-size (count data))))
+      octet.spec/ISpecDynamicSize
+      (size* [_ data]
+        (+ len-size (* (buf/size item-spec) (count data))))
 
       octet.spec/ISpec
       (read [_ buff pos]
