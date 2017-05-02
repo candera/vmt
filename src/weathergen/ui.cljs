@@ -879,13 +879,18 @@
                :revision revision
                :briefing? (some? briefing))
     (progress/report (str "Loading briefing from " path))
-    (let [mission-data (mission/briefing->mission installations briefing)]
+    (let [mission-data (mission/briefing->mission installations briefing)
+          unedit (fn [m] (assoc m :editing? false))]
       (progress/report "Preparing views")
       (dosync
        (reset! display-mode :briefing)
        (reset! mission mission-data)
        (reset! visible-sides (:visible-sides vmtb))
-       (reset! weather-params (-> vmtb :weather :weather-params))
+       (reset! weather-params (-> vmtb
+                                  :weather
+                                  :weather-params
+                                  (update :wind-stability-areas #(map unedit %))
+                                  (update :weather-overrides #(map unedit %))))
        (reset! cloud-params (-> vmtb :weather :cloud-params))
        (reset! movement-params (-> vmtb :weather :movement-params))
        (reset! display-params (-> vmtb :weather :display-params))
