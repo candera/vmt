@@ -138,12 +138,12 @@
     (when (not (exists? path))
       (.mkdirSync filesystem path))))
 
-(defn save-binary
-  "Saves `buf` to the filesystem at `path`. Creates the directory if
+(defn save-data
+  "Saves `data` to the filesystem at `path`. Creates the directory if
   necessary."
-  [path buf]
+  [path data]
   (mkdir (parent path) true)
-  (.writeFileSync filesystem path buf))
+  (.writeFileSync filesystem path data))
 
 (defn stat
   "Returns stats for file as map with keys `:size` and `:modified`."

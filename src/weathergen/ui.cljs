@@ -681,10 +681,25 @@
   [mission-name]
   (str (mission-name-base mission-name) ".vmtw"))
 
-(defn save-settings
+(defn save-weather-settings
   [_]
-  (save-data (settings-blob)
-             (settings-filename (get-in @display-params [:multi-save :mission-name]))))
+  (when-let [path (-> electron
+                      .-remote
+                      .-dialog
+                      (.showSaveDialog
+                       #js {:title       "Save weather settings"
+                            :defaultPath (fs/path-combine (mission/campaign-dir @mission)
+                                                          (str (mission/mission-name @mission)
+                                                               ".vmtw"))
+                            :filters     #js [#js {:name      "VMT Weather Settings"
+                                                   :extension #js ["vmtw"]}]}))]
+    (->> {:weather-params @weather-params
+          :movement-params @movement-params
+          :display-params @display-params
+          :cloud-params @cloud-params
+          :revision revision}
+         pr-str
+         (fs/save-data path))))
 
 (defn twx-blob
   "Returns a JS blob containing TWX file data."
@@ -697,81 +712,44 @@
   (save-data (safari-safe-binary (twx-blob cloud-params direction))
              (twx-filename mission-name)))
 
-(defn load-file
-  "Asynchronously loads a file. Opts can include `:extensions` a CSV
-  of extensions to accept. Extensions must start with a period."
-  ([cb read-fn] (load-file cb read-fn {}))
-  ([cb read-fn opts]
-   (let [{:keys [extensions]} opts
-         attrs (cond-> {:type "file"}
-                 extensions (assoc :accept extensions))
-         i (input attrs)
-         ch (async/chan)]
-     (-> (gdom/getDocument) .-body (gdom/appendChild i))
-     (gstyle/showElement i false)
-     (-> i .-onchange (set! (fn [e]
-                              (async/put! ch e)
-                              (async/close! ch))))
-     (.click i)
-     (go
-       (let [e (<! ch)]
-         (when-let [file (aget (.. e -target -files) 0)]
-           (let [reader (js/FileReader.)]
-             (-> reader
-                 .-onload
-                 (set! #(let [data (-> %
-                                       .-target
-                                       .-result)]
-                          (cb data (.-name file)))))
-             (read-fn reader file))))))))
-
-(defn load-text-file
-  ([cb] (load-text-file cb {}))
-  ([cb opts]
-   (load-file
-    cb
-    (fn [reader file]
-      (.readAsText reader file))
-    opts)))
-
-(defn load-file-name
-  "Asks the user to open a file, does nothing with its contents, and
-   asynchronously sets cell `c` to the filename."
-  ([c] (load-file c {}))
-  ([c opts]
-   (load-file
-    ;; We're not doing anything with the contents - all we need is the name.
-    (fn [contents name]
-      (log/debug "Received name" name)
-      (reset! c name))
-    (fn [reader file]
-      (.readAsArrayBuffer reader file))
-    opts)))
-
-(defn load-settings
+(defn load-weather-settings
   [_]
-  (load-text-file
-   (fn [contents name]
-     (let [data (-> contents
-                    reader/read-string
-                    (model/upgrade revision))
-           t    (mission/mission-time @mission)]
-       (dosync
-        (reset! weather-params (-> data
-                                   :weather-params
-                                   (assoc-in [:time :current] t)))
-        (reset! display-params (-> data
-                                   :display-params
-                                   (assoc :multi-save
-                                          {:mission-name nil
-                                           :from         t
-                                           :to           (model/add-time t (* 6 60))
-                                           :step         (-> data :movement-params :step)})))
-        (reset! movement-params (:movement-params data))
-        (swap! time-params assoc :displayed t))))
-   {:extensions ".vmtw"}))
+  (let [[path] (-> electron
+                   .-remote
+                   .-dialog
+                   (.showOpenDialog
+                    (clj->js
+                     {:title       "Select a VMT or Weathergen Weather File"
+                      :properties  ["openFile"]
+                      :defaultPath (mission/campaign-dir @mission)
+                      :filters     [{:name      "VMT Weather Settings"
+                                     :extensions ["vmtw"]}
+                                    {:name      "WeatherGen Settings"
+                                     ;; Unfortunately, dots are a
+                                     ;; no-no, so we can't limit it to
+                                     ;; .wgs.edn files.
+                                     :extensions ["edn"]}]})))]
+    (when path
+      (let [data (-> path
+                     fs/file-text
+                     reader/read-string
+                     (model/upgrade revision))
+            t    (mission/mission-time @mission)]
+        (dosync
+         (reset! weather-params (-> data
+                                    :weather-params
+                                    (assoc-in [:time :current] t)))
+         (reset! display-params (-> data
+                                    :display-params
+                                    (assoc :multi-save
+                                           {:mission-name nil
+                                            :from         t
+                                            :to           (model/add-time t (* 6 60))
+                                            :step         (-> data :movement-params :step)})))
+         (reset! movement-params (:movement-params data))
+         (swap! time-params assoc :displayed t))))))
 
-(defn load-dtc
+#_(defn load-dtc
   [_]
   (load-text-file
    (fn [contents name]
@@ -919,7 +897,7 @@
           :visible-sides visible-sides}
          encode
          compress
-         (fs/save-binary path))))
+         (fs/save-data path))))
 
 (def zipbuilder-worker
   (let [worker (js/Worker. "worker.js")
@@ -3630,11 +3608,11 @@
        (div
         :class "button-container"
         (buttons/a-button
-         :click save-settings
-         "Save Settings"))
+         :click save-weather-settings
+         "Save Weather Settings"))
        (div
         :class "button-container"
-        (buttons/a-button :click load-settings "Load Settings"))))
+        (buttons/a-button :click load-weather-settings "Load Weather Settings"))))
      (control-subsection
       :toggle (cell= (some? mission))
       :title (with-help [:serialization-controls :multi-save :overview]
@@ -3866,7 +3844,7 @@
                     (swap! path assoc :color @val)))]))))
 
 ;; TODO: Maybe remove
-(defn flightpath-controls
+#_(defn flightpath-controls
   [_]
   (control-section
    :id "flightpath-controls"
@@ -4435,7 +4413,7 @@
    :wind-stability-parameters wind-stability-parameters
    :weather-override-parameters weather-override-parameters
    :advanced-controls advanced-controls
-   :flightpath-controls flightpath-controls
+   ;; :flightpath-controls flightpath-controls
    :flights-section (:controls flight-paths-layer)
    :air-forces-section air-forces-section
    :oob-section order-of-battle-section

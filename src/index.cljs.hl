@@ -33,12 +33,12 @@
                         .-remote
                         .-dialog
                         (.showOpenDialog
-                         #js {:title "Select a campaign or tactical engagement file"
-                              :openFile true
-                              :filters #js [#js {:name "Campaign file"
-                                                 :extensions #js ["cam"]}
-                                            #js {:name "Tactical engagement file"
-                                                 :extensions #js ["tac"]}]}))]
+                         (clj->js {:title      "Select a campaign or tactical engagement file"
+                                   :properties ["openFile"]
+                                   :filters    [{:name       "Campaign file"
+                                                 :extensions ["cam"]}
+                                                {:name       "Tactical engagement file"
+                                                 :extensions ["tac"]}]})))]
     (dosync
      (reset! loading? true)
      (reset! load-error nil)

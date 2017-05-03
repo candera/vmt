@@ -116,10 +116,10 @@
         (or (= parent ancestor)
             (ancestor? ancestor parent))))))
 
-(defn save-binary
-  "Saves `buf` to the filesystem at `path`. Creates the directory if
+(defn save-data
+  "Saves `data` to the filesystem at `path`. Creates the directory if
   necessary."
-  [path buf]
+  [path data]
   #_(.mkdirSync filesystem (parent path))
   #_(.writeFileSync filesystem path buf)
   (throw (ex-info "Not yet implemented" {:reason :not-implemented})))

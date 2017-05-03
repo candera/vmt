@@ -291,7 +291,7 @@
                 (->> reader
                      .-result
                      js/Buffer.
-                     (fs/save-binary path))
+                     (fs/save-data path))
                 ;; Might need this - no idea what it does.
                 ;;   deferred.resolve();
                 )))
