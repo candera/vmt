@@ -2420,3 +2420,7 @@ type: 0x64 -> image
 
 
 (class (mission/read-mission installs "/Users/candera/falcon/4.33.3/Data/Add-On Balkans/Campaign/SAVE2.CAM")) 
+
+(def b (read-briefing "/tmp/WNPU Mission 19.cam.vmtb"))
+
+(-> b :weather :display-params :overlay)

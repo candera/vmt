@@ -868,11 +868,11 @@
                                   :weather
                                   :weather-params
                                   (update :wind-stability-areas #(map unedit %))
-                                  (update :weather-overrides #(map unedit %))))
+                                  (update :weather-overrides #(map unedit %))
+                                  (assoc-in [:time :max] (mission/mission-time mission-data))))
        (reset! cloud-params (-> vmtb :weather :cloud-params))
        (reset! movement-params (-> vmtb :weather :movement-params))
-       (reset! display-params (-> vmtb :weather :display-params))
-       (swap! weather-params assoc-in [:time :max] (mission/mission-time mission-data))))))
+       (reset! display-params (-> vmtb :weather :display-params))))))
 
 (defn save-briefing
   "Prompts the user for a path and saves a briefing file to it."
@@ -1344,6 +1344,11 @@
                          cell=)]
        (cell-let [{:keys [coordinates]} selected-cell
                   [x y] coordinates]
+         ;; TODO: It's not good enough to just set the value of the
+         ;; `selected` attribute - that won't cause the browser to
+         ;; actually change the selected item. You have to change the
+         ;; select's selectedIndex property, too. The `dropdown` elem
+         ;; should help with this.
          (select
           :id "locations"
           :change #(change-location @mission (nth @airbases (util/str->long @%)))
@@ -2472,55 +2477,6 @@
        (div :class "left-column" left)
        (div :class "right-column" right)))
 
-(defelem dropdown
-  [attrs _]
-  (let [{:keys [value select items]} attrs
-        attrs (dissoc attrs :value :select :items)
-        show? (cell false)
-        selected (formula-of
-                  [items value]
-                  (->> items
-                       (filter #(= value (:value %)))
-                       first))
-        _ (formula-of
-           [selected])]
-    (div
-     :css {:border "solid 1px black"
-           :background "white"
-           :border-radius "4px"
-           :padding-left "4px"
-           :padding-top "2px"}
-     attrs
-     [(formula-of
-       [selected value]
-       (if (= (:value selected) value)
-         (:ui selected)
-         ""))
-      (span
-       :css (merge (triangle-style)
-                   {:margin-bottom "6px"
-                    :margin-left "4px"})
-       :click #(swap! show? not))
-      (div
-       :toggle show?
-       (formula-of
-        [items value]
-        (for [item items]
-          (a
-           :href "#"
-           :click #(dosync
-                    (reset! show? false)
-                    (select item))
-           :css {:margin-left "4px"
-                 :display "block"}
-           (div
-            :css {:width "8px"
-                  :display "inline-block"}
-            (if (= value (:value item))
-              "✓"
-              " "))
-           (:ui item)))))])))
-
 (defn parse-int
   "Parses an int from a string, returning the int, or nil if it cannot
   be parsed as an int."
@@ -2896,21 +2852,8 @@
 
 (defn display-controls
   [{:keys [prevent-map-change?]}]
-  (let [dropdown (fn [{:keys [k key->name name->key change]}]
-                   (select
-                    :change (if change
-                              #(change (name->key @%))
-                              #(swap! display-params assoc k (name->key @%)))
-                    (for [name (conj (keys name->key) "None")]
-                      (option
-                       :value name
-                       :selected (cell= (-> display-params
-                                            k
-                                            key->name
-                                            (= name)))
-                       name))))
-        field      (fn [& kids] (apply div :class "field" kids))
-        field-help (fn [& kids] (apply div :class "field-elem field-help" kids))
+  (let [field       (fn [& kids] (apply div :class "field" kids))
+        field-help  (fn [& kids] (apply div :class "field-elem field-help" kids))
         field-input (fn [& kids] (apply div :class "field-elem field-input" kids))
         field-label (fn [help-path & kids]
                       (with-help help-path
@@ -2919,45 +2862,50 @@
      :title "Display controls"
      :id "display-controls-section"
      (control-layout
-      (let [opts {:cell display-params
+      (let [opts {:cell      display-params
                   :help-base :display-controls}]
         [["Display"
           [:display]
           (merge opts
-                 {:ui (dropdown {:k :display
-                                 :key->name display-key->name
-                                 :name->key display-name->key})})]
+                 {:ui (comm/dropdown
+                       :value (path-lens display-params [:display])
+                       :choices [{:label "None"}
+                                 {:label "Weather Type"
+                                  :value :type}
+                                 {:label "Pressure"
+                                  :value :pressure}
+                                 {:label "Temperature"
+                                  :value :temperature}])})]
          ["Overlay"
           [:overlay]
-          (merge opts {:ui (dropdown {:label "Overlay"
-                                      :k :overlay
-                                      :key->name overlay-key->name
-                                      :name->key overlay-name->key})})]
+          (merge opts {:ui (comm/dropdown
+                            :value (path-lens display-params [:overlay])
+                            :choices [{:label "None"}
+                                      {:label "Wind"
+                                       :value :wind}
+                                      {:label "Pressure"
+                                       :value :pressure}
+                                      {:label "Temperature"
+                                       :value :temperature}
+                                      {:label "Weather Type"
+                                       :value :type}])})]
          ["Pressure"
           [:pressure]
-          (merge opts {:ui (select
-                            :change #(do
-                                       (swap! display-params
-                                              assoc
-                                              :pressure-unit
-                                              (pressure-unit-name->key @%)))
-                            (for [name (keys pressure-unit-name->key)]
-                              (option
-                               :value name
-                               :selected (cell= (-> display-params
-                                                    :pressure-unit
-                                                    pressure-unit-key->name
-                                                    (= name)))
-                               name)))})]
+          (merge opts {:ui (comm/dropdown
+                            :value (path-lens display-params [:pressure-unit])
+                            :choices [{:label "InHg"
+                                       :value :inhg}
+                                      {:label "Millibar"
+                                       :value :mbar}])})]
          ["Opacity:"
           [:opacity]
-          (merge opts {:ui (input {:type "range"
-                                   :min 0
-                                   :max 100
-                                   :value (cell= (-> display-params
-                                                     :opacity
-                                                     (* 100)
-                                                     long))
+          (merge opts {:ui (input {:type   "range"
+                                   :min    0
+                                   :max    100
+                                   :value  (cell= (-> display-params
+                                                      :opacity
+                                                      (* 100)
+                                                      long))
                                    :change #(swap! display-params
                                                    assoc
                                                    :opacity

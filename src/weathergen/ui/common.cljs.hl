@@ -402,3 +402,34 @@
                  :change #(swap! selected-sides
                                  (comp set (if @val disj conj))
                                  (mission/team-number @side))))))))))
+
+(defelem dropdown
+  "Renders an HTML select. Attrs include :value, a cell or lens
+  containing the current choice, which will be updated when the choice
+  changes, and :choices, a vector of maps containing :value and :label
+  keys."
+  [attrs _]
+  ;; TODO: Let choices be a cell if we ever need that.
+  (with-attr-bindings attrs [value choices]
+    (let [indexed  (map-indexed (fn [i c] [(str i) c])
+                                choices)
+          by-index (into {} indexed)]
+      (with-let [s (select)]
+        (s
+         (assoc attrs
+                :change (fn [v]
+                          (log/debug "resetting dropdown value to"
+                                     :v (pr-str @v)
+                                     :by-index (-> @v by-index pr-str)
+                                     :value (-> @v by-index :value pr-str))
+                          (reset! value (-> @v by-index :value))))
+         (for [[index choice] indexed]
+           (with-let [o (option)]
+             (o
+              {:value    index
+               :selected (formula-of [value]
+                           (with-let [selected? (= value (:value choice))]
+                             (when selected?
+                               (-> s .-selectedIndex (set! (.-index o))))))}
+              (:label choice)))))))))
+

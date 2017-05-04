@@ -1,10 +1,12 @@
 (ns user
-  (:require [clojure.pprint :as pprint :refer [pprint]]
+  (:require [clojure.java.io :as io]
+            [clojure.pprint :as pprint :refer [pprint]]
             [clojure.repl :refer :all]
             [clojure.set :as set]
             [clojure.spec :as s]
             [clojure.string :as str]
             [clojure.tools.namespace.repl :refer [refresh]]
+            [cognitect.transit :as transit]
             [garden.core :refer [css]]
             [garden.selectors :as css-sel]
             [octet.core :as buf]
@@ -177,3 +179,11 @@
 (defn smoke-test
   []
   (map mission/mission-name [@balkans @ito @wnpu @te-new @stratus-te @save2 @smpu @smpu-old]))
+
+(defn read-briefing
+  [path]
+  (-> path
+      io/input-stream
+      java.util.zip.GZIPInputStream.
+      (transit/reader :json)
+      transit/read))
