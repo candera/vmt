@@ -747,6 +747,7 @@
                                             :to           (model/add-time t (* 6 60))
                                             :step         (-> data :movement-params :step)})))
          (reset! movement-params (:movement-params data))
+         (reset! cloud-params    (:cloud-params data))
          (swap! time-params assoc :displayed t))))))
 
 #_(defn load-dtc
