@@ -261,7 +261,7 @@
                                      (min i))})
      :contrails (let [[i p f s] (sort (repeatedly
                                        4
-                                       #(random-int 2000 40000 1000)))]
+                                       #(random-int 20000 40000 1000)))]
                   {:sunny s
                    :fair f
                    :poor p
