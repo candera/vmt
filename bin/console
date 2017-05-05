@@ -5,7 +5,7 @@ title weathergen
 
 cat > /tmp/boot-dev <<EOF
 . ~/.bashrc
-boot repl-server dev
+boot dev
 EOF
 
 
