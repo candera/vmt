@@ -2424,3 +2424,74 @@ type: 0x64 -> image
 (def b (read-briefing "/tmp/WNPU Mission 19.cam.vmtb"))
 
 (-> b :weather :display-params :overlay)
+
+
+(let [mission @fnpu
+      squadrons (->> mission
+                     :units
+                     (group-by :type)
+                     :squadron
+                     (map (fn [squadron]
+                            (assoc squadron
+                                   ::aircraft (mission/squadron-aircraft mission squadron))))
+                     ;; (group-by :airbase-id)
+                     )
+      airbases (mission/oob-air mission)
+      ab-squadrons (->> airbases
+                        (mapcat ::mission/squadrons))]
+
+  (->> mission
+       :vehicle-class-data
+       csv-ize
+       (spit "/tmp/vehicle-classes.csv"))
+  #_(->> mission
+         :objectives
+         csv-ize
+         (spit "/tmp/objectives.csv"))
+  #_(->> mission
+         :units
+         csv-ize
+         (spit "/tmp/units.csv"))
+  #_(->> airbases
+         csv-ize
+         (spit "/tmp/airbases.csv"))
+  #_(->> squadrons
+         csv-ize
+         (spit "/tmp/squadrons.csv"))
+  #_(->> squadrons
+         (filter #(= (:name %) "401st Fighter Squadron"))
+         first
+         :airbase-id
+         (mission/find-objective mission :id)
+         keys)
+  #_{:squadrons (count squadrons)
+     :ab-squadrons (count ab-squadrons)
+     :names (->> squadrons (map :name))
+     :missing (set/difference (->> squadrons (map :name) set)
+                              (->> ab-squadrons (map :name) set))}
+  #_(doseq [s (set/difference (->> squadrons (map :name) set)
+                              (->> ab-squadrons (map :name) set))]
+      (println s)))
+
+(mission/objective-name @fnpu (mission/find-objective @fnpu :id {:name 1311 :creator 0}))
+
+(let [{:keys [names strings]} @fnpu]
+  (->> (range 3000)
+       (map #(try (-> % strings .toLowerCase) (catch Exception _ "")))
+       (filter #(.contains % "a"))))
+
+(let [mission @fnpu]
+  (@#'mission/carrier-name mission (first (@#'mission/carriers mission))))
+
+(let [mission @fnpu]
+  (count (@#'mission/army-bases mission)))
+
+(let [mission @fnpu]
+  (->> (for [base (mission/oob-air mission)]
+         {:name (::mission/name base)
+          :squadrons (count (::mission/squadrons base))})
+       (sort-by :squadrons)
+       (reverse)
+       (take 20)))
+
+(take 3 (mission/oob-air @fnpu))

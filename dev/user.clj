@@ -116,7 +116,7 @@
    (log/debug "Reading SMPU...")
    (let [mission (mission/read-mission
                   installs
-                  "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 18 15 07.cam")]
+                  "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 23 55 48.cam")]
      (log/debug "Done reading.")
      mission)))
 
@@ -176,6 +176,15 @@
      (log/debug "Done reading.")
      mission)))
 
+(def fnpu
+  (delay
+   (log/debug "Reading FNPU...")
+   (let [mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/FNPU-Day  1 05 12 15.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
 (defn smoke-test
   []
   (map mission/mission-name [@balkans @ito @wnpu @te-new @stratus-te @save2 @smpu @smpu-old]))
@@ -187,3 +196,22 @@
       java.util.zip.GZIPInputStream.
       (transit/reader :json)
       transit/read))
+
+(defn dump-mission
+  [mission dir]
+  (->> mission
+       :class-table
+       csv-ize
+       (spit (fs/path-combine dir "class-table.csv")))
+  (->> mission
+       :vehicle-class-data
+       csv-ize
+       (spit (fs/path-combine dir "vehicle-classes.csv")))
+  (->> mission
+       :objectives
+       csv-ize
+       (spit (fs/path-combine dir "objectives.csv")))
+  (->> mission
+       :units
+       csv-ize
+       (spit (fs/path-combine dir "units.csv"))))

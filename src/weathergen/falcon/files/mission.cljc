@@ -1725,30 +1725,6 @@
         :grey]
        (team-number team)))
 
-;; Note that the below will also return carriers, which might be what
-;; we want, but might not be. Carrier airbases have subtype 7 and
-;; specific type 7.
-;;
-;; Made this private because it's confusing that it doens't return
-;; squadrons etc. Should prefer the OOB functions, which do.
-(defn- airbases
-  "Returns all the airbase and airstrip objectives."
-  [mission]
-  (let [airbase-classes (->> mission
-                             :class-table
-                             (util/filter= #(get-in % [:vu-class-data :class-info :domain])
-                                           c/DOMAIN_LAND)
-                             (util/filter= #(get-in % [:vu-class-data :class-info :class])
-                                           c/CLASS_OBJECTIVE)
-                             (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
-                                       (get-in % [:vu-class-data :class-info :type])))
-                             (map ::index)
-                             set)]
-    (->> mission
-         :objectives
-         (filterv (fn [objective]
-                    (airbase-classes (- (:entity-type objective) 100)))))))
-
 (defn package-name
   "Given a package ID, return its string name, e.g. Package 12345."
   [mission package-id]
@@ -1911,32 +1887,86 @@
                             (- 100)))]
     (min runway-score nonrunway-statuses)))
 
-(defn oob-air
-  "Returns a seq of airbases."
-  [mission]
-  (let [squadrons (->> mission
-                       :units
-                       (group-by :type)
-                       :squadron
-                       (map (fn [squadron]
-                              (assoc squadron
-                                     ::aircraft (squadron-aircraft mission squadron))))
-                       (group-by :airbase-id))]
+(defn- objective-status
+  [mission objective]
+  ;; Will this work for non-airbases?
+  (airbase-status mission objective))
 
+;; Note that the below will also return carriers, which might be what
+;; we want, but might not be.
+;;
+;; Made this private because it's confusing that it doens't return
+;; squadrons etc. Should prefer the OOB functions, which do.
+(defn- airbases
+  "Returns all the airbase and airstrip objectives."
+  [mission]
+  (let [airbase-classes (->> mission
+                             :class-table
+                             (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                                           c/DOMAIN_LAND)
+                             (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                           c/CLASS_OBJECTIVE)
+                             (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
+                                       (get-in % [:vu-class-data :class-info :type])))
+                             ;;  Carrier airbases have subtype 7 and specific type 7.
+                             (remove (fn [cls]
+                                       (= [7 7]
+                                          [(get-in cls [:vu-class-data :class-info :stype])
+                                           (get-in cls [:vu-class-data :class-info :sptype])])))
+                             (map ::index)
+                             set)]
     (->> mission
-         airbases
-         (map (fn [airbase]
-                (assoc airbase
-                       ::squadrons (get squadrons (:id airbase))
-                       ::status (airbase-status mission airbase)))))))
+         :objectives
+         (filterv (fn [objective]
+                    (airbase-classes (- (:entity-type objective) 100)))))))
 
-(defn order-of-battle
-  "Returns the order of battle, a map from category (air,
-  army, naval, objective) to entries (specific to category)."
+(defn- carriers
+  "Returns all the carrier task force units in the mission."
   [mission]
-  ;; TODO: Group by side, category
-  ;; TODO: Add army, navy, objective
-  {:air (oob-air mission)})
+  (let [carrier-classes (->> mission
+                             :class-table
+                             (util/filter= #(get-in % [:vu-class-data :class-info :domain]
+                                                    c/DOMAIN_SEA)
+                                           c/DOMAIN_SEA)
+                             (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                           c/CLASS_UNIT)
+                             (util/filter= #(get-in % [:vu-class-data :class-info :type])
+                                           c/TYPE_TASKFORCE)
+                             (util/filter= #(get-in % [:vu-class-data :class-info :stype])
+                                           c/STYPE_UNIT_CARRIER)
+                             (map ::index)
+                             set)]
+    (->> mission
+         :units
+         (filterv (fn [unit]
+                    (carrier-classes (- (:entity-type unit) 100)))))))
+
+(defn- army-bases
+  "Returns all the army base objectives."
+  [mission]
+  ;; TODO: There's a lot of commonality here with `airbases` - factor out
+  (let [armybase-classes (->> mission
+                              :class-table
+                              (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                                            c/DOMAIN_LAND)
+                              (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                            c/CLASS_OBJECTIVE)
+                              (util/filter= #(get-in % [:vu-class-data :class-info :type])
+                                            c/TYPE_ARMYBASE)
+                              (map ::index)
+                              set)]
+    (->> mission
+         :objectives
+         (filterv (fn [objective]
+                    (armybase-classes (- (:entity-type objective) 100)))))))
+
+(defn- carrier-name
+  "Returns the name of a carrier task force unit."
+  [mission carrier]
+  (-> (class-table-entry mission carrier)
+      :data-pointer
+      (->> (nth (:vehicle-class-data mission)))
+      :name))
 
 (def air-icon-resource-prefix
   {:white  "wh"
@@ -1948,7 +1978,7 @@
    :red    "rd"
    :grey   "gy"})
 
-(defn squadron-image
+(defn- squadron-image
   "Returns an image descriptor for a squadron."
   [mission squadron]
   (let [{:keys [owner]}      squadron
@@ -1960,11 +1990,64 @@
                              "air_nn")
                         (get-in image-ids [:id->name icon-index]))))
 
-(defn squadron-type
+(defn- squadron-type
   "Returns a string describing the type of the squadron - Fighter,
   Attack, etc."
   [mission squadron]
   (->> squadron (unit-class-entry mission) :name))
+
+
+(defn oob-air
+  "Returns a seq of airbases."
+  [mission]
+  ;; TODO: Squadrons can be assigned to air bases, air strips, army
+  ;; bases, or carriers. Need to deal with all of those.
+  ;; The squadron's :airbase-id will point to the one of the following
+  ;; things:
+  ;; - The :id of the an airbase objective.
+  ;; - The :id of a task force unit.
+  ;; - The :id of a non-airbase objective
+  (let [squadrons   (->> mission
+                         :units
+                         (group-by :type)
+                         :squadron
+                         (map (fn [squadron]
+                                (assoc squadron
+                                       ::aircraft (squadron-aircraft mission squadron)
+                                       ::squadron-type (squadron-type mission squadron)
+                                       ::image (squadron-image mission squadron))))
+                         (group-by :airbase-id))
+        airbases    (airbases mission)
+        carriers    (carriers mission)
+        army-bases  (army-bases mission)
+        airbases*   (->> airbases
+                         (mapv #(assoc %
+                                       ::location (select-keys % [:x :y])
+                                       ::status (airbase-status mission %)
+                                       ::squadrons (get squadrons (:id %))
+                                       ::name (objective-name mission %))))
+        ;; airbase-id => unit with this ID => entity-type - 100 => class-table -> data-pointer -> vehicle-class-table -> name
+        carriers*   (->> carriers
+                         (mapv #(assoc %
+                                       ::location (select-keys % [:x :y])
+                                       ::status 100
+                                       ::squadrons (get squadrons (:id %))
+                                       ::name (carrier-name mission %))))
+        army-bases* (->> army-bases
+                         (mapv #(assoc %
+                                       ::location (select-keys % [:x :y])
+                                       ::status (objective-status mission %)
+                                       ::squadrons (get squadrons (:id %))
+                                       ::name (objective-name mission %))))]
+    (vec (concat airbases* carriers* army-bases*))))
+
+(defn order-of-battle
+  "Returns the order of battle, a map from category (air,
+  army, naval, objective) to entries (specific to category)."
+  [mission]
+  ;; TODO: Group by side, category
+  ;; TODO: Add army, navy, objective
+  {:air (oob-air mission)})
 
 (defn mission-time
   "Returns the current time in the virtual world."

@@ -2019,7 +2019,7 @@
   (let [coords            (formula-of [mission airbase] (coords/fgrid->weather mission (:x airbase) (:y airbase)))
         x                 (formula-of [coords] (:x coords))
         y                 (formula-of [coords] (:y coords))
-        label             (formula-of [mission airbase] (mission/objective-name mission airbase))
+        label             (formula-of [airbase] (::mission/name airbase))
         camp-id           (formula-of [airbase] (:camp-id airbase))
         visible?          (formula-of [displayed-airbases airbase] (displayed-airbases airbase))
         highlighted?      (formula-of [highlighted-airbase airbase] (= highlighted-airbase airbase))
@@ -3927,9 +3927,7 @@
   (formula-of [mission airbase]
     (->> airbase
          ::mission/squadrons
-         (sort-by (fn [squadron]
-                    [(mission/squadron-type mission squadron)
-                     (:name-id squadron)])))))
+         (sort-by (juxt ::mission/squadron-type :name)))))
 
 (defn air-forces-section
   [_]
@@ -4047,10 +4045,13 @@
                             {:toggle (formula-of [airbase listed-airbases]
                                        (listed-airbases airbase))})
                    :children (fn [airbase]
-                               (airbase-squadrons mission airbase))
+                               (formula-of [airbase]
+                                 (->> airbase
+                                      ::mission/squadrons
+                                      (sort-by (juxt ::mission/squadron-type ::mission/name)))))
                    :formatter (fn [expanded? airbase]
-                                (let [ab-name (formula-of [mission airbase]
-                                                (mission/objective-name mission airbase))
+                                (let [ab-name (formula-of [airbase]
+                                                (::mission/name airbase))
                                       status (formula-of [airbase]
                                                (->> airbase
                                                     ::mission/status))]
@@ -4100,7 +4101,7 @@
                                                  (included-squadrons squadron))
                                        :src (formula-of [mission squadron]
                                               (->> squadron
-                                                   (mission/squadron-image mission)
+                                                   ::mission/image
                                                    (get-image mission)))
                                        :css {:height "20px"
                                              :margin-left "3px"
@@ -4125,7 +4126,7 @@
                                         :text-align "center"}
                                   (img :src (formula-of [mission squadron]
                                               (->> squadron
-                                                   (mission/squadron-image mission)
+                                                   ::mission/image
                                                    (get-image mission)))))
                                  (inl :css { ;;:background "#eee"
                                             :padding "2px 4px 0 5px"
