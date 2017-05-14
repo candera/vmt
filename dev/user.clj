@@ -212,6 +212,14 @@
        csv-ize
        (spit (fs/path-combine dir "objectives.csv")))
   (->> mission
+       :objective-class-data
+       csv-ize
+       (spit (fs/path-combine dir "objective-classes.csv")))
+  (->> mission
        :units
        csv-ize
-       (spit (fs/path-combine dir "units.csv"))))
+       (spit (fs/path-combine dir "units.csv")))
+  (->> mission
+       :unit-class-data
+       csv-ize
+       (spit (fs/path-combine dir "unit-classes.csv"))))

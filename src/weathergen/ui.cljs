@@ -54,7 +54,7 @@
             [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [colors control-section
                                                    get-image
-                                                   format-time inl pre-cell
+                                                   format-time inl pre-cell px
                                                    styled team-color triangle]]
             [weathergen.ui.grids :as grids]
             [weathergen.ui.layers.flights]
@@ -3934,7 +3934,7 @@
   (control-section
    :title "Air Forces"
    (let [expand-state (cell [:expand-through-level 1])
-         row (fn [& args] (apply div :class "row" args))]
+         row          (fn [& args] (apply div :class "row" args))]
      (cond-tpl
        (-> mission not cell=)
        "No mission loaded"
@@ -3967,12 +3967,12 @@
            :click #(reset! included-squadron-types #{})
            "Uncheck all"))
          (div
-          :css {:display "flex"
+          :css {:display   "flex"
                 :flex-wrap "wrap"
                 :max-width "275px"}
           (for-tpl [squadron-type (cell= (sort all-squadron-types))]
             (div
-             :css {:width "70px"
+             :css {:width       "70px"
                    :white-space "nowrap"}
              (let [val (cell= (contains? included-squadron-types squadron-type))]
                (input :type "checkbox"
@@ -4003,20 +4003,20 @@
           :click #(reset! checked-airbases #{})
           "Uncheck all"))
         (row
-         :css {:overflow "scroll"
+         :css {:overflow    "scroll"
                :font-family "monospace"
-               :font-size "120%"
-               :background "white"
-               :border "inset 1px lightgray"}
+               :font-size   "120%"
+               :background  "white"
+               :border      "inset 1px lightgray"}
          (let [by-side (formula-of [mission all-airbases]
                          (group-by (fn [airbase]
                                      (->> airbase :owner (mission/side mission)))
                                    all-airbases))
-               sorted (formula-of [mission by-side]
-                        (for [side (mission/sides mission)
-                              :let [airbases (get by-side side)]
-                              :when (-> airbases count pos?)]
-                          [side airbases]))]
+               sorted  (formula-of [mission by-side]
+                         (for [side  (mission/sides mission)
+                               :let  [airbases (get by-side side)]
+                               :when (-> airbases count pos?)]
+                           [side airbases]))]
            (->> sorted
                 (trees/tree
                  expand-state
@@ -4026,43 +4026,43 @@
                                   (inl
                                    :id (cell= (gstring/format "air-forces-side-%d" side))
                                    :css (formula-of [side]
-                                          {:height "20px"
-                                           :font-weight "bold"
+                                          {:height       "20px"
+                                           :font-weight  "bold"
                                            :margin-right "3px"
-                                           :margin-top "4px"
-                                           :color (team-color side :dark-text)})
+                                           :margin-top   "4px"
+                                           :color        (team-color side :dark-text)})
                                    (formula-of [mission side]
                                      (comm/side-label :mission mission :side side)
                                      #_(mission/team-name mission side)))))
-                   :children (fn [item]
-                               (formula-of [item mission]
-                                 (let [[side airbases] item]
-                                   (sort-by (fn [airbase]
-                                              (mission/objective-name mission airbase))
-                                            airbases))))}
+                   :children  (fn [item]
+                                (formula-of [item mission]
+                                  (let [[side airbases] item]
+                                    (sort-by (fn [airbase]
+                                               (mission/objective-name mission airbase))
+                                             airbases))))}
                   ;; Airbases
-                  {:attrs (fn [airbase]
-                            {:toggle (formula-of [airbase listed-airbases]
-                                       (listed-airbases airbase))})
-                   :children (fn [airbase]
-                               (formula-of [airbase]
-                                 (->> airbase
-                                      ::mission/squadrons
-                                      (sort-by (juxt ::mission/squadron-type ::mission/name)))))
+                  {:attrs     (fn [airbase]
+                                {:toggle (formula-of [airbase listed-airbases]
+                                           (listed-airbases airbase))})
+                   :children  (fn [airbase]
+                                (formula-of [airbase]
+                                  (->> airbase
+                                       ::mission/squadrons
+                                       (sort-by (juxt ::mission/squadron-type ::mission/name)))))
                    :formatter (fn [expanded? airbase]
                                 (let [ab-name (formula-of [airbase]
                                                 (::mission/name airbase))
-                                      status (formula-of [airbase]
-                                               (->> airbase
-                                                    ::mission/status))]
+                                      status  (formula-of [airbase]
+                                                (->> airbase
+                                                     ::mission/status))]
                                   (div
                                    :id (cell= (gstring/format "air-forces-airbase-%d"
                                                               (:camp-id airbase)))
                                    :css (formula-of [expanded?]
-                                          {:display "inline-block"
-                                           :height "20px"
+                                          {:display    "inline-block"
+                                           :height     "20px"
                                            :margin-top "4px"
-                                           :cursor "pointer"})
+                                           :cursor     "pointer"})
                                    :click #(dosync
                                             (swap! checked-airbases util/toggle-set-membership @airbase)
                                             (reset! highlighted-airbase (@checked-airbases @airbase)))
@@ -4072,25 +4072,38 @@
                                           :css {:margin-right "7px"}
                                           :value (formula-of [airbase checked-airbases]
                                                    (checked-airbases airbase)))
+                                   (let [width 25]
+                                     (inl
+                                      :css {:width        (px width)
+                                            :margin-right (px 3)
+                                            :text-align   "center"}
+                                      (img
+                                       :src (formula-of [mission airbase]
+                                              (->> airbase
+                                                   ::mission/image
+                                                   (get-image mission)))
+                                       :css {:max-width      (px width)
+                                             :max-height     (px width)
+                                             :vertical-align "middle"})))
                                    (inl
                                     :css (formula-of [status]
-                                           {:width "24px"
-                                            :height "8px"
-                                            :margin-right "5px"
-                                            :margin-bottom "2px"
+                                           {:width          (px 25)
+                                            :height         (px 8)
+                                            :margin-right   (px 5)
+                                            :margin-bottom  (px 2)
                                             :vertical-align "middle"
-                                            :border "solid 1px black"
-                                            :background (let [color (cond
-                                                                      (< 75 status) "green"
-                                                                      (< 25 status) "orange"
-                                                                      :else "red")]
-                                                          (gstring/format "linear-gradient(to right, %s, %s %f%%, white %f%%)"
-                                                                          color color
-                                                                          status status))}))
+                                            :border         "solid 1px black"
+                                            :background     (let [color (cond
+                                                                          (< 75 status) "green"
+                                                                          (< 25 status) "orange"
+                                                                          :else         "red")]
+                                                              (gstring/format "linear-gradient(to right, %s, %s %f%%, white %f%%)"
+                                                                              color color
+                                                                              status status))}))
                                    (inl
                                     :css (formula-of [airbase]
-                                           {:font-weight "bold"
-                                            :color (team-color (:owner airbase) :dark-text)
+                                           {:font-weight  "bold"
+                                            :color        (team-color (:owner airbase) :dark-text)
                                             :margin-right "10px"})
                                     ab-name)
                                    (inl
@@ -4103,35 +4116,35 @@
                                               (->> squadron
                                                    ::mission/image
                                                    (get-image mission)))
-                                       :css {:height "20px"
-                                             :margin-left "3px"
+                                       :css {:height         "20px"
+                                             :margin-left    "3px"
                                              :vertical-align "middle"})))
                                    (div
                                     :toggle expanded?
                                     :css {:margin-left "22px"
-                                          :font-style "italic"
-                                          :color "gray"}
+                                          :font-style  "italic"
+                                          :color       "gray"}
                                     (formula-of [status]
                                       (gstring/format "Status: %d%%" status))))))}
                   ;; Squadrons
-                  {:attrs (fn [squadron]
-                            {:toggle (formula-of [squadron included-squadrons]
-                                       (included-squadrons squadron))})
+                  {:attrs     (fn [squadron]
+                                {:toggle (formula-of [squadron included-squadrons]
+                                           (included-squadrons squadron))})
                    :formatter (fn [expanded? squadron]
                                 (inl
                                  :id (cell= (gstring/format "air-forces-squadron-%d"
                                                             (:camp-id squadron)))
                                  (inl
-                                  :css {:width "35px"
+                                  :css {:width      "35px"
                                         :text-align "center"}
                                   (img :src (formula-of [mission squadron]
                                               (->> squadron
                                                    ::mission/image
                                                    (get-image mission)))))
                                  (inl :css { ;;:background "#eee"
-                                            :padding "2px 4px 0 5px"
+                                            :padding       "2px 4px 0 5px"
                                             :margin-bottom "3px"
-                                            :margin-top "3px"}
+                                            :margin-top    "3px"}
                                       (div :css {:font-weight "bold"}
                                            (inl :css {:margin-right "7px"}
                                                 (-> squadron ::mission/aircraft :quantity str cell=))

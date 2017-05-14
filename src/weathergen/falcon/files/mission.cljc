@@ -380,8 +380,8 @@
             :pt-data-index buf/int16 ; Index into pt header data table
             :detection (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; Detection ranges
             :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte) ; How much each type will hurt me (% of strength applied)
-            :icon-index buf/int16 ; Index to this objective's icon type
             :mystery buf/ubyte    ; Not sure what this is
+            :icon-index buf/uint16 ; Index to this objective's icon type
             :features buf/ubyte ; Number of features in this objective
             :radar-feature buf/ubyte ; ID of the radar feature for this objective
             :first-feature buf/int16 ; Index of first feature entry
@@ -1990,6 +1990,40 @@
                              "air_nn")
                         (get-in image-ids [:id->name icon-index]))))
 
+(def icon-resource-prefix
+  {:white  "wht"
+   :green  "grn"
+   :blue   "blu"
+   :brown  "brn"
+   :orange "orn"
+   :yellow "ylw"
+   :red    "red"
+   :grey   "gry"})
+
+(defn- objective-image
+  "Returns an image descriptor for an objective."
+  [mission objective]
+  (let [{:keys [owner]}      objective
+        {:keys [icon-index]} (objective-class-entry mission objective)
+        {:keys [image-ids]}  mission]
+    (im/make-descriptor mission
+                        (str "resource/"
+                             (-> owner team-color icon-resource-prefix)
+                             "dark")
+                        (get-in image-ids [:id->name icon-index]))))
+
+(defn- unit-image
+  "Returns an image descriptor for a unit."
+  [mission unit]
+  (let [{:keys [owner]}      unit
+        {:keys [icon-index]} (unit-class-entry mission unit)
+        {:keys [image-ids]}  mission]
+    (im/make-descriptor mission
+                        (str "resource/"
+                             (-> owner team-color icon-resource-prefix)
+                             "dark")
+                        (get-in image-ids [:id->name icon-index]))))
+
 (defn- squadron-type
   "Returns a string describing the type of the squadron - Fighter,
   Attack, etc."
@@ -2025,19 +2059,21 @@
                                        ::location (select-keys % [:x :y])
                                        ::status (airbase-status mission %)
                                        ::squadrons (get squadrons (:id %))
+                                       ::image (objective-image mission %)
                                        ::name (objective-name mission %))))
-        ;; airbase-id => unit with this ID => entity-type - 100 => class-table -> data-pointer -> vehicle-class-table -> name
         carriers*   (->> carriers
                          (mapv #(assoc %
                                        ::location (select-keys % [:x :y])
                                        ::status 100
                                        ::squadrons (get squadrons (:id %))
+                                       ::image (unit-image mission %)
                                        ::name (carrier-name mission %))))
         army-bases* (->> army-bases
                          (mapv #(assoc %
                                        ::location (select-keys % [:x :y])
                                        ::status (objective-status mission %)
                                        ::squadrons (get squadrons (:id %))
+                                       ::image (objective-image mission %)
                                        ::name (objective-name mission %))))]
     (vec (concat airbases* carriers* army-bases*))))
 

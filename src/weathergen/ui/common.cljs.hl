@@ -26,6 +26,11 @@
     (.-exports js/module)
     js/tinycolor))
 
+(defn px
+  "Returns a pixel measurement string, e.g. '2px'"
+  [n]
+  (str n "px"))
+
 (def colors
   {:invalid       "#c70505"
    :invalid-background "#fcc"

@@ -2494,4 +2494,15 @@ type: 0x64 -> image
        (reverse)
        (take 20)))
 
-(take 3 (mission/oob-air @fnpu))
+(->> @fnpu
+     mission/oob-air
+     first
+     ::mission/image)
+
+(let [{:keys [image-ids]} @smpu]
+  (get-in image-ids [:name->id "ICON_ASTRIP_VERT"]))
+
+(->> (nth (:objective-class-data @fnpu) 2)
+     :icon-index)
+
+(-> @smpu :image-ids :name->id (get "ICON_ASTRIP_VERT"))
