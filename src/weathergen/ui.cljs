@@ -2923,10 +2923,10 @@
                                                       :opacity
                                                       (* 100)
                                                       long))
-                                   :change #(swap! display-params
-                                                   assoc
-                                                   :opacity
-                                                   (/ @% 100.0))})})]])))))
+                                   :input #(swap! display-params
+                                                  assoc
+                                                  :opacity
+                                                  (/ @% 100.0))})})]])))))
 
 (defn weather-parameters
   [_]
