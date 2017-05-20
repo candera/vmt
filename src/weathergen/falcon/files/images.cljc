@@ -7,48 +7,49 @@
             [weathergen.falcon.constants :as c]
             [weathergen.filesystem :as fs]))
 
-(defn read-index
-  [path]
-  ;; (log/debug "read-index" :path path)
-  (let [common-header (buf/spec
-                       :type buf/int32
-                       :id (buf/string 32))
-        image-header  (buf/spec
-                       :flags buf/int32
-                       :center (buf/repeat 2 buf/int16)
-                       :size (buf/repeat 2 buf/int16)
-                       :image-offset buf/int32
-                       :palette-size buf/int32
-                       :palette-offset buf/int32)
-        sound-header  (buf/spec
-                       :flags buf/int32
-                       :channels buf/int16
-                       :sound-type buf/int16
-                       :offset buf/int32
-                       :header-size buf/int32)
-        flat-header   (buf/spec
-                       :offset buf/int32
-                       :size   buf/int32)
-        file-header   (buf/spec :size buf/int32
-                                :version buf/int32)
-        idx-buf       (fs/file-buf path)]
-    (binding [octet.buffer/*byte-order* :little-endian]
-      (let [{:keys [size]} (buf/read idx-buf file-header)]
-        (loop [offset (buf/size file-header)
-               items []]
-          (if-not (-> size (- offset) pos?)
-            items
-            (let [[size common]    (buf/read* idx-buf common-header
-                                              {:offset offset})
-                  offset           (+ offset size)
-                  [size specifics] (buf/read* idx-buf
-                                              (condp = (:type common)
-                                                c/_RSC_IS_IMAGE_  image-header
-                                                c/_RSC_IS_SOUND_ sound-header
-                                                c/_RSC_IS_FLAT_  flat-header)
-                                              {:offset offset})]
-              (recur (+ offset size)
-                     (conj items (into common specifics))))))))))
+(def read-index
+  (memoize
+   (fn [path]
+     #_(log/debug "read-index" :path (pr-str path))
+     (let [common-header (buf/spec
+                          :type buf/int32
+                          :id (buf/string 32))
+           image-header  (buf/spec
+                          :flags buf/int32
+                          :center (buf/repeat 2 buf/int16)
+                          :size (buf/repeat 2 buf/int16)
+                          :image-offset buf/int32
+                          :palette-size buf/int32
+                          :palette-offset buf/int32)
+           sound-header  (buf/spec
+                          :flags buf/int32
+                          :channels buf/int16
+                          :sound-type buf/int16
+                          :offset buf/int32
+                          :header-size buf/int32)
+           flat-header   (buf/spec
+                          :offset buf/int32
+                          :size   buf/int32)
+           file-header   (buf/spec :size buf/int32
+                                   :version buf/int32)
+           idx-buf       (fs/file-buf path)]
+       (binding [octet.buffer/*byte-order* :little-endian]
+         (let [{:keys [size]} (buf/read idx-buf file-header)]
+           (loop [offset (buf/size file-header)
+                  items []]
+             (if-not (-> size (- offset) pos?)
+               items
+               (let [[size common]    (buf/read* idx-buf common-header
+                                                 {:offset offset})
+                     offset           (+ offset size)
+                     [size specifics] (buf/read* idx-buf
+                                                 (condp = (:type common)
+                                                   c/_RSC_IS_IMAGE_  image-header
+                                                   c/_RSC_IS_SOUND_ sound-header
+                                                   c/_RSC_IS_FLAT_  flat-header)
+                                                 {:offset offset})]
+                 (recur (+ offset size)
+                        (conj items (into common specifics))))))))))))
 
 (defn palette
   [image-buf image-data]
@@ -74,22 +75,22 @@
   result of calling the finalize function."
   [mission image-descriptor allocator]
   ;; TODO: Try theater directory first and fall back to Falcon dir
-  (let [{:keys [resource image-id base]} image-descriptor
-        data-dir          (-> mission :installation :data-dir)
-        resource-base     (fs/path-combine data-dir base resource)
-        _                 (log/debug "read-image" :image-descriptor image-descriptor)
-        index             (read-index (str resource-base ".idx"))
-        image-buf         (fs/file-buf (str resource-base ".rsc"))
-        image-data        (->> index (filter #(= image-id (:id %))) first)
-        _                 (assert image-data (with-out-str (print "Couldn't find an image with that ID" :resource resource :image-id image-id)))
+  (let [{:keys [resource
+                image-id
+                base
+                image-data]} image-descriptor
+        image-buf            (fs/file-buf (str base ".rsc"))
+        palette              (palette image-buf image-data)
+        {:keys [palette-size
+                palette-offset
+                center
+                image-offset
+                size]}       image-data
 
-        {:keys [palette-size palette-offset center image-offset size]}
-        image-data
-
-        palette           (palette image-buf image-data)
-        [width height]    size
-        is-8-bit?         (-> image-data :flags (bit-and c/_RSC_8_BIT_) pos?)
-        use-transparency? (-> image-data :flags (bit-and c/_RSC_USECOLORKEY_) pos?)]
+        is-8-bit?            (-> image-data :flags (bit-and c/_RSC_8_BIT_) pos?)
+        use-transparency?    (-> image-data :flags (bit-and c/_RSC_USECOLORKEY_) pos?)
+        [width height]       size]
+    (log/debug "read-image" :image-descriptor image-descriptor)
     (when-not (-> image-data :type (= c/_RSC_IS_IMAGE_))
       (throw (ex-info "Not an image" {:reason ::not-an-image})))
     (when (and (not is-8-bit?) (not (-> image-data :flags (bit-and c/_RSC_16_BIT_) pos?)))
@@ -162,11 +163,20 @@
         idx-path          (str base ".idx")
         rsc-path          (str base ".rsc")
         idx-stats         (fs/stat idx-path)
-        rsc-stats         (fs/stat rsc-path)]
-    {:resource     resource
-     :image-id     image-id
-     :base         resource-base
-     :idx-size     (:size idx-stats)
-     :idx-modified (:modified idx-stats)
-     :rsc-size     (:size rsc-stats)
-     :rsc-modified (:modified rsc-stats)}))
+        rsc-stats         (fs/stat rsc-path)
+        data-dir          (-> mission :installation :data-dir)
+        resource-base     (fs/path-combine data-dir base)
+        index             (read-index (str resource-base ".idx"))
+        image-data        (->> index (filter #(= image-id (:id %))) first)
+        _                 (assert image-data (with-out-str
+                                               (print "Couldn't find an image with that ID"
+                                                      :resource resource
+                                                      :image-id image-id)))]
+    {:image-data    image-data
+     :resource      resource
+     :image-id      image-id
+     :base          resource-base
+     :idx-size      (:size idx-stats)
+     :idx-modified  (:modified idx-stats)
+     :rsc-size      (:size rsc-stats)
+     :rsc-modified  (:modified rsc-stats)}))

@@ -2506,3 +2506,13 @@ type: 0x64 -> image
      :icon-index)
 
 (-> @smpu :image-ids :name->id (get "ICON_ASTRIP_VERT"))
+
+(let [mission @fnpu]
+  (->> (mission/oob-air mission)
+       first
+       ::mission/image
+       time
+       #_pprint))
+
+(let [mission @fnpu]
+  (->> (im/make-descriptor mission "resource/campmap" "BIG_MAP_ID")))

@@ -388,6 +388,9 @@
             (map mission/team-number))
        (mission/teams mission)))))
 
+;; How big the icons are: converts from pixels in the Falcon resources to SVG coordinates
+(defc icon-scale 0.05)
+
 ;;; Components
 
 (def flight-paths-layer (weathergen.ui.layers.flights/create mission map-zoom visible-teams))
@@ -2045,67 +2048,80 @@
      (svg/g
       :transform (cell= (str "scale(" (/ 1 map-zoom) ")"))
       (let [line-spacing 0.70
-            line-height  0.75]
-        (with-bbox :y ty :w tw :h th :watch included-squadrons
-          [t (svg/text
-              :font-size "3.5%"
-              :font-family "Source Code Pro"
-              :font-weight 100
-              :x (-> tw (/ 2) - cell=)
-              :y line-height
-              :stroke color
-              :stroke-width 0.03
-              :fill color
-              (svg/tspan label)
-              (for-tpl [indexed (formula-of [airbase included-squadrons]
-                                  (->> airbase
-                                       ::mission/squadrons
-                                       (filter included-squadrons)
-                                       (map-indexed vector)))]
-                (let [i (cell= (first indexed))
-                      squadron (cell= (second indexed))]
-                  (svg/tspan
-                   :y (-> i inc (* line-height) (+ line-spacing) cell=)
-                   :text-anchor "start"
-                   :x (-> tw (/ 2) - cell=)
-                   :dx "0.75em"
-                   (cell= (gstring/format "%d %s"
-                                          (->> squadron ::mission/aircraft :quantity)
-                                          (->> squadron ::mission/aircraft :airframe)))))))]
-          (svg/g
-           (let [padding 0.1
-                 rx      (formula-of [tw] (- 0 padding (/ tw 2)))
-                 ry      (formula-of [ty] (- ty padding))
-                 rw      (formula-of [tw] (+ tw padding padding))
-                 rh      (formula-of [th] (+ th padding padding))]
-             (svg/g
-              :debug "background"
-              (svg/rect
-               :x rx
-               :y ry
-               :width rw
-               :height rh
-               :opacity 0.4
-               :fill contrasting-color
-               :stroke "none")
-              (svg/rect
-               :toggle highlighted?
-               :x rx
-               :y ry
-               :width rw
-               :height rh
-               :stroke-width 0.1
-               :stroke "yellow"
-               :fill "none")))
-           t)))
-      ;; TODO: Replace with airbase icon
-      (svg/circle
-       :cx 0
-       :cy 0
-       :r 0.15
-       :fill "none"
-       :stroke color
-       :stroke-width 0.1)))))
+            line-height  0.75
+            dims (formula-of [airbase icon-scale]
+                   (let [image                 (::mission/image airbase)
+                         {:keys [image-data]}  image
+                         {:keys [size center]} image-data
+                         [w h]                 size
+                         [cx cy]               center]
+                     {:x (-> cx (- w) (* icon-scale))
+                      :y (-> h (- cy) - (* icon-scale))
+                      :w (* w icon-scale)
+                      :h (* h icon-scale)
+                      :d (-> cy (* icon-scale))}))]
+        (svg/g
+         :debug "icon-and-info"
+         (with-bbox :y ty :w tw :h th :watch included-squadrons
+           [t (svg/text
+               :font-size "3.5%"
+               :font-family "Source Code Pro"
+               :font-weight 100
+               :x (-> tw (/ 2) - cell=)
+               :y line-height
+               :stroke color
+               :stroke-width 0.03
+               :fill color
+               (svg/tspan label)
+               (for-tpl [indexed (formula-of [airbase included-squadrons]
+                                   (->> airbase
+                                        ::mission/squadrons
+                                        (filter included-squadrons)
+                                        (map-indexed vector)))]
+                 (let [i        (cell= (first indexed))
+                       squadron (cell= (second indexed))]
+                   (svg/tspan
+                    :y (-> i inc (* line-height) (+ line-spacing) cell=)
+                    :text-anchor "start"
+                    :x (-> tw (/ 2) - cell=)
+                    :dx "0.75em"
+                    (cell= (gstring/format "%d %s"
+                                           (->> squadron ::mission/aircraft :quantity)
+                                           (->> squadron ::mission/aircraft :airframe)))))))]
+           (svg/g
+            :debug "info"
+            :transform (cell= (str "translate(0, " (-> dims :d) ")"))
+            (let [padding 0.1
+                  rx      (formula-of [tw] (- 0 padding (/ tw 2)))
+                  ry      (formula-of [ty] (- ty padding))
+                  rw      (formula-of [tw] (+ tw padding padding))
+                  rh      (formula-of [th] (+ th padding padding))]
+              (svg/g
+               :debug "background"
+               (svg/rect
+                :x rx
+                :y ry
+                :width rw
+                :height rh
+                :opacity 0.4
+                :fill contrasting-color
+                :stroke "none")
+               (svg/rect
+                :toggle highlighted?
+                :x rx
+                :y ry
+                :width rw
+                :height rh
+                :stroke-width 0.1
+                :stroke "yellow"
+                :fill "none")))
+            t))
+         (svg/image
+          :xlink-href (cell= (get-image mission (::mission/image airbase)))
+          :x (-> dims :x cell=)
+          :y (-> dims :y cell=)
+          :width (-> dims :w cell=)
+          :height (-> dims :h cell=))))))))
 
 (def airbases-info-overlay
   (svg/g
@@ -3706,7 +3722,13 @@
     :tabs [{:title "One"
             :id :one
             :ui (div "This is one"
-                     (hoplon.core/button "button"))}
+                     (hoplon.core/button "button")
+                     (input :type "range"
+                            :min 1
+                            :max 100
+                            :value (cell= (* icon-scale 1000))
+                            :input #(reset! icon-scale (/ @% 1000.0)))
+                     (text icon-scale))}
            {:title "Two"
             :id :two
             :ui (div "This is two")}
