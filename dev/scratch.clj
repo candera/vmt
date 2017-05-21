@@ -2515,4 +2515,5 @@ type: 0x64 -> image
        #_pprint))
 
 (let [mission @fnpu]
-  (->> (im/make-descriptor mission "resource/campmap" "BIG_MAP_ID")))
+  (->> (im/make-descriptor mission "resource/campmap" "BIG_MAP_ID")
+       im/cache-key))

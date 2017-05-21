@@ -128,9 +128,9 @@
   "Return a string unique to this image. Intended to be used as a key
   for caching across sessions."
   [image-descriptor]
-  (let [{:keys [resource image-id base idx-size idx-modified rsc-size rsc-modified]}
+  (let [{:keys [resource image-id art-dir idx-size idx-modified rsc-size rsc-modified]}
         image-descriptor]
-    (str base
+    (str art-dir
          "/"
          resource
          "/"
@@ -154,19 +154,19 @@
                                            install-art-dir
                                            resource)
         theater-resource? (fs/exists? (str theater-resource ".idx"))
-        resource-base     (if theater-resource?
+        resource-art-dir  (if theater-resource?
                             theater-art-dir
                             install-art-dir)
-        base              (if theater-resource?
-                            theater-resource
-                            install-resource)
+        base     (fs/path-combine data-dir
+                                  (if theater-resource?
+                                    theater-resource
+                                    install-resource))
         idx-path          (str base ".idx")
         rsc-path          (str base ".rsc")
         idx-stats         (fs/stat idx-path)
         rsc-stats         (fs/stat rsc-path)
         data-dir          (-> mission :installation :data-dir)
-        resource-base     (fs/path-combine data-dir base)
-        index             (read-index (str resource-base ".idx"))
+        index             (read-index idx-path)
         image-data        (->> index (filter #(= image-id (:id %))) first)
         _                 (assert image-data (with-out-str
                                                (print "Couldn't find an image with that ID"
@@ -175,7 +175,8 @@
     {:image-data    image-data
      :resource      resource
      :image-id      image-id
-     :base          resource-base
+     :art-dir       resource-art-dir
+     :base          base
      :idx-size      (:size idx-stats)
      :idx-modified  (:modified idx-stats)
      :rsc-size      (:size rsc-stats)
