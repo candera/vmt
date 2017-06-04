@@ -1,5 +1,5 @@
 (ns weathergen.ui
-  (:require [cljsjs.filesaverjs]
+  (:require ;;[cljsjs.filesaverjs]
             [cljsjs.select2]
             [clojure.data]
             [clojure.set :as set]
@@ -67,6 +67,7 @@
             [cljs.core.async :as async
              :refer [<! >! alts!]]
             [cljs.reader :as reader]
+            ;; TODO: Get rid of this once we stop being able to link out to shareable forecasts.
             [cljsjs.pako]
             ;;[secretary.core :refer-macros [defroute]]
             [taoensso.timbre :as log
@@ -2988,7 +2989,7 @@
                          :wind-stability-areas
                          (fn [areas]
                            (remove-nth areas @index))))
-         (img
+         (buttons/image-button
           :click #(swap! weather-params
                          update-in
                          [:wind-stability-areas @index :editing?]
@@ -2997,9 +2998,7 @@
           :src "images/move.svg"
           :width "16px"
           :height "16px"
-          :css (formula-of
-                [area]
-                (buttons/image-button-style (:editing? area))))
+          :latched? (cell= (:editing? area)))
          (hr)))))
    (buttons/a-button
     :click #(swap! weather-params
@@ -3120,9 +3119,7 @@
           :src "images/move.svg"
           :width "16px"
           :height "16px"
-          :css (formula-of
-                {{:keys [editing?]} override}
-                (buttons/image-button-style editing?)))))))
+          :latched (cell= (:editing? override)))))))
    (buttons/a-button
     :click #(swap! weather-params
                    (fn [wp]
@@ -4018,12 +4015,12 @@
         (row
          (buttons/a-button
           :click #(reset! checked-airbases @listed-airbases)
-          "Check all")
+          "Show all")
          ;; Bit of an asymmetry here, but to me, it seems less surprising that uncheck all should
          ;; clear the map, even if some of the checked airbases are not currently displayed.
          (buttons/a-button
           :click #(reset! checked-airbases #{})
-          "Uncheck all"))
+          "Hide all"))
         (row
          :css {:overflow    "scroll"
                :font-family "monospace"

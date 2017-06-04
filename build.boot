@@ -26,7 +26,8 @@
                  [weasel "0.7.0" :scope "test"]
                  [org.clojure/tools.nrepl "0.2.13" :scope "test"]
 
-                 [cljsjs/filesaverjs "1.3.3-0"]
+                 [cljsjs/tether "1.4.0-0"]
+;;                 [cljsjs/filesaverjs "1.3.3-0"]
                  ;; Had to download as the cljsjs one is pretty far out of date
                  ;;[cljsjs/jszip "2.5.0-0"]
                  [cljsjs/pako "0.2.7-0"]

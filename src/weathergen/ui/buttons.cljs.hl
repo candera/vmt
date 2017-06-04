@@ -6,9 +6,9 @@
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of]]))
 
-(defn image-button-style
+(defn- image-button-style
   [pressed?]
   {:border-style (if pressed? "inset" "outset")
    :border-color "#ddd"
@@ -21,26 +21,28 @@
    :vertical-align "middle"})
 
 (defelem image-button
+  "A button displaying an image rather than text. Can take a
+  `latched?` attribute, which, if a cell evaluating to true, locks the
+  button in the pressed state."
   [attrs]
-  (let [down (cell false)
-        css (:css attrs)
-        attrs (dissoc attrs :css)]
-    (img
-     :css (formula-of
-            [down]
-            (merge (image-button-style down)
-                   css))
-     :mousedown (fn [e]
-                  (let [up (fn up-fn [e]
-                             (.removeEventListener js/document "mouseup" up-fn)
-                             (reset! down false))]
-                    (.addEventListener js/document "mouseup" up))
-                  (reset! down true))
-     ;; Overriding dragstart stops the browser from trying
-     ;; to drag and drop SVG as images, which would
-     ;; interfere with our functionality.
-     :dragstart (constantly false)
-     attrs)))
+  (with-attr-bindings attrs [css latched?]
+    (let [down (cell false)]
+      (img
+       :css (formula-of
+              [latched? down]
+              (merge (image-button-style (or latched? down))
+                     css))
+       :mousedown (fn [e]
+                    (let [up (fn up-fn [e]
+                               (.removeEventListener js/document "mouseup" up-fn)
+                               (reset! down false))]
+                      (.addEventListener js/document "mouseup" up))
+                    (reset! down true))
+       ;; Overriding dragstart stops the browser from trying
+       ;; to drag and drop SVG as images, which would
+       ;; interfere with our functionality.
+       :dragstart (constantly false)
+       attrs))))
 
 (comm/register-class!
  ::div-button

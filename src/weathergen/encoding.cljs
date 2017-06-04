@@ -1,7 +1,12 @@
 (ns weathergen.encoding
   "A library for encoding values for use across web worker
   boundaries."
-  (:require ;;[cljsjs.pako]
+  (:require
+   ;; Pako dependency comes in from ui.cljs. Can't remember why I had
+   ;; to do it that way. Pako can be removed once we no longer have
+   ;; the ability to link out to shared forecasts. Along with most of
+   ;; the functions in this namespace.
+   ;;[cljsjs.pako]
             [cognitect.transit :as transit]
             [goog.crypt.base64 :as base64])
   (:require-macros [weathergen.cljs.macros :refer [with-time]]))
