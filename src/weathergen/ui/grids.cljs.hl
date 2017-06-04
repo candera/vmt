@@ -3,9 +3,14 @@
   (:require [garden.core :refer [css]]
             [garden.selectors :as css-sel]
             [hoplon.svg :as svg]
-            [weathergen.ui.common :as comm :refer [inl register-styles! triangle]])
+            [taoensso.timbre :as log
+             :refer-macros (log trace debug info warn error fatal report
+                                logf tracef debugf infof warnf errorf fatalf reportf
+                                spy get-env log-env)]
+            [weathergen.ui.buttons :as buttons]
+            [weathergen.ui.common :as comm :refer [inl px register-styles! triangle]])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-time formula-of with-attr-bindings]]))
 
 (defelem master-detail
   "Creates a master-detail grid view. TODO: explain options."
@@ -126,16 +131,23 @@
                                   "black"
                                   "none"))))))
 
-;; :data - A cell containing a seq of maps
-;; :row-attrs - A function from a cell containing a row to an Hoplon
-;;              attrs map
-;; :columns - A seq of maps describing columns
-;;
-;; Column description:
-;; :title - Shows up in the header row
-;; :sort-key - Function from a row value (not cell) to a sort value
-;; :formatter - Function from a row cell to UI
+;; TODO: Don't bonk when row-attrs is nil
 (defelem table-grid
+  "Returns a table grid control. Attributes
+
+:data - A cell containing a seq of maps
+:row-attrs - A function from a cell containing a row to an Hoplon
+             attrs map
+:when-empty - UI to show when there are no rows in the data
+:columns - A seq of maps describing columns
+
+Column description:
+:title - Shows up in the header row
+:hidden? - [cell] [boolean] True to hide this column
+:sort-key - Function from a row value (not cell) to a sort value
+:formatter - Function from a row cell and row number cell to UI
+:attrs - Function from cell of row item and cell of row number to
+         Hoplon style map of attr values."
   [attrs _]
   (register-styles!
    ::table-grid
@@ -146,63 +158,102 @@
       {:background "white"}]
      [:thead
       [:td {:background "#ddd"
-            :border "solid 1px grey"
-            :padding "2px 4px 4px 4px"}]
+            :border     "solid 1px grey"
+            :padding    "2px 4px 4px 4px"}]
       [:.sorters {:float "right"}
        [:svg {:vertical-align "bottom"}]]]
      [:tbody [:td {:padding "2px 3px 2px 3px"
-                   :border "solid 1px lightgray"
+                   :border  "solid 1px lightgray"
                    ;;:border-bottom "none"
                    ;;:border-top "none"
-                   }]]]])
-  (let [{:keys [data columns row-attrs when-empty]} attrs
-        attrs (dissoc attrs :data :columns :row-attrs :when-empty)
-        sort-criteria (cell nil)
-        sorted-items (formula-of [data sort-criteria]
-                       (if-not sort-criteria
-                         data
-                         (let [[sort-column sort-direction] sort-criteria
-                               {:keys [sort-key formatter]} (nth columns sort-column)]
-                           (sort-by sort-key
-                                    (if (= sort-direction :ascending)
-                                      compare
-                                      (fn [a b]
-                                        (- (compare a b))))
-                                    data))))]
-    (table
-     :class "table-grid"
-     (thead
-      (tr (for [[column-index {:keys [title disable-sort]}] (map-indexed vector columns)]
-            (td
-             :click #(when-not disable-sort
-                       (swap! sort-criteria
-                              (fn [[old-index direction]]
-                                [column-index
-                                 (cond
-                                   (not= old-index column-index)
-                                   :ascending
-
-                                   (= direction :ascending)
-                                   :descending
-
-                                   :else
-                                   :ascending)]))
-                       false)
-             title
-             (if disable-sort
-               []
-               (sorters sort-criteria column-index))))))
-     (if-tpl (-> sorted-items count zero? (and when-empty) cell=)
-       (tbody
+                   }]]]
+    [:td.hidden-column {:display "none"}]])
+  (with-attr-bindings attrs [data columns row-attrs when-empty]
+    (let [sort-criteria    (cell nil)
+          columns*         (->> columns
+                                (map-indexed (fn [i m] (assoc m
+                                                              ::index i
+                                                              :hidden? (get m :hidden? (cell false)))))
+                                (into []))
+          sorted-items     (formula-of [data sort-criteria]
+                             (if-not sort-criteria
+                               data
+                               (let [[sort-column sort-direction] sort-criteria
+                                     {:keys [sort-key]} (nth columns* sort-column)]
+                                 (sort-by sort-key
+                                          (if (= sort-direction :ascending)
+                                            compare
+                                            (fn [a b]
+                                              (- (compare a b))))
+                                          data))))
+          editing-columns? (cell false)]
+      (table
+       :class "table-grid"
+       (thead
         (tr
-         (td
-          :colspan (count columns)
-          when-empty)))
-       (tbody
-        (for-tpl [indexed (cell= (map-indexed vector sorted-items))]
-          (cell-let [[rownum item] indexed]
-            (tr
-             (row-attrs item rownum)
-             (for [{:keys [attrs formatter] :or {attrs (constantly {})}} columns]
-               (td (attrs item rownum)
-                   (formatter item rownum)))))))))))
+         (td :colspan (count columns*)
+             (buttons/image-button
+              :src "images/settings.svg"
+              :width (px 16)
+              :title "Settings"
+              :latched? editing-columns?
+              :click #(swap! editing-columns? not))))
+        (tr (for [column columns*]
+              (let [{:keys [title disable-sort hidden?]} column
+                    column-index                         (::index column)]
+                (td
+                 :class (formula-of [editing-columns? hidden?]
+                          {:hidden-column (and (not editing-columns?) hidden?)})
+                 :click #(when-not disable-sort
+                           (swap! sort-criteria
+                                  (fn [[old-index direction]]
+                                    [column-index
+                                     (cond
+                                       (not= old-index column-index)
+                                       :ascending
+
+                                       (= direction :ascending)
+                                       :descending
+
+                                       :else
+                                       :ascending)]))
+                           true)
+                 (when-tpl editing-columns?
+                   (inl
+                    :css (formula-of [hidden?]
+                           {:border-width (px 2)
+                            :border-style "inset"
+                            :border-radius (px 3)
+                            :color (if hidden? "red" "green")
+                            :background "white"
+                            :line-height "90%"
+                            :padding (px 1)
+                            :cursor "pointer"
+                            :width (px 10)})
+                    :click (fn [_]
+                             (swap! hidden? not)
+                             false)
+                    (if-tpl hidden? "✗" "✓")))
+                 title
+                 (if disable-sort
+                   []
+                   (sorters sort-criteria column-index)))))))
+       (if-tpl (-> sorted-items count zero? (and when-empty) cell=)
+         (tbody
+          (tr
+           (td
+            :colspan (count columns*)
+            when-empty)))
+         (tbody
+          (for-tpl [indexed (cell= (map-indexed vector sorted-items))]
+            (cell-let [[rownum item] indexed]
+              (tr
+               (row-attrs item rownum)
+               (for [column columns*]
+                 (let [{:keys [attrs formatter hidden?]} column]
+                   (td
+                    :class (formula-of [editing-columns? hidden?]
+                             {:hidden-column (and (not editing-columns?) hidden?)})
+                    (let [attrs (or attrs (constantly {}))]
+                      (attrs item rownum))
+                    (formatter item)))))))))))))

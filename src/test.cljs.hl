@@ -6,16 +6,54 @@
             [weathergen.database :as db]
             [weathergen.math :as math]
             [weathergen.model :as model]
-            [weathergen.ui :as ui])
+            [weathergen.ui :as ui]
+            [weathergen.ui.grids :as grids])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
    [weathergen.cljs.macros :refer [with-time formula-of]]))
 
 ;; (reset! ui/max-time {:day 2 :hour 2 :minute 2})
 
-(reset! ui/weather-params
-        ui/default-weather-params)
+;; (reset! ui/weather-params
+;;         ui/default-weather-params)
 
-(ui/weather-page
- :test-section {})
+;; (ui/weather-page
+;;  :test-section {})
+
+(html
+ (ui/head)
+ (body
+  (grids/table-grid
+   :data [{:foo 1
+           :bar 2
+           :quux "hi"}
+          {:foo 3
+           :bar 4
+           :quux "there"}
+          {:foo 10
+           :bar 2034234
+           :quux "long words"}]
+   :row-attrs (constantly {})
+   :columns [{:title "foo"
+              :hidden? (cell true)
+              :formatter (fn [item]
+                           (formula-of [item]
+                             (:foo item)))
+              :sort-key :foo
+              :attrs (fn [item rownum]
+                       {:css (formula-of [item rownum]
+                               {:background-color (if (odd? rownum)
+                                                    "purple"
+                                                    "pink")})})}
+             {:title "bar"
+              :hidden? (cell true)
+              :formatter (fn [item]
+                           (formula-of [item]
+                             (:bar item)))
+              :sort-key :bar}
+             {:title "quux"
+              :formatter (fn [item]
+                           (formula-of [item]
+                             (:quux item)))
+              :sort-key :quux}])))
 

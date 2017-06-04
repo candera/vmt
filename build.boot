@@ -81,7 +81,7 @@
              ;; :only-by-re [#"^((?!worker).)*$"]
              )
    ;;(cljs-repl :ids #{"index.html"})
-   (cljs :ids #{"worker" "index.html" "mission.html"}
+   (cljs :ids #{"worker" "index.html" "mission.html" "test.html"}
          :optimizations :whitespace
          :compiler-options {;;:target :nodejs
                             :hashbang false

@@ -92,6 +92,10 @@
 
 (defn init-browser []
   (reset! app-window (mk-window 800 600 true false))
+  (when (-> js/process.env (aget "VMT_DEV_SHOW_TEST_WINDOW") some?)
+    (let [test-window (mk-window 1300 800 true false)]
+      (load-page test-window "test.html")
+        (-> test-window .-webContents (.on "did-finish-load" (fn [] (.show test-window))))))
   (load-page @app-window "index.html")
   (-> @app-window .-webContents (.on "did-finish-load" (fn [] (.show @app-window))))
   ;; Shows how to make a child window that's always on top of the app window:
