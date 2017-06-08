@@ -34,26 +34,27 @@
            :bar 2034234
            :quux "long words"}]
    :row-attrs (constantly {})
-   :columns [{:title "foo"
-              :hidden? (cell true)
-              :formatter (fn [item]
-                           (formula-of [item]
-                             (:foo item)))
-              :sort-key :foo
-              :attrs (fn [item rownum]
-                       {:css (formula-of [item rownum]
-                               {:background-color (if (odd? rownum)
-                                                    "purple"
-                                                    "pink")})})}
-             {:title "bar"
-              :hidden? (cell true)
-              :formatter (fn [item]
-                           (formula-of [item]
-                             (:bar item)))
-              :sort-key :bar}
-             {:title "quux"
-              :formatter (fn [item]
-                           (formula-of [item]
-                             (:quux item)))
-              :sort-key :quux}])))
+   :hidden-columns (cell #{:bar})
+   :fixed-columns (cell [:foo])
+   :movable-columns (cell [:bar :quux])
+   :columns {:foo {:title "foo"
+                   :formatter (fn [item]
+                                (formula-of [item]
+                                  (:foo item)))
+                   :sort-key :foo
+                   :css (fn [item rownum]
+                          (formula-of [item rownum]
+                            {:background-color (if (odd? rownum)
+                                                 "purple"
+                                                 "pink")}))}
+             :bar {:title "bar"
+                   :formatter (fn [item]
+                                (formula-of [item]
+                                  (:bar item)))
+                   :sort-key :bar}
+             :quux {:title "quux"
+                    :formatter (fn [item]
+                                 (formula-of [item]
+                                   (:quux item)))
+                    :sort-key :quux}})))
 

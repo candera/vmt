@@ -108,9 +108,9 @@
 (defn- sorters
   "Returns UI for the sort handles at the top of a column.
   `sort-state` is a tuple of column index and direction for the
-  current sort. `column-index` is the index of the column we're
+  current sort. `column-id` is a cell the index of the column we're
   rendering."
-  [sort-criteria column-index]
+  [sort-criteria column-id]
   (inl
    :class "sorters"
    (svg/svg
@@ -120,14 +120,16 @@
                    :r 50
                    :stroke "black"
                    :stroke-width "2"
-                   :fill (cell= (if (= sort-criteria [column-index :ascending])
-                                  "black"
-                                  "none")))
+                   :fill (formula-of [sort-criteria column-id]
+                           (if (= sort-criteria [column-id :ascending])
+                             "black"
+                             "none")))
     (comm/triangle :transform "translate(0 -50)"
                    :r 50
                    :stroke "black"
                    :stroke-width "2"
-                   :fill (cell= (if (= sort-criteria [column-index :descending])
+                   :fill (formula-of [sort-criteria column-id]
+                           (if (= sort-criteria [column-id :descending])
                                   "black"
                                   "none"))))))
 
@@ -139,7 +141,9 @@
 :row-attrs - A function from a cell containing a row to an Hoplon
              attrs map
 :when-empty - UI to show when there are no rows in the data
-:columns - A seq of maps describing columns
+:columns - A map from column IDs to column descriptions
+:fixed-columns - A seq of IDs of unmovable columns
+:movable-columns - [cell] A seq of IDs of movable columns
 
 Column description:
 :title - Shows up in the header row
@@ -168,48 +172,51 @@ Column description:
                    ;;:border-top "none"
                    }]]]
     [:td.hidden-column {:display "none"}]])
-  (with-attr-bindings attrs [data columns row-attrs when-empty]
+  (with-attr-bindings attrs [data columns row-attrs when-empty fixed-columns movable-columns hidden-columns]
     (let [sort-criteria    (cell nil)
-          columns*         (->> columns
-                                (map-indexed (fn [i m] (assoc m
-                                                              ::index i
-                                                              :hidden? (get m :hidden? (cell false)))))
-                                (into []))
           sorted-items     (formula-of [data sort-criteria]
                              (if-not sort-criteria
                                data
                                (let [[sort-column sort-direction] sort-criteria
-                                     {:keys [sort-key]} (nth columns* sort-column)]
+                                     {:keys [sort-key]}           (get columns sort-column)]
                                  (sort-by sort-key
                                           (if (= sort-direction :ascending)
                                             compare
                                             (fn [a b]
                                               (- (compare a b))))
                                           data))))
+          num-columns      (count columns)
+          column-order     (formula-of [fixed-columns movable-columns]
+                             (into (vec fixed-columns)
+                                   (vec movable-columns)))
           editing-columns? (cell false)]
       (table
        :class "table-grid"
        (thead
         (tr
-         (td :colspan (count columns*)
+         (td :colspan num-columns
              (buttons/image-button
               :src "images/settings.svg"
               :width (px 16)
               :title "Settings"
               :latched? editing-columns?
               :click #(swap! editing-columns? not))))
-        (tr (for [column columns*]
-              (let [{:keys [title disable-sort hidden?]} column
-                    column-index                         (::index column)]
+        (tr (for [n (range num-columns)]
+              (let [column-id    (formula-of [column-order]
+                                   (nth column-order n))
+                    hidden?      (formula-of [hidden-columns column-id]
+                                   (hidden-columns column-id))
+                    disable-sort (formula-of [column-id]
+                                   (-> columns (get column-id) :disable-sort))]
                 (td
                  :class (formula-of [editing-columns? hidden?]
                           {:hidden-column (and (not editing-columns?) hidden?)})
-                 :click #(when-not disable-sort
+                 :click #(when-not @disable-sort
                            (swap! sort-criteria
                                   (fn [[old-index direction]]
-                                    [column-index
+                                    [@column-id
                                      (cond
-                                       (not= old-index column-index)
+                                       (not= old-index @column-id)
                                        :ascending
 
                                        (= direction :ascending)
@@ -221,39 +228,70 @@ Column description:
                  (when-tpl editing-columns?
                    (inl
                     :css (formula-of [hidden?]
-                           {:border-width (px 2)
-                            :border-style "inset"
+                           {:border-width  (px 2)
+                            :border-style  "inset"
                             :border-radius (px 3)
-                            :color (if hidden? "red" "green")
-                            :background "white"
-                            :line-height "90%"
-                            :padding (px 1)
-                            :cursor "pointer"
-                            :width (px 10)})
+                            :color         (if hidden? "red" "green")
+                            :background    "white"
+                            :line-height   "90%"
+                            :padding       (px 1)
+                            :cursor        "pointer"
+                            :width         (px 10)})
                     :click (fn [_]
-                             (swap! hidden? not)
+                             (swap! hidden-columns (if @hidden? disj conj) @column-id)
                              false)
                     (if-tpl hidden? "✗" "✓")))
-                 title
-                 (if disable-sort
+                 (formula-of [column-id]
+                   (-> columns (get column-id) :title))
+                 (if-tpl disable-sort
                    []
-                   (sorters sort-criteria column-index)))))))
+                   (sorters sort-criteria column-id)))))))
        (if-tpl (-> sorted-items count zero? (and when-empty) cell=)
          (tbody
           (tr
            (td
-            :colspan (count columns*)
+            :colspan num-columns
             when-empty)))
          (tbody
           (for-tpl [indexed (cell= (map-indexed vector sorted-items))]
             (cell-let [[rownum item] indexed]
               (tr
                (row-attrs item rownum)
-               (for [column columns*]
-                 (let [{:keys [attrs formatter hidden?]} column]
-                   (td
-                    :class (formula-of [editing-columns? hidden?]
-                             {:hidden-column (and (not editing-columns?) hidden?)})
-                    (let [attrs (or attrs (constantly {}))]
-                      (attrs item rownum))
-                    (formatter item)))))))))))))
+               ;; Here we have a map with functions that produce
+               ;; cells, and we sort of invert it into cells that
+               ;; contain maps from the keys to the value resulting
+               ;; from calling the function. Hard to explain, and so
+               ;; probably not a very good way to do this.
+               (let [formatteds (apply
+                                 (javelin.core/formula
+                                  (fn [& formatteds]
+                                    (zipmap (map key columns)
+                                            formatteds)))
+                                 (->> columns
+                                      vals
+                                      (map :formatter)
+                                      (map (fn [formatter]
+                                             (formatter item)))))
+                     csses     (apply
+                                (javelin.core/formula
+                                 (fn [& csses]
+                                   (zipmap (map key columns)
+                                           csses)))
+                                (->> columns
+                                     vals
+                                     (map :css)
+                                     (map (fn [css]
+                                            (when css
+                                              (css item rownum))))))]
+                 (for [n (range num-columns)]
+                   (let [column-id (formula-of [column-order]
+                                     (nth column-order n))
+                         hidden?   (formula-of [hidden-columns column-id]
+                                     (hidden-columns column-id))]
+                     (td
+                      :class (formula-of [editing-columns? hidden?]
+                               {:hidden-column (and (not editing-columns?) hidden?)})
+                      :css (formula-of [column-id csses]
+                             (get csses column-id))
+                      (formula-of [column-id formatteds]
+                        (get formatteds column-id)))))))))))))))
