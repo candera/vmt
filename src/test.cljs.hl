@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [cljsjs.pako]
             [goog.crypt.base64 :as base64]
+            [hoplon.storage-atom :refer [local-storage]]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
             [weathergen.math :as math]
@@ -20,23 +21,36 @@
 ;; (ui/weather-page
 ;;  :test-section {})
 
+(def hidden-columns
+  (local-storage
+   (cell #{:bar :baaz})
+   (str ::hidden-columns)))
+
+(def movable-columns
+  (local-storage
+   (cell [:foo :bar :baaz :quux])
+   (str ::movable-columns2)))
+
 (html
  (ui/head)
  (body
   (grids/table-grid
    :data [{:foo 1
            :bar 2
+           :baaz "a"
            :quux "hi"}
           {:foo 3
            :bar 4
+           :baaz "b"
            :quux "there"}
           {:foo 10
            :bar 2034234
+           :baaz "c"
            :quux "long words"}]
    :row-attrs (constantly {})
-   :hidden-columns (cell #{:bar})
-   :fixed-columns (cell [:foo])
-   :movable-columns (cell [:bar :quux])
+   :hidden-columns hidden-columns
+   :fixed-columns (cell [])
+   :movable-columns movable-columns
    :columns {:foo {:title "foo"
                    :formatter (fn [item]
                                 (formula-of [item]
@@ -52,6 +66,11 @@
                                 (formula-of [item]
                                   (:bar item)))
                    :sort-key :bar}
+             :baaz {:title "baaz"
+                    :formatter (fn [item]
+                                 (formula-of [item]
+                                   (:baaz item)))
+                    :sort-key :baaz}
              :quux {:title "quux"
                     :formatter (fn [item]
                                  (formula-of [item]

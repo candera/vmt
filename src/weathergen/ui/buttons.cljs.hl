@@ -56,7 +56,8 @@
    :padding         "3px"
    :border-radius   "4px"
    :text-decoration "none"
-   :color           "black"}
+   :color           "black"
+   :cursor          "pointer"}
   [:&:active
    {:background "linear-gradient(#c0c0c0, #f0f0f0)"}]])
 

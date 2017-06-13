@@ -133,6 +133,23 @@
                                   "black"
                                   "none"))))))
 
+(defn- nudge
+  "Moves item `item` in `coll` by one position earlier or later,
+  depending on the sign of `n`.
+
+  E.g. `(reorder [:a :b :c] :b -1)` returns `[:b :a :c]`"
+  [coll item n]
+  (->> coll
+       (map-indexed (fn [i v]
+                      [(if (= v item)
+                         (if (pos? n)
+                           (+ i 1.5)
+                           (- i 1.5))
+                         i)
+                       v]))
+       (sort-by first)
+       (mapv second)))
+
 ;; TODO: Don't bonk when row-attrs is nil
 (defelem table-grid
   "Returns a table grid control. Attributes
@@ -144,14 +161,14 @@
 :columns - A map from column IDs to column descriptions
 :fixed-columns - A seq of IDs of unmovable columns
 :movable-columns - [cell] A seq of IDs of movable columns
+:hidden-columns - [cell] A set of IDs of hidden columns
 
 Column description:
 :title - Shows up in the header row
-:hidden? - [cell] [boolean] True to hide this column
 :sort-key - Function from a row value (not cell) to a sort value
 :formatter - Function from a row cell and row number cell to UI
-:attrs - Function from cell of row item and cell of row number to
-         Hoplon style map of attr values."
+:css - Function from cell of row item and cell of row number to
+         map of css values."
   [attrs _]
   (register-styles!
    ::table-grid
@@ -161,10 +178,13 @@ Column description:
      [(css-sel/tr (css-sel/nth-child :odd))
       {:background "white"}]
      [:thead
-      [:td {:background "#ddd"
-            :border     "solid 1px grey"
-            :padding    "2px 4px 4px 4px"}]
-      [:.sorters {:float "right"}
+      [:td {:background  "#ddd"
+            :border      "solid 1px grey"
+            :padding     "2px 4px 4px 4px"
+            :white-space "nowrap"}]
+      [:.sorters { ;; :float "right"
+                  :display "inline-block"
+                  }
        [:svg {:vertical-align "bottom"}]]]
      [:tbody [:td {:padding "2px 3px 2px 3px"
                    :border  "solid 1px lightgray"
@@ -225,6 +245,15 @@ Column description:
                                        :else
                                        :ascending)]))
                            true)
+                 (when-tpl (cell= (and (< (count fixed-columns) n)
+                                       editing-columns?))
+                   (buttons/a-button
+                    :title "Move column left"
+                    :css {:background "linear-gradient(white, white 50%, rgb(195, 194, 194) 100%)"}
+                    :click #(do
+                              (swap! movable-columns nudge @column-id -1)
+                              false)
+                    "<"))
                  (when-tpl editing-columns?
                    (inl
                     :css (formula-of [hidden?]
@@ -245,7 +274,17 @@ Column description:
                    (-> columns (get column-id) :title))
                  (if-tpl disable-sort
                    []
-                   (sorters sort-criteria column-id)))))))
+                   (sorters sort-criteria column-id))
+                 (when-tpl (cell= (and (<= (count fixed-columns) n)
+                                       (< n (dec num-columns))
+                                       editing-columns?))
+                   (buttons/a-button
+                    :title "Move column right"
+                    :css {:background "linear-gradient(white, white 50%, rgb(195, 194, 194) 100%)"}
+                    :click #(do
+                              (swap! movable-columns nudge @column-id 1)
+                              false)
+                    ">")))))))
        (if-tpl (-> sorted-items count zero? (and when-empty) cell=)
          (tbody
           (tr
@@ -272,26 +311,36 @@ Column description:
                                       (map :formatter)
                                       (map (fn [formatter]
                                              (formatter item)))))
-                     csses     (apply
-                                (javelin.core/formula
-                                 (fn [& csses]
-                                   (zipmap (map key columns)
-                                           csses)))
-                                (->> columns
-                                     vals
-                                     (map :css)
-                                     (map (fn [css]
-                                            (when css
-                                              (css item rownum))))))]
+                     csses      (apply
+                                 (javelin.core/formula
+                                  (fn [& csses]
+                                    (zipmap (map key columns)
+                                            csses)))
+                                 (->> columns
+                                      vals
+                                      (map :css)
+                                      (map (fn [css]
+                                             (when css
+                                               (css item rownum))))))]
                  (for [n (range num-columns)]
                    (let [column-id (formula-of [column-order]
                                      (nth column-order n))
                          hidden?   (formula-of [hidden-columns column-id]
                                      (hidden-columns column-id))]
-                     (td
-                      :class (formula-of [editing-columns? hidden?]
-                               {:hidden-column (and (not editing-columns?) hidden?)})
-                      :css (formula-of [column-id csses]
-                             (get csses column-id))
-                      (formula-of [column-id formatteds]
-                        (get formatteds column-id)))))))))))))))
+                     (with-let [c (td)]
+                       (c :class (formula-of [editing-columns? hidden?]
+                                   {:hidden-column (and (not editing-columns?) hidden?)})
+                          :css (formula-of [column-id csses]
+                                 ;; This is horrible, but it appears
+                                 ;; that Hoplon won't actually remove
+                                 ;; the style attribute it's already
+                                 ;; set if the value is nil. Or an
+                                 ;; empty map, or anything else I
+                                 ;; could figure out to provide.
+                                 (or (get csses column-id)
+                                     (do
+                                       (.removeAttribute c "style")
+                                       nil))
+                                 (get csses column-id))
+                          (formula-of [column-id formatteds]
+                            (get formatteds column-id))))))))))))))))
