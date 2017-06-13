@@ -93,6 +93,12 @@
   (condp = criteria
     :id (->> mission :objectives (filter #(= (:id %) value)) first)))
 
+(defn find-unit
+  "Find a unit by the criteria given, or nil if the item can't be found."
+  [mission criteria value]
+  (condp = criteria
+    :id (->> mission :units (filter #(= (:id %) value)) first)))
+
 ;; This doesn't do well with carrier airbase names. For that, we need
 ;; to somehow figure out how to chase our way into the vehicle info
 ;; and get the carrier vehicle name, which is where we get things
@@ -108,8 +114,14 @@
                 names
                 strings]} mission
         name-id (-> objective :name-id)]
-    (if (not (zero? name-id))
+    (cond
+      (nil? name-id)
+      "N/A"
+
+      (not (zero? name-id))
       (names name-id)
+
+      :else
       (if-let [parent (->> objective :parent (find-objective mission :id))]
         (str (-> parent :name-id names)
              " "
@@ -1612,6 +1624,13 @@
 
       c/ATO_OTHER)))
 
+(defn flight-squadron
+  "Returns the squadron of a given flight."
+  [mission flight]
+  (->> flight
+       :squadron
+       (find-unit mission :id)))
+
 (defn team-number
   "Returns the team number given a team or team number."
   [team-or-number]
@@ -1736,14 +1755,20 @@
          :name-id
          str)))
 
+(declare carrier-name)
+
 (defn squadron-airbase
-  "Returns the airbase objective for the given squadron."
+  "Returnsn the airbase objective for the given squadron."
   [mission squadron]
   (let [squadron-id (-> squadron :id :name)
         unit (->> mission :units (util/filter= :camp-id squadron-id) util/only)
         airbase-id (:airbase-id unit)]
-    (->> mission :objectives (util/filter= :id airbase-id) util/only)))
-
+    (if-let [airbase (some->> mission :objectives (util/filter= :id airbase-id) util/only)]
+      ;; It's a land-based airbase
+      (assoc airbase ::name (objective-name mission airbase))
+      ;; It's a carrier
+      (let [carrier (some->> mission :units (util/filter= :id airbase-id) util/only)]
+        (assoc carrier ::name (carrier-name mission carrier))))))
 
 (defn squadron-aircraft
   "Returns a map of `:airframe` and `:quantity` for a squadron."
@@ -1766,6 +1791,19 @@
                            :roster
                            (bit-shift-right (* i 2))
                            (bit-and 0x03))))})
+
+;; TODO: This might need to change, because the aircraft in a flight can have different statuses, like. See e.g. AIRCRAFT_NOT_ASSIGNED
+(defn flight-aircraft
+  "Returns a map of `:airframe` and `:quantity` for a flight."
+  [mission flight]
+  {:airframe (->> flight
+                  (flight-squadron mission)
+                  (squadron-aircraft mission)
+                  :airframe)
+   :quantity (->> flight
+                  :plane-stats
+                  (remove #{c/AIRCRAFT_NOT_ASSIGNED})
+                  count)})
 
 ;; Status algorithm at objectiv.cpp(2455)
 (defn airbase-status

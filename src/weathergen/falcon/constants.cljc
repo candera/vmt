@@ -3000,3 +3000,11 @@
     ATO_OTHER,
     ))
 
+
+(with-file "flight.h"
+  ;; planeStats valuesb
+  (def AIRCRAFT_NOT_ASSIGNED 0)
+  (def AIRCRAFT_MISSING 1)
+  (def AIRCRAFT_DEAD 2)
+  (def AIRCRAFT_RTB 3)
+  (def AIRCRAFT_AVAILABLE 4))

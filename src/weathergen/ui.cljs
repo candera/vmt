@@ -4032,10 +4032,12 @@
                                      (->> airbase :owner (mission/side mission)))
                                    all-airbases))
                sorted  (formula-of [mission by-side]
-                         (for [side  (mission/sides mission)
-                               :let  [airbases (get by-side side)]
-                               :when (-> airbases count pos?)]
-                           [side airbases]))]
+                         (with-time
+                           "Updating air forces tree"
+                           (for [side  (mission/sides mission)
+                                 :let  [airbases (get by-side side)]
+                                 :when (-> airbases count pos?)]
+                             [side airbases])))]
            (->> sorted
                 (trees/tree
                  expand-state

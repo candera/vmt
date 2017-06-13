@@ -71,3 +71,14 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(->> @smpu
+     :units
+     (filter #(= (:type %) :flight))
+     (#(nth % 18))
+     (mission/flight-squadron @smpu)
+     (mission/squadron-airbase @smpu)
+     ::mission/name
+     ;; (mission/squadron-airbase @smpu)
+     ;; (mission/objective-name @smpu)
+     )
+
