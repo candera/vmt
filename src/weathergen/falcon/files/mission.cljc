@@ -1557,12 +1557,12 @@
   [_ entry buf _]
   :not-yet-implemented)
 
-(defn flight-mission-name
+(defn- flight-mission-name
   "Given a flight, returns the name of a flight mission type, e.g. BARCAP."
   [mission flight]
   (get-in mission [:strings :mission-type-names (:mission flight)]))
 
-(defn flight-mission-category
+(defn- flight-mission-category
   "Given a flight, return its mission category, e.g. ATO_DCA."
   [mission flight]
   (let [{:keys [mission]} flight]
@@ -1623,13 +1623,6 @@
       c/ATO_SUPPORT
 
       c/ATO_OTHER)))
-
-(defn flight-squadron
-  "Returns the squadron of a given flight."
-  [mission flight]
-  (->> flight
-       :squadron
-       (find-unit mission :id)))
 
 (defn team-number
   "Returns the team number given a team or team number."
@@ -1755,21 +1748,6 @@
          :name-id
          str)))
 
-(declare carrier-name)
-
-(defn squadron-airbase
-  "Returnsn the airbase objective for the given squadron."
-  [mission squadron]
-  (let [squadron-id (-> squadron :id :name)
-        unit (->> mission :units (util/filter= :camp-id squadron-id) util/only)
-        airbase-id (:airbase-id unit)]
-    (if-let [airbase (some->> mission :objectives (util/filter= :id airbase-id) util/only)]
-      ;; It's a land-based airbase
-      (assoc airbase ::name (objective-name mission airbase))
-      ;; It's a carrier
-      (let [carrier (some->> mission :units (util/filter= :id airbase-id) util/only)]
-        (assoc carrier ::name (carrier-name mission carrier))))))
-
 (defn squadron-aircraft
   "Returns a map of `:airframe` and `:quantity` for a squadron."
   [mission squadron]
@@ -1791,19 +1769,6 @@
                            :roster
                            (bit-shift-right (* i 2))
                            (bit-and 0x03))))})
-
-;; TODO: This might need to change, because the aircraft in a flight can have different statuses, like. See e.g. AIRCRAFT_NOT_ASSIGNED
-(defn flight-aircraft
-  "Returns a map of `:airframe` and `:quantity` for a flight."
-  [mission flight]
-  {:airframe (->> flight
-                  (flight-squadron mission)
-                  (squadron-aircraft mission)
-                  :airframe)
-   :quantity (->> flight
-                  :plane-stats
-                  (remove #{c/AIRCRAFT_NOT_ASSIGNED})
-                  count)})
 
 ;; Status algorithm at objectiv.cpp(2455)
 (defn airbase-status
@@ -2067,6 +2032,46 @@
   Attack, etc."
   [mission squadron]
   (->> squadron (unit-class-entry mission) :name))
+
+(defn- squadron-airbase
+  "Returnsn the airbase objective for the given squadron."
+  [mission squadron]
+  (let [squadron-id (-> squadron :id :name)
+        unit (->> mission :units (util/filter= :camp-id squadron-id) util/only)
+        airbase-id (:airbase-id unit)]
+    (if-let [airbase (some->> mission :objectives (util/filter= :id airbase-id) util/only)]
+      ;; It's a land-based airbase
+      (assoc airbase ::name (objective-name mission airbase))
+      ;; It's a carrier
+      (let [carrier (some->> mission :units (util/filter= :id airbase-id) util/only)]
+        (assoc carrier ::name (carrier-name mission carrier))))))
+
+(defn flights
+  "Return a seq of all the flights in a mission"
+  [mission]
+  (some->> mission
+           :units
+           (filter #(= (:type %) :flight))
+           (map (fn [flight]
+                  (let [squadron (->> flight :squadron (find-unit mission :id))]
+                    (assoc flight
+                           ::mission {:name     (flight-mission-name mission flight)
+                                      :category (flight-mission-category mission flight)}
+                           ::squadron {:name (unit-name mission squadron)}
+                           ::airbase {:name (->> squadron
+                                                 (squadron-airbase mission)
+                                                 ::name)}
+                           ::aircraft  {:airframe (->> squadron
+                                                       (squadron-aircraft mission)
+                                                       :airframe)
+                                        ;; TODO: This might need to change, because the
+                                        ;; aircraft in a flight can have different
+                                        ;; statuses, like. See e.g.
+                                        ;; AIRCRAFT_NOT_ASSIGNED
+                                        :quantity (->> flight
+                                                       :plane-stats
+                                                       (remove #{c/AIRCRAFT_NOT_ASSIGNED})
+                                                       count)}))))))
 
 
 (defn oob-air

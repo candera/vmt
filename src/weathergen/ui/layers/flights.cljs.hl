@@ -85,7 +85,8 @@
   "Returns the color for a flight mission"
   [mission flight colors]
   (->> flight
-       (mission/flight-mission-category mission)
+       ::mission/mission
+       :category
        colors))
 
 (defn controls
@@ -206,27 +207,25 @@
                    :squadron (col "Squadron"
                                   (fn [mission flight]
                                     (->> flight
-                                         (mission/flight-squadron mission)
-                                         (mission/unit-name mission))))
+                                         ::mission/squadron
+                                         :name)))
                    :airbase   (col "Airbase"
                                    (fn [mission flight]
-                                     (when (and mission flight)
-                                       (->> flight
-                                            (mission/flight-squadron mission)
-                                            (mission/squadron-airbase mission)
-                                            ::mission/name))))
+                                     (some->> flight
+                                              ::mission/airbase
+                                              :name)))
                    :airframe  (col "Aircraft"
                                    (fn [mission flight]
-                                     (let [{:keys [quantity airframe]} (mission/flight-aircraft mission flight)]
+                                     (let [{:keys [quantity airframe]} (::mission/aircraft flight)]
                                        (str quantity " " airframe))))
                    :callsign  (col "Callsign"
                                    (fn [_ flight] (:name flight)))
                    :mission   {:title     "Mission"
                                :sort-key  (fn [flight]
-                                            (mission/flight-mission-name @mission flight))
+                                            (->> flight ::mission/mission :name))
                                :formatter (fn [flight]
-                                            (formula-of [mission flight]
-                                              (mission/flight-mission-name mission flight)))
+                                            (formula-of [flight]
+                                              (-> flight ::mission/mission :name)))
                                :css       (fn [flight rownum]
                                             (formula-of [mission flight mission-category-colors rownum]
                                               (let [color    (flight-mission-color mission
@@ -411,7 +410,7 @@
                :highlighted-flight (cell nil)
                :visible-teams      visible-teams
                :display            (cell {})
-               :all-flights        (cell= (some->> mission :units (filter #(= (:type %) :flight))))
+               :all-flights        (cell= (some->> mission mission/flights))
                :selected-teams     (cell #{})}
         watchable (formula-of [mission visible-teams]
                     [mission visible-teams])]
