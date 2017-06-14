@@ -2034,17 +2034,14 @@
   (->> squadron (unit-class-entry mission) :name))
 
 (defn- squadron-airbase
-  "Returnsn the airbase objective for the given squadron."
+  "Returns the airbase objective for the given squadron."
   [mission squadron]
-  (let [squadron-id (-> squadron :id :name)
-        unit (->> mission :units (util/filter= :camp-id squadron-id) util/only)
-        airbase-id (:airbase-id unit)]
-    (if-let [airbase (some->> mission :objectives (util/filter= :id airbase-id) util/only)]
-      ;; It's a land-based airbase
-      (assoc airbase ::name (objective-name mission airbase))
-      ;; It's a carrier
-      (let [carrier (some->> mission :units (util/filter= :id airbase-id) util/only)]
-        (assoc carrier ::name (carrier-name mission carrier))))))
+  (if-let [airbase (find-objective mission :id (:airbase-id squadron))]
+    ;; It's a land-based airbase
+    (assoc airbase ::name (objective-name mission airbase))
+    ;; It's a carrier
+    (let [carrier (find-unit mission :id (:airbase-id squadron))]
+      (assoc carrier ::name (carrier-name mission carrier)))))
 
 (defn flights
   "Return a seq of all the flights in a mission"
@@ -2057,13 +2054,22 @@
                     (assoc flight
                            ::mission {:name     (flight-mission-name mission flight)
                                       :category (flight-mission-category mission flight)}
-                           ::squadron {:name (unit-name mission squadron)}
-                           ::airbase {:name (->> squadron
-                                                 (squadron-airbase mission)
-                                                 ::name)}
-                           ::aircraft  {:airframe (->> squadron
-                                                       (squadron-aircraft mission)
-                                                       :airframe)
+                           ::squadron {:name (if-not squadron
+                                               "Unknown"
+                                               (unit-name mission squadron))}
+                           ::airbase {:name (if-not squadron
+                                              "Unknown"
+                                              (->> squadron
+                                                   (squadron-airbase mission)
+                                                   ::name))}
+                           ::aircraft  {:airframe (if-not squadron
+                                                    ;; TODO: Somehow Mission Commander knows
+                                                    ;; the aircraft type even if there's no
+                                                    ;; squadron
+                                                    "Unknown"
+                                                    (->> squadron
+                                                         (squadron-aircraft mission)
+                                                         :airframe))
                                         ;; TODO: This might need to change, because the
                                         ;; aircraft in a flight can have different
                                         ;; statuses, like. See e.g.

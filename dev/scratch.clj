@@ -2517,3 +2517,26 @@ type: 0x64 -> image
 (let [mission @fnpu]
   (->> (im/make-descriptor mission "resource/campmap" "BIG_MAP_ID")
        im/cache-key))
+
+(def phalanx
+  (delay
+   (log/debug "Reading FNPU...")
+   (let [mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.33.3/Data/Add-On Balkans/Campaign/PhalanxOffline.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+(let [mission @phalanx]
+  (->> mission mission/flights (into []) class))
+
+(let [mission @phalanx
+      squadron-id 6773
+      unit (->> mission :units (util/filter= :camp-id squadron-id) util/only)
+      airbase-id (:airbase-id unit)]
+  (if-let [airbase (some->> mission :objectives (util/filter= :id airbase-id) util/only)]
+    ;; It's a land-based airbase
+    (assoc airbase ::name (mission/objective-name mission airbase))
+    ;; It's a carrier
+    (let [carrier (some->> mission :units (util/filter= :id airbase-id) util/only)]
+      (assoc carrier ::name (@#'mission/carrier-name mission carrier)))))
