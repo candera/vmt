@@ -77,6 +77,13 @@
        :data-pointer
        (nth (:unit-class-data mission))))
 
+(defn active-units
+  "Return a seq of the units in `mission` that are not inactive."
+  [mission]
+  (->> mission
+       :units
+       (remove #(-> % :unit-flags :inactive))))
+
 (defn objective-type
   "Given an objective, return its numeric type."
   [mission objective]
@@ -97,7 +104,7 @@
   "Find a unit by the criteria given, or nil if the item can't be found."
   [mission criteria value]
   (condp = criteria
-    :id (->> mission :units (filter #(= (:id %) value)) first)))
+    :id (->> mission active-units (filter #(= (:id %) value)) first)))
 
 ;; This doesn't do well with carrier airbase names. For that, we need
 ;; to somehow figure out how to chase our way into the vehicle info
@@ -1740,7 +1747,7 @@
 (defn package-name
   "Given a package ID, return its string name, e.g. Package 12345."
   [mission package-id]
-   (let [packages (->> mission
+  (let [packages (->> mission
                       :units
                       (util/filter= :type :package))]
     (->> package-id
@@ -1940,7 +1947,7 @@
                              (map ::index)
                              set)]
     (->> mission
-         :units
+         active-units
          (filterv (fn [unit]
                     (carrier-classes (- (:entity-type unit) 100)))))))
 
@@ -2047,7 +2054,7 @@
   "Return a seq of all the flights in a mission"
   [mission]
   (some->> mission
-           :units
+           active-units
            (filter #(= (:type %) :flight))
            (map (fn [flight]
                   (let [squadron (->> flight :squadron (find-unit mission :id))]
@@ -2091,7 +2098,7 @@
   ;; - The :id of a task force unit.
   ;; - The :id of a non-airbase objective
   (let [squadrons   (->> mission
-                         :units
+                         active-units
                          (group-by :type)
                          :squadron
                          (map (fn [squadron]
