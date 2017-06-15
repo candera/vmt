@@ -2530,7 +2530,7 @@ type: 0x64 -> image
 (let [mission @phalanx]
   (->> mission mission/flights (into []) class))
 
-(mission/mission-name @phalanx)
+(:mission-name @phalanx)
 
 (let [mission @phalanx
       squadron-id 6773

@@ -187,7 +187,7 @@
 
 (defn smoke-test
   []
-  (map mission/mission-name [@balkans @ito @wnpu @te-new @stratus-te @save2 @smpu @smpu-old]))
+  (map :mission-name [@balkans @ito @wnpu @te-new @stratus-te @save2 @smpu @smpu-old]))
 
 (defn read-briefing
   [path]
