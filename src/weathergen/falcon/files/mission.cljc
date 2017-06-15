@@ -2146,11 +2146,6 @@
   [mission]
   (->> mission :campaign-info :current-time))
 
-(defn mission-name
-  "Returns the display name of the mission."
-  [mission]
-  (-> mission :mission-name))
-
 ;; Bunch of ideas:
 ;;
 ;; Things like having a name or being able to be turned into a string

@@ -637,10 +637,6 @@
               #js {:type "application/octet-stream"})
     blob))
 
-(defn save-data
-  [blob filename]
-  (js/saveAs blob filename))
-
 (defn fmap-filename
   "Returns the filename for an FMAP at time `t`."
   [t]
@@ -653,23 +649,52 @@
   [mission-name]
   (str (mission-name-base mission-name) ".twx"))
 
+(defn save-data
+  "Prompts the user for a path and saves a file.
+
+  `:title` - the title of the dialog that will be shown.
+  `:data`  - a string, Blob, or Buffer of data to save.
+
+  `:filters` - A seq of maps containing `:name` (string) and
+  `:extension` - (vector of strings) to populate the dialog's filter
+                 dropdown with.
+  `:filename` - The default filename - user can change this. Default
+                directory is the campaign directory for the mission."
+  [{:keys [data title filters filename]}]
+  (when-let [path (-> electron
+                      .-remote
+                      .-dialog
+                      (.showSaveDialog
+                       (clj->js {:title       title
+                                 :defaultPath (fs/path-combine (mission/campaign-dir @mission)
+                                                               filename)
+                                 :filters     [filters]})))]
+    (if (instance? js/Blob data)
+      (comm/save-blob-async data path)
+      (fs/save-data path data))))
+
 (defn save-fmap
   [weather-params weather-data]
-  (let [t (get-in weather-params [:time :current])
+  (let [t                 (get-in weather-params [:time :current])
         [x-cells y-cells] (:cell-count weather-params)
         ;; Since processing is async, it's possible the weather data
         ;; can be out of sync with respect to the weather parameters.
         ;; In that case, we compute synchronously.
-        data (if (= weather-params weather-data-params)
-               weather-data
-               (model/weather-grid (assoc weather-params
-                                          :cells (for [x (range x-cells)
-                                                       y (range y-cells)]
-                                                   [x y]))))
-        blob (fmap/get-blob data
-                            x-cells
-                            y-cells)]
-    (save-data (safari-safe-binary blob) (fmap-filename t))))
+        data              (if (= weather-params weather-data-params)
+                            weather-data
+                            (model/weather-grid (assoc weather-params
+                                                       :cells (for [x (range x-cells)
+                                                                    y (range y-cells)]
+                                                                [x y]))))
+        blob              (fmap/get-blob data
+                                         x-cells
+                                         y-cells)]
+    (save-data
+     {:data     (safari-safe-binary blob)
+      :title    "Save FMAP"
+      :filters  {:name      "FMAP Files"
+                 :extension ["fmap"]}
+      :filename (-> @mission :mission-name mission-name-base (str "-" (fmap-filename t)))})))
 
 ;; TODO: make these functional instead of relying on the global state?
 (defn settings-blob
@@ -687,23 +712,16 @@
 
 (defn save-weather-settings
   [_]
-  (when-let [path (-> electron
-                      .-remote
-                      .-dialog
-                      (.showSaveDialog
-                       #js {:title       "Save weather settings"
-                            :defaultPath (fs/path-combine (mission/campaign-dir @mission)
-                                                          (str (mission/mission-name @mission)
-                                                               ".vmtw"))
-                            :filters     #js [#js {:name      "VMT Weather Settings"
-                                                   :extension #js ["vmtw"]}]}))]
-    (->> {:weather-params @weather-params
-          :movement-params @movement-params
-          :display-params @display-params
-          :cloud-params @cloud-params
-          :revision revision}
-         pr-str
-         (fs/save-data path))))
+  (save-data
+   {:data     (pr-str {:weather-params  @weather-params
+                       :movement-params @movement-params
+                       :display-params  @display-params
+                       :cloud-params    @cloud-params
+                       :revision        revision})
+    :title    "Save weather settings"
+    :filename (-> @mission :mission-name settings-filename)
+    :filters  [{:name      "VMT Weather Settings"
+                :extension ["vmtw"]}]}))
 
 (defn twx-blob
   "Returns a JS blob containing TWX file data."
@@ -713,8 +731,12 @@
 (defn save-twx
   "Initiates a download of a TWX file."
   [cloud-params direction mission-name]
-  (save-data (safari-safe-binary (twx-blob cloud-params direction))
-             (twx-filename mission-name)))
+  (save-data
+   {:data     (safari-safe-binary (twx-blob cloud-params direction))
+    :title    "Save TWX"
+    :filters  [{:name      "TWX Files"
+                :extension ["twx"]}]
+    :filename (twx-filename mission-name)}))
 
 (defn load-weather-settings
   [_]
@@ -882,27 +904,20 @@
 (defn save-briefing
   "Prompts the user for a path and saves a briefing file to it."
   [install-id visible-sides]
-  (when-let [path (-> electron
-                      .-remote
-                      .-dialog
-                      (.showSaveDialog
-                       #js {:title       "Save a briefing file"
-                            :defaultPath (fs/path-combine (mission/campaign-dir @mission)
-                                                          (str (mission/mission-name @mission)
-                                                               ".vmtb"))
-                            :filters     #js [#js {:name      "VMT Briefing"
-                                                   :extension #js ["vmtb"]}]}))]
-    (log/debug "save-briefing" :path path)
-    (->> {:revision      revision
-          :briefing      (mission/mission->briefing @mission install-id)
-          :weather       {:weather-params  @weather-params
-                          :cloud-params    @cloud-params
-                          :movement-params @movement-params
-                          :display-params  @display-params}
-          :visible-sides visible-sides}
-         encode
-         compress
-         (fs/save-data path))))
+  (save-data
+   {:data     (->> {:revision      revision
+                    :briefing      (mission/mission->briefing @mission install-id)
+                    :weather       {:weather-params  @weather-params
+                                    :cloud-params    @cloud-params
+                                    :movement-params @movement-params
+                                    :display-params  @display-params}
+                    :visible-sides visible-sides}
+                   encode
+                   compress)
+    :title    "Save a briefing file"
+    :filename (-> @mission :mission-name mission-name-base (str ".vmtb"))
+    :filters  [{:name      "VMT Briefing"
+                :extension ["vmtb"]}]}))
 
 (def zipbuilder-worker
   (let [worker (js/Worker. "worker.js")
@@ -3315,7 +3330,7 @@
     (buttons/a-button
      :click #(save-twx @cloud-params
                        (:direction @movement-params)
-                       (get-in @display-params [:multi-save :mission-name]))
+                       (:mission-name @mission))
      "Save .TWX"))
    (table
     (tr (td (with-help [:clouds :cumulus-coverage]
@@ -3564,8 +3579,7 @@
         (buttons/a-button
          :click #(save-twx @cloud-params
                            (:direction @movement-params)
-                           (get-in @display-params
-                                   [:multi-save :mission-name]))
+                           (:mission-name @mission))
          "Save .TWX"))
        (div
         :class "button-container"
@@ -3594,8 +3608,7 @@
                    more))]
         [(row "Mission:"
               [:serialization-controls :multi-save :mission-name]
-              (let [l (path-lens display-params [:multi-save :mission-name])]
-                (div (cell= (or l "No Mission Loaded")))))
+              (div (cell= (or (:mission-name mission) "No Mission Loaded"))))
          (row "From:"
               [:serialization-controls :multi-save :from]
               (time-entry :source display-params
@@ -3645,7 +3658,7 @@
                                                :cloud-params      @cloud-params
                                                :weather-direction (:direction @movement-params)
                                                :campaign-dir      (mission/campaign-dir @mission)
-                                               :mission-name      (get-in @display-params [:multi-save :mission-name])
+                                               :mission-name      (:mission-name @mission)
                                                :from              (get-in @display-params [:multi-save :from])
                                                :to                (get-in @display-params [:multi-save :to])
                                                :step              (get-in @display-params [:multi-save :step])
@@ -4228,7 +4241,7 @@
             (cell= (mission/theaterdef-name mission)))
        (div (span :css {:font-weight "bold"}
                   "Mission: ")
-            (cell= (mission/mission-name mission)))
+            (cell= (:mission-name mission)))
        (div (span :css {:font-weight "bold"}
                   "Falcon Time: ")
             (cell= (-> mission mission/mission-time format-time))))
@@ -4285,7 +4298,7 @@
               "Virtual Mission Tools"
               (str (mission/theaterdef-name mission)
                    " - "
-                   (mission/mission-name mission)
+                   (:mission-name mission)
                    (when (= :briefing display-mode)
                      ".vmtb")))))
    ;; (link :href "lib/slickgrid/slick.grid.css" :rel "stylesheet" :title "main" :type "text/css")
