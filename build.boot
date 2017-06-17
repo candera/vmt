@@ -119,7 +119,7 @@
 
 (deftask electron
   "Compile in a way compatible with electron packaging."
-  []
+  [t target-dir TARGETDIR str "Enable source maps"]
   (let [source-maps true]
     (comp
      (hoplon)
@@ -153,7 +153,7 @@
      ;;       :optimizations :simple
      ;;       :compiler-options {:target :nodejs
      ;;                          :hashbang false})
-     (target))))
+     (target (or target-dir "target")))))
 
 #_(deftask dev-repl
   []

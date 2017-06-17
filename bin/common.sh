@@ -1,17 +1,26 @@
-function package () {
+function build() {
+    TARGETDIR=$1
     boot electron
-    cd target/
+    cd $TARGETDIR
     # Annoyingly, it seems that if I don't do an `npm install`, the
     # node_modules directory in the target does not get populated, and
     # electron-packager does not subsequently include modules in the
     # package, which causes a runtime error.
     npm install
     cd ..
-    rm -rf package/
-    mkdir -p package/
+}
+
+function package () {
+    TARGETDIR=$1
+    DESTINATION=$2
+    PLATFORM=$3
+    ARCH=$4
+    if [[ "$PLATFORM" = "darwin" ]]; then
+        ICON="assets/images/vmt.icns"
+    else
+        ICON="assets/images/vmt.ico"
+    fi
     ELECTRON_VERSION=$(electron --version | cut -d v -f 2)
     echo "Using Electron version ${ELECTRON_VERSION}"
-    electron-packager target/ --electron-version=$ELECTRON_VERSION --out package/ --overwrite --platform=darwin --icon "assets/images/vmt.icns"
-    electron-packager target/ --electron-version=$ELECTRON_VERSION --out=package/ --overwrite --platform=win32 --arch=ia32,x64 --icon="assets/images/vmt.ico" #--asar=true
-
+    electron-packager $TARGETDIR --electron-version=$ELECTRON_VERSION --out=$DESTINATION --overwrite --platform=$PLATFORM --arch=$ARCH --icon $ICON
 }
