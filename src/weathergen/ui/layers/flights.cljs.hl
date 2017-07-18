@@ -222,8 +222,18 @@
                    :max-width (pct 45)
                    :padding   (px 10)}
              (div
-              :css {:font-weight "bold"}
-              (cell= (str (:name flight) "-" (inc index))))
+              (span
+               :css {:font-weight "bold"}
+               (cell= (str (:name flight) "-" (inc index))))
+              (span
+               :css {:font-size  "90%"
+                     :font-style "italic"}
+               (formula-of [flight index]
+                 (let [stats (-> flight :plane-stats (nth index))]
+                   (condp = stats
+                     c/AIRCRAFT_MISSING " (missing)"
+                     c/AIRCRAFT_DEAD    " (destroyed)"
+                     "")))))
              (ul
               :css {:margin-top (px 5)}
               (for-tpl [weapon loadout]

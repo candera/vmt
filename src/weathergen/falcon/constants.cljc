@@ -2309,6 +2309,13 @@
 (with-file "vuentity.h"
   (def VU_LAST_ENTITY_TYPE 100))
 
+(with-file "pilot.h"
+  (def PILOT_AVAILABLE 0)
+  (def PILOT_KIA 1)
+  (def PILOT_MIA 2)
+  (def PILOT_RESCUED 3)
+  (def PILOT_IN_USE 4))
+
 (with-file "pilot.cpp"
   (def NUM_CALLSIGNS 160)
   (def NUM_PILOTS 686)
@@ -3044,7 +3051,7 @@
 
 
 (with-file "flight.h"
-  ;; planeStats valuesb
+  ;; planeStats values
   (def AIRCRAFT_NOT_ASSIGNED 0)
   (def AIRCRAFT_MISSING 1)
   (def AIRCRAFT_DEAD 2)
