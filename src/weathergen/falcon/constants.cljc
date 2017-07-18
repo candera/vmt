@@ -33,8 +33,46 @@
     NuclearDam,
     OtherDam)
 
+  (def WEAP_RECON 0x01) ;; Used for recon
+  (def WEAP_FUEL 0x02) ;; Fuel tank
+  (def WEAP_ECM 0x04) ;; Used for ECM
+  (def WEAP_AREA 0x08) ;; Can damage multiple vehicles
+  (def WEAP_CLUSTER 0x10) ;; CBU -- cluster bomb
+  (def WEAP_TRACER 0x20) ;; Use tracers when drawing weapon fire
+  (def WEAP_ALWAYSRACK 0x40) ;; this weapon has no rack
+  (def WEAP_LGB_3RD_GEN 0x80) ;; 3rd generation LGB's
+  (def WEAP_BOMBWARHEAD 0x100) ;; this is for example a missile with a
+                               ;; bomb war head. MissileEnd when
+                               ;; ground impact, not when lethalradius
+                               ;; reached
+  (def WEAP_NO_TRAIL 0x200) ;; do not display any weapon trails or engine glow
+  (def WEAP_BOMBDROPSOUND 0x400) ;; play the bomb drop sound instead of missile launch
+  (def WEAP_BOMBGPS 0x800) ;; we use this for JDAM "missile" bombs to have them always CanDetectObject and CanSeeObject true
+
+  ;; RV - Biker - Make the rocket marker flag usable
+  (def WEAP_ROCKET_MARKER 0x1000)
+
+  (def WEAP_FORCE_ON_ONE 0x2000) ;; Put all requested weapons on one/two hardpoints
+  (def WEAP_GUN 0x4000) ;; Used by LoadWeapons only - to specify guns only
+  (def WEAP_ONETENTH 0x8000) ;; # listed is actually 1/10th the # of shots
+
+  (def WEAP_BAI_LOADOUT 0x10000) ;; special loadout for BAI type missions:
+  ;;  Mavericks and dumb bombs, GBU only
+  ;;  GBU-12 (wid 68) and GBU-22 (wid 310)
+  ;;  flag is NOT used in the WeaponClassDataType,
+  ;;  for loading specific weapons only
+  ;;
+  ;; RV Biker - Some more loadout flags
+  (def WEAP_DEAD_LOADOUT 0x20000) ;; Give long range weapons higher prio
+  (def WEAP_LASER_POD 0x40000) ;; Used to load laser pods on HPs
+  (def WEAP_FAC_LOADOUT 0x80000) ;; Load Willy Pete rockets only
+  (def WEAP_CHAFF_POD 0x100000) ;; Load Chaff Flare dispenser pods
+
+  (def WEAP_INFINITE_MASK 0x07) ;; Things which meet this mask never run out.
+
   ;; Number of hardpoints in the weapon table
   (def HARDPOINT_MAX 16))
+
 
 (with-file "f4vu.h"
   (def VU_DOMAIN 0)
@@ -2938,6 +2976,10 @@
 
   (def WPF_CRITICAL_MASK 0x07FF) ;; If it's one of these, we can't
                                  ;; skip this waypoint
+
+  (def GRIDZ_SCALE_FACTOR 10) ;; How many feet per pt of Z.
+
+  (def MINIMUM_ASL_ALTITUDE 5000) ;; Below this # of feet, the WP is considered AGL
   )
 
 (with-file "team.h"
@@ -3008,3 +3050,8 @@
   (def AIRCRAFT_DEAD 2)
   (def AIRCRAFT_RTB 3)
   (def AIRCRAFT_AVAILABLE 4))
+
+(with-file "phyconst.h"
+  (def PASL 2116.22) ;; Standard pressure at sea level
+  (def AASLK 661.48) ;; Speed of sound at sea level
+  )

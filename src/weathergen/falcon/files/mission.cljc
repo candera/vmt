@@ -6,14 +6,17 @@
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
+            [weathergen.coordinates :as coords]
             [weathergen.falcon.constants :as c]
             [weathergen.falcon.files :refer [larray fixed-string lstring bitflags
                                              constant read-> read-trace spec-if]]
             [weathergen.falcon.files.images :as im]
             [weathergen.filesystem :as fs]
             [weathergen.lzss :as lzss]
+            [weathergen.math :as math]
             [weathergen.progress :as progress]
-            [weathergen.util :as util]))
+            [weathergen.time :as time]
+            [weathergen.util :as util :refer [has-flag?]]))
 
 ;;; Database accessors
 
@@ -76,6 +79,13 @@
        (class-table-entry mission)
        :data-pointer
        (nth (:unit-class-data mission))))
+
+(defn- weapon-class-entry
+  "Returns the class data entry of a weapon."
+  [mission id]
+  (let [{:keys [weapon-class-data]} mission]
+    (-> weapon-class-data
+        (nth id))))
 
 (defn active-units
   "Return a seq of the units in `mission` that are not inactive."
@@ -219,19 +229,6 @@
 (def vu-id (buf/spec :name buf/uint32
                      :creator buf/uint32))
 
-(defn campaign-time->long
-  "Converts a campaign time map to a long."
-  [{:keys [day hour minute second millisecond] :as t}]
-  (-> day
-      (* 24)
-      (+ hour)
-      (* 60)
-      (+ minute)
-      (* 60)
-      (+ second)
-      (* 1000)
-      (+ millisecond)))
-
 (def campaign-time
   (reify
     octet.spec/ISpecSize
@@ -241,20 +238,10 @@
     octet.spec/ISpec
     (read [_ buff pos]
       (let [[size data] (buf/read* buff buf/uint32 {:offset pos})]
-        [size
-         (let [d (-> data (/ 24 60 60 1000) long)
-               h (-> data (mod (* 24 60 60 1000)) (/ 60 60 1000) long)
-               m (-> data (mod (* 60 60 1000)) (/ 60 1000) long)
-               s (-> data (mod (* 60 1000)) (/ 1000) long)
-               ms (mod data 1000)]
-           {:day (inc d)
-            :hour h
-            :minute m
-            :second s
-            :millisecond ms})]))
+        [size (time/ms->campaign-time data)]))
 
     (write [_ buff pos t]
-      (buf/write! buff buf/int32 (campaign-time->long t)))))
+      (buf/write! buff buf/int32 (time/campaign-time->ms t)))))
 
 ;; Ref: f4vu.h
 (def vector3
@@ -438,6 +425,33 @@
                 :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte) ; // How much each type will hurt me (% of strength applied
                 :mystery (buf/repeat 3 buf/ubyte)
                 ))
+
+;; Ref: entity.h
+(def weapon-class-data
+  (buf/spec :index buf/int16       ; ;; descriptionIndex pointing here
+            ;; 2002-02-08 MN changed from short to ushort
+            :strength buf/uint16    ;; How much damage it'll do.
+            ;; See DamageDataType
+            :damage-type buf/uint16 ;; What type of damage it does.
+            :padding (buf/repeat 2 buf/ubyte)
+            :range buf/int16        ;; Range, in km.
+            :flags buf/uint16
+            :name (fixed-string 20)
+            :hit-chance (buf/repeat c/MOVEMENT_TYPES buf/ubyte)
+            :fire-rate buf/ubyte ;; # of shots fired per barrage
+            :rariety buf/ubyte ;; % of full supply which is actually provided
+            :guidance-flags buf/uint16
+            :collective buf/ubyte
+            :padding2 buf/ubyte
+            :simweap-index buf/int16 ;; Index into sim's weapon data tables
+            :drag-index buf/int16
+            :blast-radius buf/uint16 ;; radius in ft.
+            :radar-type buf/int16    ;; Index into RadarDataTable
+            :sim-data-idx buf/int16  ;; Index int SimWeaponDataTable
+            :max-alt buf/byte ;; Maximum altitude it can hit in thousands of feet
+            :padding3 buf/ubyte
+            :weight buf/uint16       ;; Weight in lbs.
+            ))
 
 ;; Ref: entity.h
 (def feature-class-data
@@ -706,6 +720,7 @@
                             ["FALCON4.UCD" :unit-class-data unit-class-data]
                             ["FALCON4.OCD" :objective-class-data objective-class-data]
                             ["FALCON4.VCD" :vehicle-class-data vehicle-class-data]
+                            ["FALCON4.WCD" :weapon-class-data weapon-class-data]
                             ["FALCON4.FCD" :feature-class-data feature-class-data]
                             ["falcon4.fed" :feature-entry-data feature-entry-data]
                             ["FALCON4.PHD" :point-header-data point-header-data]]]
@@ -1064,7 +1079,7 @@
 ;; Victory conditions
 (defmethod read-embedded-file* :victory-conditions
   [_ {:keys [offset length] :as entry} buf _]
-  (buf/read buf (buf/string length) {:offset offset}))
+  (buf/read buf (fixed-string length) {:offset offset}))
 
 ;; Team definition file
 
@@ -1218,7 +1233,7 @@
 ;; Version file
 (defmethod read-embedded-file* :version
   [_ {:keys [offset length] :as entry} buf _]
-  (let [version-string (buf/read buf (buf/string length) {:offset offset})]
+  (let [version-string (buf/read buf (fixed-string length) {:offset offset})]
     {:version #?(:clj (Long. version-string)
                  :cljs (-> version-string js/Number. .valueOf long))}))
 
@@ -1564,6 +1579,156 @@
   [_ entry buf _]
   :not-yet-implemented)
 
+(defn- flight-aircraft-quantity
+  "Returns the number of aircraft in `flight`."
+  [flight]
+  (->> flight
+       :plane-stats
+       (remove #{c/AIRCRAFT_NOT_ASSIGNED})
+       count))
+
+(defn- loadout-weapons
+  "Returns a seq of maps describing weapons in a loadout. Maps contain
+  `:quantity` and `:name` keys."
+  [mission loadout]
+  (let [{ids :id counts :count}     loadout]
+    (->> (map vector ids counts)
+         (reduce (fn [m [id count]]
+                   (if (or (zero? id) (zero? count))
+                     m
+                     (update m id (fnil + 0) count)))
+                 {})
+         (mapv (fn [[k v]]
+                 (let [weapon (weapon-class-entry mission k)]
+                   {:name (:name weapon)
+                    :quantity (* v (if (-> weapon :flags (has-flag? c/WEAP_ONETENTH))
+                                     10
+                                     1))}))))))
+
+(defn- flight-loadouts
+  "Given a flight, returns a seq of maps describing the loadouts."
+  [mission flight]
+  (let [loadouts (:loadouts flight)
+        num-ac (flight-aircraft-quantity flight)]
+    (for [i (range num-ac)]
+      (loadout-weapons mission (if (= (count loadouts) num-ac)
+                                 (nth loadouts i)
+                                 (first loadouts))))))
+
+;; Ref waypoint.cpp(2012)
+(defn- compute-speed
+  "Given a ground speed in kts and an altitude in feet, returns mach and IAS in kts."
+  [speed altitude]
+  (let [ttheta (if (<= altitude 36089)
+                 (- 1.0 (* 0.000006875 altitude))
+                 0.7519)
+        rsigma (if (<= altitude 36089)
+                 (Math/pow ttheta 4.256)
+                 (* 0.2971 (Math/pow 2.718 (* 0.00004806 (- 36089.0 altitude)))))
+        mach   (/ speed (* c/AASLK (Math/sqrt ttheta)))
+        pa     (* ttheta rsigma c/PASL)
+        qc     (if (<= mach 1.0)
+                 (* pa
+                    (- (Math/pow (+ 1.0 (* 0.2 mach mach))
+                                 3.5)
+                       1.0))
+                 (* pa
+                    (- (/ (* 166.9 mach mach)
+                          (Math/pow (- 7.0 (/ 1.0 (* mach mach)))
+                                    2.5))
+                       1.0)))
+        qpasl1 (+ 1.0 (/ qc c/PASL))
+        vcas   (* 1479.12 (Math/sqrt (- (Math/pow qpasl1 0.285714)
+                                        1.0)))
+        ias    (if (< 1889.65 qc)
+                 (let [oper (* qpasl1 (Math/pow (- 7.0 (/ (* c/AASLK c/AASLK) (* vcas vcas)))
+                                                2.5))]
+                   (* 51.1987 (Math/sqrt (if (neg? oper) 0.1 oper))))
+                 vcas)]
+    {:mach mach
+     :ias  ias
+     :cas  vcas
+     :qc   qc}))
+
+;; Ref: brief.cpp(826)
+(defn- waypoint-comments
+  "Return the comments section of the flight briefing for a waypoint"
+  [mission w]
+  (let [strings                             (get-in mission [:strings :fn])
+        {:keys [flags action route-action]} w]
+    (cond
+      (has-flag? flags c/WPF_ALTERNATE) (strings 237)
+      (has-flag? flags c/WPF_REPEAT)    (strings 247)
+      (= c/WP_NOTHING action)           (strings (+ 1650 route-action))
+      :else                             (strings (+ 1650 action)))))
+
+(defn- flight-waypoints
+  "Given a flight, returns a seq of maps describing the waypoints"
+  [mission flight]
+  (let [waypoints (->> flight
+                       :waypoints
+                       (map-indexed
+                        (fn [i w]
+                          (let [{:keys [action route-action arrive depart haves]} w
+                                action-name         (get-in mission [:strings
+                                                                     :waypoint-type-names
+                                                                     action])
+                                enroute-action-name (get-in mission [:strings
+                                                                     :waypoint-type-names
+                                                                     route-action])]
+                            (assoc
+                             w
+                             ::number (inc i)
+                             ::action-name action-name
+                             ::enroute-action-name action-name
+                             ::description (if (= action c/WP_NOTHING)
+                                             enroute-action-name
+                                             action-name)
+                             ::remain (when (haves :deptime)
+                                        (time/difference-hms arrive depart))
+                             ::altitude (-> w :grid-z (* c/GRIDZ_SCALE_FACTOR))
+                             ::comments (waypoint-comments mission w))))))]
+    (->> waypoints
+         (partition 2 1)
+         (map (fn [[prev curr]]
+                (let [{curr-x :grid-x curr-y :grid-y} curr
+                      {prev-x :grid-x prev-y :grid-y} prev
+                      dx                              (- curr-x prev-x)
+                      dy                              (- curr-y prev-y)
+                      dv                              [dx dy]
+                      distance                        (-> dv math/magnitude coords/fgrid->nm)
+                      delta-t                         (/ (- (-> curr :arrive time/campaign-time->ms)
+                                                            (-> prev :depart time/campaign-time->ms))
+                                                         1000
+                                                         60
+                                                         60)
+                      gnd-speed                       (/ distance delta-t)
+                      altitude                        (if (-> curr :flags (has-flag? c/WPF_HOLDCURRENT))
+                                                        (::altitude prev)
+                                                        (::altitude curr))
+                      {:keys [mach ias cas]}          (compute-speed gnd-speed altitude)]
+                  (assoc curr
+                         ::distance distance
+                         ::heading  (math/heading dv)
+                         ::speed-ias ias
+                         ::speed-cas cas
+                         ;; TODO: True airspeed would need to take
+                         ;; winds into account, which we aren't doing
+                         ;; here.
+                         ::speed-tas gnd-speed
+                         ::speed-gnd gnd-speed
+                         ::speed-mach mach
+                         ))))
+         (into (vec (take 1 waypoints)))
+         (map (fn [w]
+                (if-not (let [{:keys [action flags]} w]
+                          (or (has-flag? flags c/WPF_ALTERNATE)
+                              (= c/WP_REFUEL action)))
+                  w
+                  (dissoc w
+                          :arrive :depart ::distance ::heading ::speed-ias
+                          ::speed-cas ::speed-gnd ::speed-mach ::speed-tas)))))))
+
 (defn- flight-mission-name
   "Given a flight, returns the name of a flight mission type, e.g. BARCAP."
   [mission flight]
@@ -1709,7 +1874,7 @@
   [mission]
   (->> mission
        teams
-       (sort-by #(-> % :team :last-player-mission campaign-time->long -))
+       (sort-by #(-> % :team :last-player-mission time/campaign-time->ms -))
        first))
 
 (defn sides
@@ -2069,6 +2234,9 @@
                                               (->> squadron
                                                    (squadron-airbase mission)
                                                    ::name))}
+                           ::package {:name (->> flight :package (package-name mission))}
+                           ::waypoints (flight-waypoints mission flight)
+                           ::loadouts (flight-loadouts mission flight)
                            ::aircraft  {:airframe (if-not squadron
                                                     ;; TODO: Somehow Mission Commander knows
                                                     ;; the aircraft type even if there's no
@@ -2081,10 +2249,7 @@
                                         ;; aircraft in a flight can have different
                                         ;; statuses, like. See e.g.
                                         ;; AIRCRAFT_NOT_ASSIGNED
-                                        :quantity (->> flight
-                                                       :plane-stats
-                                                       (remove #{c/AIRCRAFT_NOT_ASSIGNED})
-                                                       count)}))))))
+                                        :quantity (flight-aircraft-quantity flight)}))))))
 
 
 (defn oob-air

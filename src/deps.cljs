@@ -15,4 +15,6 @@
   ;;  :requires ["slick.core"]}
   ],
  :externs ["cljsjs/common/jquery.minicolors.ext.js"
-           "cljsjs/common/jszip.ext.js"]}
+           "cljsjs/common/jszip.ext.js"
+           ;; "externs.ext.js"
+           ]}

@@ -7,6 +7,7 @@
             [garden.selectors :as css-sel]
             [goog.string :as gstring]
             [goog.string.format]
+            [hoplon.storage-atom :refer [local-storage]]
             [hoplon.svg :as svg]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
@@ -15,21 +16,33 @@
             [weathergen.falcon.files.images :as im]
             [weathergen.falcon.files.mission :as mission]
             [weathergen.filesystem :as fs]
+            [weathergen.math :as math]
             [weathergen.settings :refer [app-dir]])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of hint-> hint]]))
+
+;; (set! *warn-on-infer* true)
 
 ;; This is a massive hack, and I have no idea what we're going to do if some other library decides to
 ;; say `module.exports` in its code.
-(def tinycolor (.-exports js/module)
+(def ^js/tinycolor tinycolor (.-exports js/module)
   #_(if (= "nodejs" cljs.core/*target*)
     (.-exports js/module)
     js/tinycolor))
 
 (defn px
-  "Returns a pixel measurement string, e.g. '2px'"
+  "Returns a pixel measurement string, e.g. '2px'. Allows multiple
+  arguments, in which case it will return a margin-style string,
+  e.g. `(px 1 2)` returns '1px 2px'."
+  [& ns]
+  (->> ns
+       (map #(str % "px"))
+       (str/join " ")))
+
+(defn pct
+  "Returns a percentage measurement string, e.g. '50%'"
   [n]
-  (str n "px"))
+  (str n "%"))
 
 (def colors
   {:invalid       "#c70505"
@@ -76,12 +89,11 @@
   "Adds styles to the head of the document. If already registered under `key`, does nothing."
   [key garden]
   (when-not (contains? @registered-styles key)
-    (let [head (aget (.getElementsByTagName js/document "head") 0)
+    (let [^js/Element head (aget (.getElementsByTagName js/document "head") 0)
           styles (cell= (css garden))]
+      (swap! registered-styles conj key)
       (when-dom head
-        #(do
-           (.appendChild head (style :type "text/css" styles))
-           (swap! registered-styles conj key))))))
+        #(.appendChild head (style :type "text/css" styles))))))
 
 (defn register-class!
   "Adds a style to the head of a document for abstract class `key`.
@@ -103,7 +115,7 @@
   ([color] (contrasting color "black" "white"))
   ([color dark light]
    ;; http://stackoverflow.com/questions/3942878/how-to-decide-font-color-in-white-or-black-depending-on-background-color
-   (-> tinycolor (.mostReadable color #js [dark light]) .toHexString)
+   (-> tinycolor (.mostReadable color #js [dark light]) (hint-> js/tinycolor) .toHexString)
    #_(let [rgb (-> color tinycolor .toRgb)
          ;; Advanced compilation is somehow screwing up direct field
          ;; access, so we have to go in by name.
@@ -117,22 +129,25 @@
 (defn darken
   "Darkens a color by an amount from 0-100."
   [color amount]
-  (-> color tinycolor (.darken amount) .toHexString))
+  ;; Don't like writing this way, but not sure how else to get the
+  ;; compiler to correctly avoid symbol renaming in advanced
+  ;; compilation.
+  (-> color tinycolor (hint-> js/tinycolor) (.darken amount) (hint-> js/tinycolor) .toHexString))
 
 (defn lighten
   "Lightens a color by an amount from 0-100."
   [color amount]
-  (-> color tinycolor (.lighten amount) .toHexString))
+  (-> color tinycolor (hint-> js/tinycolor) (.lighten amount) (hint-> js/tinycolor) .toHexString))
 
 (defn spin
   "Rotates a color by an amount from 0 to 360 degrees."
   [color amount]
-  (-> color tinycolor (.spin amount) .toHexString))
+  (-> color tinycolor (hint-> js/tinycolor) (.spin amount) (hint-> js/tinycolor) .toHexString))
 
 (defn to-hex-str
   "Converts a color to a hex string."
   [color]
-  (-> color tinycolor .toHexString))
+  (-> color tinycolor (hint-> js/tinycolor) .toHexString))
 
 (defelem styled
   "Creates an element which is a scope for a set of CSS rules,
@@ -141,7 +156,7 @@
   [attrs content]
   (let [{:keys [garden]} attrs
         attrs (dissoc attrs :garden)
-        head (aget (.getElementsByTagName js/document "head") 0)
+        ^js/Element head (aget (.getElementsByTagName js/document "head") 0)
         id (str (gensym))
         styles (cell= (css [(keyword (str "#" id))
                             garden]))]
@@ -219,11 +234,42 @@
 
 
 (defn format-time
-  [{:keys [day hour minute]}]
-  (gstring/format "%02d/%02d%02d"
-                  day
-                  hour
-                  minute))
+  "Formats a campaign time into a string. `opts` is a map of options:
+
+  `:seconds?` - If true, format time including seconds.
+  `:omit-day?` - If true, don't include the day in the result"
+  ([{:keys [day hour minute second] :as time}] (format-time time {}))
+  ([{:keys [day hour minute second] :as time} {:keys [seconds? omit-day?] :as opts}]
+   (when time
+     (str (if omit-day? "" (gstring/format "%02d/" day))
+          (if seconds?
+            (gstring/format "%02d:%02d:%02d"
+                            hour
+                            minute
+                            second)
+            (gstring/format "%02d:%02d"
+                            hour
+                            minute))))))
+
+(defn format-heading
+  "Formats a heading"
+  [^js/Number heading]
+  (some-> heading (.toFixed 0)))
+
+(defn format-distance
+  "Formats a distance"
+  [^js/Number distance]
+  (some-> distance (.toFixed 1)))
+
+(defn format-speed
+  "Formats a speed."
+  [^js/Number speed]
+  (some-> speed (math/nearest 5) (.toFixed 0)))
+
+(defn format-mach
+  "Formats a Mach number."
+  [^js/Number mach]
+  (some-> mach (.toFixed 2)))
 
 (defelem color-picker
   [attrs _]
@@ -245,15 +291,21 @@
                  (-> (gensym) str keyword)
                  (fn [_ _ _ n]
                    (when n
-                     (-> i js/jQuery (.minicolors "value" (to-hex-str n))))))
+                     (-> i
+                         js/jQuery
+                         (hint-> js/HTMLInputElement)
+                         (.minicolors "value" (to-hex-str n))))))
       (when-dom i
-        #(-> i js/jQuery (.minicolors #js {"theme" "weathergen"
-                                           "show" (fn []
-                                                    (reset! open? true)
-                                                    (when show (show)))
-                                           "hide" (fn []
-                                                    (reset! open? false)
-                                                    (when hide (hide)))}))))))
+        #(-> i
+             js/jQuery
+             (hint-> js/HTMLInputElement)
+             (.minicolors #js {"theme" "weathergen"
+                               "show" (fn []
+                                        (reset! open? true)
+                                        (when show (show)))
+                               "hide" (fn []
+                                        (reset! open? false)
+                                        (when hide (hide)))}))))))
 
 (defelem side-label
   "Returns UI for the display name of a side."
@@ -308,7 +360,7 @@
   (let [path (image-cache-path image-descriptor)]
     (if (fs/exists? path)
       path
-      (let [canvas (.createElement js/document "canvas")]
+      (let [^js/HTMLCanvasElement canvas (.createElement js/document "canvas")]
         (with-time
           (str "Loading image " (:image-id image-descriptor))
           (im/read-image
@@ -317,8 +369,8 @@
            (fn [width height]
              (-> canvas .-width (set! width))
              (-> canvas .-height (set! height))
-             (let [context (.getContext canvas "2d")
-                   image-data (.getImageData context 0 0 width height)
+             (let [^js/CanvasRenderingContext2D context (.getContext canvas "2d")
+                   ^js/ImageData image-data (.getImageData context 0 0 width height)
                    buf (-> image-data .-data .-length js/ArrayBuffer.)
                    buf8 (js/Uint8ClampedArray. buf)
                    data (js/Uint32Array. buf)]
@@ -435,6 +487,18 @@
                :selected (formula-of [value]
                            (with-let [selected? (= value (:value choice))]
                              (when selected?
-                               (-> s .-selectedIndex (set! (.-index o))))))}
+                               (aset o "index" (aget s "selectedIndex")))))}
               (:label choice)))))))))
 
+;; Note that if we ever go back to a default we've used before, we'll
+;; pick up whatever the old saved value is. That's a little weird but
+;; I'm not sure how else to deal with this.
+(defn versioned-local-storage
+  "Returns a cell backed by local storage under `key` (a namespaced
+  key), where, if the `default` contents change, a new cell will be
+  allocated. This allows changing defaults in the code to overwrite
+  any stored copies."
+  [key default]
+  (local-storage
+   (cell default)
+   (str key "-" (hash default))))

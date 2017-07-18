@@ -3,7 +3,7 @@
             [clojure.pprint :as pprint :refer [pprint]]
             [clojure.repl :refer :all]
             [clojure.set :as set]
-            [clojure.spec :as s]
+            ;; [clojure.spec :as s]
             [clojure.string :as str]
             [clojure.tools.namespace.repl :refer [refresh]]
             [cognitect.transit :as transit]
@@ -22,6 +22,7 @@
             [weathergen.lzss :as lzss]
             [weathergen.math :as math]
             [weathergen.model :as model]
+            [weathergen.time :as time]
             [weathergen.util :as util]))
 
 #_(defn cljs

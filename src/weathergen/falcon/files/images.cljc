@@ -5,7 +5,8 @@
                                 spy get-env log-env)]
             [octet.core :as buf]
             [weathergen.falcon.constants :as c]
-            [weathergen.filesystem :as fs]))
+            [weathergen.filesystem :as fs]
+            [weathergen.util :as util :refer [has-flag?]]))
 
 (def read-index
   (memoize
@@ -87,13 +88,13 @@
                 image-offset
                 size]}       image-data
 
-        is-8-bit?            (-> image-data :flags (bit-and c/_RSC_8_BIT_) pos?)
-        use-transparency?    (-> image-data :flags (bit-and c/_RSC_USECOLORKEY_) pos?)
+        is-8-bit?            (-> image-data :flags (has-flag? c/_RSC_8_BIT_))
+        use-transparency?    (-> image-data :flags (has-flag? c/_RSC_USECOLORKEY_))
         [width height]       size]
     (log/debug "read-image" :image-descriptor image-descriptor)
     (when-not (-> image-data :type (= c/_RSC_IS_IMAGE_))
       (throw (ex-info "Not an image" {:reason ::not-an-image})))
-    (when (and (not is-8-bit?) (not (-> image-data :flags (bit-and c/_RSC_16_BIT_) pos?)))
+    (when (and (not is-8-bit?) (not (-> image-data :flags (has-flag? c/_RSC_16_BIT_))))
       (throw (ex-info "Image is neither 8-bit nor 16-bit" {:reason ::bit-size-unknown})))
     (let [{:keys [set-pixel! finalize]} (allocator width height)
           pixel-bytes                   (if is-8-bit? 1 2)

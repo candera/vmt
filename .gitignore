@@ -17,3 +17,4 @@ pom.xml
 /package/
 /node_modules/
 
+/dev/a.out

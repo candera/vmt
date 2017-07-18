@@ -12,6 +12,8 @@
   (:require-macros
    [weathergen.cljs.macros :refer [with-time formula-of with-attr-bindings]]))
 
+;; (set! *warn-on-infer* true)
+
 (defelem master-detail
   "Creates a master-detail grid view. TODO: explain options."
   [attrs _]
@@ -173,25 +175,27 @@ Column description:
   (register-styles!
    ::table-grid
    [[:table.table-grid {:border-collapse "collapse"}
-     [(css-sel/tr (css-sel/nth-child :even))
+     [:tr.table-grid-row (css-sel/& (css-sel/nth-child :even))
       {:background "#eee"}]
-     [(css-sel/tr (css-sel/nth-child :odd))
+     [:tr.table-grid-row (css-sel/& (css-sel/nth-child :odd))
       {:background "white"}]
-     [:thead
-      [:td {:background  "#ddd"
-            :border      "solid 1px grey"
-            :padding     "2px 4px 4px 4px"
-            :white-space "nowrap"}]
+     [:thead.table-grid-header
+      [:td.table-grid-cell {:background  "#ddd"
+                            :border      "solid 1px grey"
+                            :padding     "2px 4px 4px 4px"
+                            :white-space "nowrap"}]
       [:.sorters { ;; :float "right"
                   :display "inline-block"
                   }
        [:svg {:vertical-align "bottom"}]]]
-     [:tbody [:td {:padding "2px 3px 2px 3px"
-                   :border  "solid 1px lightgray"
-                   ;;:border-bottom "none"
-                   ;;:border-top "none"
-                   }]]]
-    [:td.hidden-column {:display "none"}]])
+     [:tbody.table-grid-body
+      [:td.table-grid-cell
+       {:padding "2px 3px 2px 3px"
+        :border  "solid 1px lightgray"
+        ;;:border-bottom "none"
+        ;;:border-top "none"
+        }]]]
+    [:td.table-grid-cell.hidden-column {:display "none"}]])
   (with-attr-bindings attrs [data columns row-attrs when-empty fixed-columns movable-columns hidden-columns]
     (let [sort-criteria    (cell nil)
           sorted-items     (formula-of [data sort-criteria]
@@ -209,18 +213,27 @@ Column description:
           column-order     (formula-of [fixed-columns movable-columns]
                              (into (vec fixed-columns)
                                    (vec movable-columns)))
-          editing-columns? (cell false)]
+          editing-columns? (cell false)
+          classify (fn [elem class]
+                     (fn [& args]
+                       (apply elem :class class args)))
+          table (classify hoplon.core/table "table-grid")
+          thead (classify hoplon.core/thead "table-grid-header")
+          tbody (classify hoplon.core/tbody "table-grid-body")
+          tr    (classify hoplon.core/tr "table-grid-row")
+          td    (classify hoplon.core/td "table-grid-cell")]
       (table
-       :class "table-grid"
        (thead
         (tr
-         (td :colspan num-columns
-             (buttons/image-button
-              :src "images/settings.svg"
-              :width (px 16)
-              :title "Settings"
-              :latched? editing-columns?
-              :click #(swap! editing-columns? not))))
+         (td
+          :class "table-grid-cell"
+          :colspan num-columns
+          (buttons/image-button
+           :src "images/settings.svg"
+           :width (px 16)
+           :title "Settings"
+           :latched? editing-columns?
+           :click #(swap! editing-columns? not))))
         (tr (for [n (range num-columns)]
               (let [column-id    (formula-of [column-order]
                                    (nth column-order n))
@@ -230,7 +243,8 @@ Column description:
                                    (-> columns (get column-id) :disable-sort))]
                 (td
                  :class (formula-of [editing-columns? hidden?]
-                          {:hidden-column (and (not editing-columns?) hidden?)})
+                          {:hidden-column (and (not editing-columns?) hidden?)
+                           :table-grid-cell true})
                  :click #(when-not @disable-sort
                            (swap! sort-criteria
                                   (fn [[old-index direction]]
@@ -327,9 +341,10 @@ Column description:
                                      (nth column-order n))
                          hidden?   (formula-of [hidden-columns column-id]
                                      (hidden-columns column-id))]
-                     (with-let [c (td)]
+                     (with-let [^js/HTMLTableDataCellElement c (td)]
                        (c :class (formula-of [editing-columns? hidden?]
-                                   {:hidden-column (and (not editing-columns?) hidden?)})
+                                   {:hidden-column (and (not editing-columns?) hidden?)
+                                    :table-grid-cell true})
                           :css (formula-of [column-id csses]
                                  ;; This is horrible, but it appears
                                  ;; that Hoplon won't actually remove

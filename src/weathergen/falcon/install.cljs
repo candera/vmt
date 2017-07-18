@@ -3,31 +3,34 @@
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
-                                spy get-env log-env)]))
+                                spy get-env log-env)])
+  (:require-macros [weathergen.cljs.macros :refer [hint->]]))
 
-(def win32? (-> "os" js/require .platform (= "win32")))
+;; (set! *warn-on-infer* true)
+
+(def win32? (-> "os" js/require (hint-> js/os) .platform (= "win32")))
 
 (def installations (atom nil))
 
 (defn- reg-read-installations
   [cb]
-  (let [Registry (js/require "winreg")
-        win64?   (= "x64" (.-arch js/process))
-        base-key "\\SOFTWARE\\Benchmark Sims\\"
-        key      (Registry. #js {:hive (.-HKLM Registry)
-                                 :key  base-key
-                                 :arch (when win64? "x86")})]
+  (let [^js/Registry Registry (js/require "winreg")
+        win64?                (= "x64" (.-arch js/process))
+        base-key              "\\SOFTWARE\\Benchmark Sims\\"
+        ^js/Registry key      (Registry. #js {:hive (.-HKLM Registry)
+                                              :key  base-key
+                                              :arch (when win64? "x86")})]
     ;; OMG how do people program like this?
     (.keys key
-           (fn [err subkeys]
+           (fn [err ^js/RegistryKeys subkeys]
              (if err
                (cb {})
                (let [n         (.-length subkeys)
                      remaining (atom n)
                      values    (atom nil)]
-                 (doseq [subkey subkeys]
+                 (doseq [^js/Registry subkey subkeys]
                    (.get subkey "baseDir"
-                         (fn [err item]
+                         (fn [err ^js/RegistryItem item]
                            (swap! remaining dec)
                            (if err
                              (log/error "Could not read from registry key " (.-path subkey))

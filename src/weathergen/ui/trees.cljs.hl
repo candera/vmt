@@ -8,6 +8,8 @@
   (:require-macros
    [weathergen.cljs.macros :refer [formula-of]]))
 
+;; (set! *warn-on-infer* true)
+
 (defn- tree*
   "Helper function for the tree control."
   [expand-state levels items level-number]

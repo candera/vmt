@@ -50,6 +50,7 @@
             [weathergen.model :as model]
             [weathergen.progress :as progress]
             [weathergen.settings :as settings]
+            [weathergen.time :as time]
             [weathergen.twx :as twx]
             [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [colors control-section
@@ -76,8 +77,10 @@
                                 spy get-env log-env)])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of]])
+   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of hint-> hint->>]])
   (:refer-clojure :exclude [load-file]))
+
+;; (set! *warn-on-infer* true)
 
 ;;; Constants
 
@@ -106,24 +109,25 @@
 
 ;;; Integration with the container and external libraries
 
-(def electron (js/require "electron")
+(def ^js/electron electron (js/require "electron")
   #_(when (= "nodejs" cljs.core/*target*)
       (js/require "electron")))
 
-(def ipcRenderer (.-ipcRenderer electron))
+(def ^js/EventEmitter ipcRenderer (.-ipcRenderer electron))
 
-(def zlib (js/require "zlib"))
+(def ^js/zlib zlib (js/require "zlib"))
 
 ;;; State
 
-(defc window-size [(-> js/window js/jQuery .width)
-                   (-> js/window js/jQuery .height)])
+(let [^js/window window (js/jQuery js/window)]
+ (defc window-size
+   [(.width window)
+    (.height window)])
 
-(-> js/window
-    js/jQuery
-    (.resize #(reset! window-size
-                      [(-> js/window js/jQuery .width)
-                       (-> js/window js/jQuery .height)])))
+ (-> window
+     (.resize #(reset! window-size
+                       [(.width window)
+                        (.height window)]))))
 
 (def default-weather-params
   {:temp-uniformity 0.7
@@ -499,36 +503,44 @@
 
 (def command-ch (async/chan (async/dropping-buffer 1)))
 
-(doseq [{:keys [worker ch]} workers]
+(doseq [{:keys [^js/Worker worker ch]} workers]
   (-> worker
       .-onmessage
-      (set! #(go (async/>! ch (->> % .-data decode))))))
+      (set! (fn [e] (go (async/>! ch (-> e (aget "data") decode)))))))
 
 (declare move)
+
+(defn- post-message
+  "Helper function to post a message to a worker. Needed because the
+  go-loop rewrites code so much I can't get type hints to work inside
+  it."
+  [^js/Worker worker message]
+  (.postMessage worker message))
 
 ;; TODO: Handle commands other than "compute weather"
 (go-loop []
   (let [[command params] (async/<! command-ch)]
     (doseq [{:keys [cells worker]} workers]
       #_(log/debug "Weather data sent to worker")
-      (.postMessage worker (encode (assoc params
-                                          :cells cells))))
+      ;; This is weird, but makes the compiler happy
+      (post-message worker  (encode (assoc params
+                                 :cells cells))))
     (reset! computing true)
     (.time js/console "compute-weather")
     (with-time "Receive weather results"
       (loop [chs (set (map :ch workers))
-             data {}]
+             data (hash-map)]
         #_(log/debug "Weather data received.")
         (if (empty? chs)
           (do
             (dosync
-               (.timeEnd js/console "compute-weather")
-               (reset! weather-data data)
-               (reset! weather-data-params params))
+             (.timeEnd js/console "compute-weather")
+             (reset! weather-data data)
+             (reset! weather-data-params params))
             (when (:looping? @movement-params)
               (async/<! (async/timeout 500))
-              (if (= (-> @weather-data-params :time :current model/falcon-time->minutes)
-                     (-> @weather-data-params :time :max model/falcon-time->minutes))
+              (if (= (-> @weather-data-params :time :current time/campaign-time->minutes)
+                     (-> @weather-data-params :time :max time/campaign-time->minutes))
                 (move (->> @movement-params :step (/ (* -60 6)) Math/floor))
                 (move 1))))
           (let [[val port] (async/alts! (vec chs))]
@@ -557,10 +569,10 @@
   [steps]
   (dosync
    (let [minutes        (* steps (:step @movement-params))
-         current-time   (-> @weather-params :time :current model/falcon-time->minutes)
+         current-time   (-> @weather-params :time :current time/campaign-time->minutes)
          desired-time   (+ current-time minutes)
          new-time       (if-let [max-time (-> @weather-params :time :max)]
-                          (min (model/falcon-time->minutes max-time)
+                          (min (time/campaign-time->minutes max-time)
                                desired-time)
                           desired-time)
          actual-steps   (/ (- new-time current-time)
@@ -593,8 +605,8 @@
         max-time (-> @weather-params :time :max)]
     (when (or (= :edit @display-mode)
             (not max-time)
-            (<= (model/falcon-time->minutes desired)
-                (model/falcon-time->minutes max-time)))
+            (<= (time/campaign-time->minutes desired)
+                (time/campaign-time->minutes max-time)))
       (jump-to-time* (:displayed @time-params)))))
 
 (defn set-time
@@ -621,7 +633,7 @@
 (defn mission-name-base
   "Compute the extensionless name of the mission file, or default to
   'vmt'."
-  [mission-name]
+  [^js/String mission-name]
   (if (empty? mission-name)
     "vmt"
     (let [i (.lastIndexOf mission-name ".")]
@@ -770,7 +782,7 @@
                                     (assoc :multi-save
                                            {:mission-name nil
                                             :from         t
-                                            :to           (model/add-time t (* 6 60))
+                                            :to           (time/add-minutes t (* 6 60))
                                             :step         (-> data :movement-params :step)})))
          (reset! movement-params (:movement-params data))
          (reset! cloud-params    (:cloud-params data))
@@ -816,7 +828,7 @@
                        (fn [ms]
                          (assoc ms
                                 :from current
-                                :to (model/add-time current (* 60 6)))))
+                                :to (time/add-minutes current (* 60 6)))))
                 (swap! weather-params
                        model/jump-to-time
                        @movement-params
@@ -843,6 +855,7 @@
                  (->> mission-data
                       mission/last-player-team
                       (mission/side mission-data)
+                      (hint->> cljs.core/Hashable)
                       hash-set)))))))
 
 (defn compress
@@ -857,7 +870,7 @@
   [buf]
   (.gunzipSync zlib buf))
 
-(def StringDecoder (.-StringDecoder (js/require "string_decoder")))
+(def ^js/StringDecoder StringDecoder (aget (js/require "string_decoder") "StringDecoder"))
 
 (defn- buf->string
   "Converts a buffer to a string."
@@ -920,13 +933,13 @@
                 :extension ["vmtb"]}]}))
 
 (def zipbuilder-worker
-  (let [worker (js/Worker. "worker.js")
+  (let [^js/Worker worker (js/Worker. "worker.js")
         command-ch (async/chan)
         result-ch (async/chan)
         output-ch (async/chan)]
     (-> worker
         .-onmessage
-        (set! #(go (async/>! result-ch (->> % .-data decode)))))
+        (set! #(go (async/>! result-ch (-> % (get "data") decode)))))
     {:command-ch command-ch
      :worker worker
      :output-ch output-ch
@@ -943,8 +956,8 @@
   (let [cells (for [x (range nx)
                     y (range ny)]
                 [x y])
-        start (model/falcon-time->minutes from)
-        end (model/falcon-time->minutes to)
+        start (time/campaign-time->minutes from)
+        end (time/campaign-time->minutes to)
         steps (-> end (- start) (/ step) long inc)
         updates-dir (fs/path-combine campaign-dir "WeatherMapsUpdates")
         save-blob (fn [blob path]
@@ -969,7 +982,7 @@
           (async/>! (:command-ch zipbuilder-worker)
                     (-> weather-params
                         (assoc-in [:time :current]
-                                  (model/minutes->falcon-time t))
+                                  (time/minutes->campaign-time t))
                         (assoc :cells cells)))
           (let [data (async/<! (:output-ch zipbuilder-worker))
                 blob (fmap/get-blob data nx ny)]
@@ -979,7 +992,7 @@
             (save-blob blob
                        (fs/path-combine
                         "WeatherMapsUpdates"
-                        (fmap-filename (model/minutes->falcon-time t)))))
+                        (fmap-filename (time/minutes->campaign-time t)))))
           (if @cancel
             (reset! progress nil)
             (recur (+ t step) true)))))))
@@ -1116,7 +1129,7 @@
 (defn format-type
   "Returns a string describing a weather type."
   [type]
-  (case type
+  (condp = type
     :sunny "Sunny"
     :fair "Fair"
     :poor "Poor"
@@ -1124,16 +1137,16 @@
 
 (defn format-pressure
   "Format a pressure in inches Mercury as appropriate for the unit."
-  [inhg unit]
+  [^js/Number inhg unit]
   (if-not inhg
     ""
     (if (= :inhg unit)
       (.toFixed inhg 2)
-      (-> inhg inhg->mbar (.toFixed 0)))))
+      (-> inhg inhg->mbar (hint-> js/Number) (.toFixed 0)))))
 
 (defn format-temperature
   "Format a temperature string"
-  [temp]
+  [^js/Number temp]
   (if-not temp
     ""
     (.toFixed temp 0)))
@@ -1146,12 +1159,12 @@
     (let [{:keys [speed heading]} wind]
       (str (gstring/format "%03d" heading)
            "@"
-           (gstring/format "%02d" (.toFixed speed 0))
+           (gstring/format "%02d" (-> speed (hint-> js/Number) (.toFixed 0)))
            "kts"))))
 
 (defn format-visibility
   "Format a visibility so that only numbers below 1 get decimal places."
-  [vis]
+  [^js/Number vis]
   (if-not vis
     ""
     (if (< vis 2)
@@ -1240,8 +1253,8 @@
   ([e zoom pan]
    (try
      (let [browser-zoom   (.-devicePixelRatio js/window)
-           ox             (-> e .-offsetX (* browser-zoom))
-           oy             (-> e .-offsetY (* browser-zoom))
+           ox             (-> e (aget "offsetX") (* browser-zoom))
+           oy             (-> e (aget "offsetY") (* browser-zoom))
            [nx ny]        (:cell-count @weather-params)
            {:keys [x y]}  pan
            [width height] @map-size]
@@ -1375,7 +1388,7 @@
           (option :selected (cell= (not= :named location-type))
                   :value ""
                   (formula-of [location-type x y]
-                    (case location-type
+                    (condp = location-type
                       :coordinates (str "Location " (format-coords x y))
                       :named ""
                       :none "None selected")))
@@ -1492,7 +1505,7 @@
 (defn fill-color
   [display w]
   ;;(println "fill-color" :w w :display display :alpha alpha)
-  (case display
+  (condp = display
     :type (-> w :type weather-color)
     :pressure (-> w
                   :pressure
@@ -1520,7 +1533,7 @@
   (with-time "update-wind-layer"
     (doseq [[[x y] weather] weather-data
             :let [{:keys [speed heading]} (:wind weather)
-                  cell (gdom/getElement (str "grid-wind-cell-" x "-" y))]]
+                  ^js/SVGRectElement cell (gdom/getElement (str "grid-wind-cell-" x "-" y))]]
       (.setAttribute cell
                      "transform"
                      (str "rotate(" (long heading) ")"))
@@ -1542,7 +1555,7 @@
 
 (defmethod overlay-text :temperature
   [weather _]
-  (-> weather :temperature (.toFixed 1)))
+  (-> weather :temperature (hint-> js/Number) (.toFixed 1)))
 
 (defmethod overlay-text :type
   [weather _]
@@ -1560,7 +1573,7 @@
   (with-time "update-text-layer"
     (doseq [[[x y] weather] weather-data
             :let [text (overlay-text weather display-params)
-                  cell (gdom/getElement (str "grid-text-cell-" x "-" y))]]
+                  ^js/SVGTextElement cell (gdom/getElement (str "grid-text-cell-" x "-" y))]]
       (-> cell .-innerHTML (set! text)))))
 
 (defn update-overlay
@@ -1579,7 +1592,7 @@
   (with-time "update-primary-layer"
     (doseq [[[x y] weather] weather-data
             :let [[r g b a] (fill-color (:display display-params) weather)
-                  cell (gdom/getElement (str "grid-primary-cell-" x "-" y))]]
+                  ^js/SVGRectElement cell (gdom/getElement (str "grid-primary-cell-" x "-" y))]]
       (when cell
         (.setAttribute cell "fill" (str "rgba("
                                         r ","
@@ -1610,22 +1623,22 @@
   (let [watched (formula-of [mouse-location map-zoom]
                   [mouse-location map-zoom])]
     (with-bbox :x x :y y :w w :h h :watch watched
-      [t (svg/text
-          :x 0
-          :y 0
-          :font-size "3.5%"
-          :font-family "Source Code Pro"
-          :font-weight 100
-          :stroke "black"
-          :stroke-width 0.03
-          :fill "black"
-          (svg/tspan (cell= (str (some->>
-                                  mouse-location
-                                  (coords/weather->bullseye mission)
-                                  format-bullseye)
-                                 ;; Debug mouse position
-                                 ;; "(" (first mouse-raw-offset) ", " (second mouse-raw-offset) ")"
-                                 ))))]
+      [^js/SVGTextElement t (svg/text
+                             :x 0
+                             :y 0
+                             :font-size "3.5%"
+                             :font-family "Source Code Pro"
+                             :font-weight 100
+                             :stroke "black"
+                             :stroke-width 0.03
+                             :fill "black"
+                             (svg/tspan (cell= (str (some->>
+                                                     mouse-location
+                                                     (coords/weather->bullseye mission)
+                                                     format-bullseye)
+                                                    ;; Debug mouse position
+                                                    ;; "(" (first mouse-raw-offset) ", " (second mouse-raw-offset) ")"
+                                                    ))))]
       (svg/g
        :debug "bullseye-info-box"
        :toggle (-> mouse-location some? cell=)
@@ -2079,31 +2092,31 @@
         (svg/g
          :debug "icon-and-info"
          (with-bbox :y ty :w tw :h th :watch included-squadrons
-           [t (svg/text
-               :font-size "3.5%"
-               :font-family "Source Code Pro"
-               :font-weight 100
-               :x (-> tw (/ 2) - cell=)
-               :y line-height
-               :stroke color
-               :stroke-width 0.03
-               :fill color
-               (svg/tspan label)
-               (for-tpl [indexed (formula-of [airbase included-squadrons]
-                                   (->> airbase
-                                        ::mission/squadrons
-                                        (filter included-squadrons)
-                                        (map-indexed vector)))]
-                 (let [i        (cell= (first indexed))
-                       squadron (cell= (second indexed))]
-                   (svg/tspan
-                    :y (-> i inc (* line-height) (+ line-spacing) cell=)
-                    :text-anchor "start"
-                    :x (-> tw (/ 2) - cell=)
-                    :dx "0.75em"
-                    (cell= (gstring/format "%d %s"
-                                           (->> squadron ::mission/aircraft :quantity)
-                                           (->> squadron ::mission/aircraft :airframe)))))))]
+           [^js/SVGTextElement t (svg/text
+                                  :font-size "3.5%"
+                                  :font-family "Source Code Pro"
+                                  :font-weight 100
+                                  :x (-> tw (/ 2) - cell=)
+                                  :y line-height
+                                  :stroke color
+                                  :stroke-width 0.03
+                                  :fill color
+                                  (svg/tspan label)
+                                  (for-tpl [indexed (formula-of [airbase included-squadrons]
+                                                      (->> airbase
+                                                           ::mission/squadrons
+                                                           (filter included-squadrons)
+                                                           (map-indexed vector)))]
+                                    (let [i        (cell= (first indexed))
+                                          squadron (cell= (second indexed))]
+                                      (svg/tspan
+                                       :y (-> i inc (* line-height) (+ line-spacing) cell=)
+                                       :text-anchor "start"
+                                       :x (-> tw (/ 2) - cell=)
+                                       :dx "0.75em"
+                                       (cell= (gstring/format "%d %s"
+                                                              (->> squadron ::mission/aircraft :quantity)
+                                                              (->> squadron ::mission/aircraft :airframe)))))))]
            (svg/g
             :debug "info"
             :transform (cell= (str "translate(0, " (-> dims :d) ")"))
@@ -2246,10 +2259,10 @@
         drag-start            (atom nil)
         register-drag-handler (fn [h]
                                 (swap! drag-handler #(or % h)))
-        doc-move              (fn [e]
+        doc-move              (fn [^js/MouseEvent e]
                                 (if-let [h @drag-handler]
-                                  (let [x              (.-offsetX e)
-                                        y              (.-offsetY e)
+                                  (let [x              (aget e "offsetX")
+                                        y              (aget e "offsetY")
                                         [sx sy]        @drag-start
                                         dx             (- x sx)
                                         dy             (- y sy)]
@@ -2257,8 +2270,8 @@
                                     (.preventDefault e))))
         doc-up                (fn doc-up [e]
                                 (when-let [h @drag-handler]
-                                  (let [x (.-offsetX e)
-                                        y (.-offsetY e)
+                                  (let [x (aget e "offsetX")
+                                        y (aget e "offsetY")
                                         [sx sy] @drag-start
                                         dx (- x sx)
                                         dy (- y sy)]
@@ -2347,7 +2360,7 @@
                                          "xmlns"       "http://www.w3.org/2000/svg"})))
                      :mousemove (fn [e]
                                   (dosync
-                                   (reset! mouse-raw-offset [(.-offsetX e) (.-offsetY e)])
+                                   (reset! mouse-raw-offset [(aget e "offsetX") (aget e "offsetY")])
                                    (reset! mouse-location
                                            (let [[x y] (mouse-weather-coords e)]
                                              (when (and (<= 0 x nx)
@@ -2358,7 +2371,7 @@
                                     (reset! hover-cell nil)))
                      :mousedown (fn [e]
                                   (.log js/console e)
-                                  (reset! drag-start [(.-offsetX e) (.-offsetY e)])
+                                  (reset! drag-start [(aget e "offsetX") (aget e "offsetY")])
                                   (when-not @drag-handler
                                     (let [{px0 :x py0 :y} @map-pan]
                                       ;; We have to handle drag coordinates
@@ -2405,13 +2418,13 @@
                      bullseye-info-box)]
       (gevents/listen (gevents/MouseWheelHandler. elem)
                       gevents/MouseWheelHandler.EventType.MOUSEWHEEL
-                      (fn [e]
+                      (fn [^js/MouseWheelEvent e]
                         (.preventDefault e)
                         (let [[mx my]       (mouse-weather-coords e)
                               {px0 :x py0 :y} @map-pan
                               browser-zoom  (.-devicePixelRatio js/window)
                               z'            (->> @map-zoom
-                                                 (* (Math/pow @zoom-speed (.-deltaY e)))
+                                                 (* (Math/pow @zoom-speed (aget e "deltaY")))
                                                  (math/clamp 1 200))
                               dz            (/ z' @map-zoom)
                               ;; TODO: Need to figure out how to deal with browser zoom
@@ -2433,38 +2446,41 @@
             (let [frag (.createDocumentFragment js/document)]
               (doseq [x (range nx)
                       y (range ny)]
-                (let [r (doto (.createElementNS
-                               js/document
-                               "http://www.w3.org/2000/svg"
-                               "rect")
-                          (.setAttribute "id" (str "grid-primary-cell-" x "-" y))
-                          (.setAttribute "x" (str x))
-                          (.setAttribute "y" (str y))
-                          (.setAttribute "width" "1")
-                          (.setAttribute "height" "1")
-                          (.setAttribute "fill" "none")
-                          (-> .-onclick
-                              (set! #(reset! selected-cell {:location    nil
-                                                            :coordinates [x y]}))))]
+                (let [^js/SVGRectElement r (.createElementNS
+                                            js/document
+                                            "http://www.w3.org/2000/svg"
+                                            "rect")]
+                  (doto r
+                    (.setAttribute "id" (str "grid-primary-cell-" x "-" y))
+                    (.setAttribute "x" (str x))
+                    (.setAttribute "y" (str y))
+                    (.setAttribute "width" "1")
+                    (.setAttribute "height" "1")
+                    (.setAttribute "fill" "none")
+                    (-> .-onclick
+                        (set! #(reset! selected-cell {:location    nil
+                                                      :coordinates [x y]}))))
                   (gdom/appendChild frag r)))
               (gdom/appendChild primary-layer frag))
             ;; Wind vector layer
             (let [frag (.createDocumentFragment js/document)]
               (doseq [x (range nx)
                       y (range ny)]
-                (let [g (doto (.createElementNS
-                               js/document
-                               "http://www.w3.org/2000/svg"
-                               "g")
-                          (.setAttribute "transform"
-                                         (gstring/format "translate(%f, %f)"
-                                                         (+ x 0.5)
-                                                         (+ y 0.5))))
-                      r (doto (.createElementNS
-                               js/document
-                               "http://www.w3.org/2000/svg"
-                               "use")
-                          (.setAttribute "id" (str "grid-wind-cell-" x "-" y)))]
+                (let [^js/SVGElement g (.createElementNS
+                                        js/document
+                                        "http://www.w3.org/2000/svg"
+                                        "g")
+                      ^js/SVGUseElement r (.createElementNS
+                                           js/document
+                                           "http://www.w3.org/2000/svg"
+                                           "use")]
+                  (doto g
+                    (.setAttribute "transform"
+                                   (gstring/format "translate(%f, %f)"
+                                                   (+ x 0.5)
+                                                   (+ y 0.5))))
+                  (doto r
+                    (.setAttribute "id" (str "grid-wind-cell-" x "-" y)))
                   (gdom/appendChild g r)
                   (gdom/appendChild frag g)))
               (gdom/appendChild wind-overlay frag))
@@ -2473,17 +2489,18 @@
                   scale 0.03]
               (doseq [x (range nx)
                       y (range ny)]
-                (let [t (doto (.createElementNS
-                               js/document
-                               "http://www.w3.org/2000/svg"
-                               "text")
-                          (.setAttribute "transform"
-                                         (gstring/format "scale(%f) translate(%f, %f)"
-                                                         scale
-                                                         (/ (+ x 0.5) scale)
-                                                         (/ (+ y 0.9) scale)))
-                          (.setAttribute "id" (str "grid-text-cell-" x "-" y))
-                          (.setAttribute "text-anchor" "middle"))]
+                (let [^js/SVGTextElement t (.createElementNS
+                                            js/document
+                                            "http://www.w3.org/2000/svg"
+                                            "text")]
+                  (doto t
+                    (.setAttribute "transform"
+                                   (gstring/format "scale(%f) translate(%f, %f)"
+                                                   scale
+                                                   (/ (+ x 0.5) scale)
+                                                   (/ (+ y 0.9) scale)))
+                    (.setAttribute "id" (str "grid-text-cell-" x "-" y))
+                    (.setAttribute "text-anchor" "middle"))
                   (gdom/appendChild frag t)))
               (gdom/appendChild text-overlay frag))))
         (let [display-params* (formula-of
@@ -2663,7 +2680,7 @@
                                     (update v)
                                     (reset! interim nil)
                                     (reset! state :set))))
-                      :keyup (fn [e]
+                      :keyup (fn [^KeyboardEvent e]
                                (when (= ESCAPE_KEY (.-keyCode e))
                                  (dosync
                                   (reset! interim nil)
@@ -2690,10 +2707,10 @@
                               :width      (or width "125px")
                               :text-align (when align align)})
                       :value value)]
-         [i
+         [^js/HTMLImageElement i
           (img :src "images/error.png"
                :title (cell= (:message parsed))
-               :click #(.focus i)
+               :click #(-> i (hint-> js/HTMLImageElement) .focus)
                :css (formula-of
                       [valid?]
                       {:position       "relative"
@@ -2748,8 +2765,8 @@
                                          (< (-> @weather-params
                                                 :time
                                                 :max
-                                                model/falcon-time->minutes)
-                                            (model/falcon-time->minutes val)))]
+                                                time/campaign-time->minutes)
+                                            (time/campaign-time->minutes val)))]
                  {:valid? (and valid? (not over-max?))
                   :message (cond
                              (not valid?) "Time must be in the format 'dd/hhmm'"
@@ -3147,9 +3164,9 @@
                                       :radius 8
                                       :falloff 2
                                       :begin (-> wp :time :current)
-                                      :peak (-> wp :time :current (model/add-time 60))
-                                      :taper (-> wp :time :current (model/add-time 180))
-                                      :end (-> wp :time :current (model/add-time 240))
+                                      :peak (-> wp :time :current (time/add-minutes 60))
+                                      :taper (-> wp :time :current (time/add-minutes 180))
+                                      :end (-> wp :time :current (time/add-minutes 240))
                                       :pressure (-> wp :pressure :min)
                                       :strength 1
                                       :show-outline? true
@@ -3433,7 +3450,7 @@
                                format-visibility
                                str)
                         :conform (cloud-param-conformer cloud-params column category)
-                        :placeholder (case column
+                        :placeholder (condp = column
                                        :visibility "vis (nm)"
                                        "altitude")
                         :align "right"
@@ -3461,8 +3478,8 @@
 (defn step-controls
   [_]
   (let [mission-time (-> mission mission/mission-time cell=)
-        max-time     (-> weather-params :time :max model/falcon-time->minutes cell=)
-        weather-time (-> weather-params :time :current model/falcon-time->minutes cell=)]
+        max-time     (-> weather-params :time :max time/campaign-time->minutes cell=)
+        weather-time (-> weather-params :time :current time/campaign-time->minutes cell=)]
     (control-section
      :id "time-location-params"
      :title "Time controls"
@@ -3705,20 +3722,20 @@
 )
 
 (defmethod do! :viewBox
-  [elem _ value]
+  [^SVGElement elem _ value]
   (if (= false value)
     (.removeAttribute elem "viewBox")
     (.setAttribute elem "viewBox" value)))
 
 (defmethod do! :xlink-href
-  [elem _ value]
+  [^SVGElement elem _ value]
   (if (= false value)
     (.removeAttributeNS elem "http://www.w3.org/1999/xlink" "href")
     (do
       (.setAttributeNS elem "http://www.w3.org/1999/xlink" "href" value))))
 
 (defmethod do! :preserveAspectRatio
-  [elem _ value]
+  [^SVGElement elem _ value]
   (if (= false value)
     (.removeAttribute elem "preserveAspectRatio")
     (.setAttribute elem "preserveAspectRatio" value)))
@@ -3738,7 +3755,8 @@
                             :max 100
                             :value (cell= (* icon-scale 1000))
                             :input #(reset! icon-scale (/ @% 1000.0)))
-                     (text icon-scale))}
+                     (formula-of [icon-scale]
+                       (str icon-scale)))}
            {:title "Two"
             :id :two
             :ui (div "This is two")}
@@ -3950,7 +3968,7 @@
   [attrs kids]
   (with-let [elem (select attrs kids)]
     (when-dom elem
-      #(-> elem js/jQuery .select2))))
+      #(-> elem js/jQuery (hint-> js/jQuery) .select2))))
 
 (defn airbase-squadrons
   "Given mission and airbase cells, return a formula cell with the
@@ -4398,23 +4416,26 @@
                :src "images/1stVFW_Insignia-64.png"))))
 
 (def section-ctor
-  {:mission-info-section mission-info-section
-   :save-briefing-section save-briefing-section
-   :serialization-controls serialization-controls
-   :step-controls step-controls
-   :display-controls display-controls
-   :weather-parameters weather-parameters
-   :forecast-section forecast-section
-   :weather-type-configuration weather-type-configuration
-   :cloud-controls cloud-controls
-   :wind-stability-parameters wind-stability-parameters
+  {:mission-info-section        mission-info-section
+   :save-briefing-section       save-briefing-section
+   :serialization-controls      serialization-controls
+   :step-controls               step-controls
+   :display-controls            display-controls
+   :weather-parameters          weather-parameters
+   :forecast-section            forecast-section
+   :weather-type-configuration  weather-type-configuration
+   :cloud-controls              cloud-controls
+   :wind-stability-parameters   wind-stability-parameters
    :weather-override-parameters weather-override-parameters
-   :advanced-controls advanced-controls
+   :advanced-controls           advanced-controls
    ;; :flightpath-controls flightpath-controls
-   :flights-section (:controls flight-paths-layer)
-   :air-forces-section air-forces-section
-   :oob-section order-of-battle-section
-   :test-section test-section})
+   :flights-section             (fn [opts]
+                                  (let [ctor             (:controls-fn flight-paths-layer)
+                                        scroll-container (::scroll-container opts)]
+                                    (ctor scroll-container)))
+   :air-forces-section          air-forces-section
+   :oob-section                 order-of-battle-section
+   :test-section                test-section})
 
 (defn weather-page
   "Emits an app page. `section-infos` is a seq of maps, one for each
@@ -4468,31 +4489,32 @@
                ;; change, so maybe not
                :nx (first (:cell-count @weather-params))
                :ny (second (:cell-count @weather-params))))
-        (div
-         :class "right-column"
-         :css (formula-of
-                [portrait?]
-                (merge {:display       "block"
-                        :align-content "flex-start"
-                        :flex-wrap     "wrap"
-                        :flex-grow     1
-                        :min-width     (str (- right-width 20) "px")
-                        ;;  This one weird trick keeps the column from expanding
-                        ;;  past where it should. Yay CSS.
-                        :width         0}
-                       (when-not portrait?
-                         {:overflow "auto"
-                          :height   "auto"})))
-         (tabs/tabs
-          :selected (cell (-> section-infos first :id))
-          :tabs (for [{:keys [title id sections]} section-infos]
-                  {:title title
-                   :id    id
-                   :ui    (for [[section opts] (partition 2 sections)
-                                :let           [ctor (section-ctor section)]]
-                            (with-time
-                              (str "Rendering " section)
-                              (ctor opts)))}))))))
+        (let [right-column (div)]
+          (right-column
+           :class "right-column"
+           :css (formula-of
+                  [portrait?]
+                  (merge {:display       "block"
+                          :align-content "flex-start"
+                          :flex-wrap     "wrap"
+                          :flex-grow     1
+                          :min-width     (str (- right-width 20) "px")
+                          ;;  This one weird trick keeps the column from expanding
+                          ;;  past where it should. Yay CSS.
+                          :width         0}
+                         (when-not portrait?
+                           {:overflow "auto"
+                            :height   "auto"})))
+           (tabs/tabs
+            :selected (cell (-> section-infos first :id))
+            :tabs (for [{:keys [title id sections]} section-infos]
+                    {:title title
+                     :id    id
+                     :ui    (for [[section opts] (partition 2 sections)
+                                  :let           [ctor (section-ctor section)]]
+                              (with-time
+                                (str "Rendering " section)
+                                (ctor (assoc opts ::scroll-container right-column))))})))))))
     (debug-info))))
 
 #_(with-init!

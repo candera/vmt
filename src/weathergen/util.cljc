@@ -46,3 +46,7 @@
   (let [op (if (contains? s x) disj conj)]
     (op s x)))
 
+(defn has-flag?
+  "Returns true if all of the bits set in `mask` are also set in `x`."
+  [x mask]
+  (-> x (bit-and mask) (= mask)))

@@ -1,6 +1,7 @@
 (ns weathergen.model
   "A library for modeling weather systems."
-  (:require [weathergen.math :as math]
+  (:require [weathergen.time :as time]
+            [weathergen.math :as math]
             [org.craigandera.weathergen.pattern-space :as pat]))
 
 (defn mmhg->inhg
@@ -72,26 +73,6 @@
                                           zoom
                                           (+ t* 1.01) 1)
                       (mod (math/frac t) 1.0))))
-
-(defn minutes->falcon-time
-  [min]
-  (let [d (-> min (/ 24 60) Math/floor int)
-        h (-> min (mod (* 24 60)) (/ 60) Math/floor int)
-        m (-> min (mod 60) Math/floor int)]
-    {:day (inc d)
-     :hour h
-     :minute m}))
-
-(defn falcon-time->minutes
-  "Converts from Falcon time to a weather-space time coordinate."
-  [t]
-  (let [{:keys [day hour minute]} t]
-    (-> day dec (* 24) (+ hour) (* 60) (+ minute))))
-
-(defn add-time
-  "Adds minutes to a Falcon time map."
-  [t min]
-  (-> t falcon-time->minutes (+ min) minutes->falcon-time))
 
 (defn perturb
   "Returns the perturbed coordinates of a point given:
@@ -193,11 +174,11 @@
   override we should blend in based on the time."
   [override current-time]
   (let [{:keys [begin peak taper end animate?]} override
-        bm (falcon-time->minutes begin)
-        pm (falcon-time->minutes peak)
-        tm (falcon-time->minutes taper)
-        em (falcon-time->minutes end)
-        t (falcon-time->minutes current-time)]
+        bm (time/campaign-time->minutes begin)
+        pm (time/campaign-time->minutes peak)
+        tm (time/campaign-time->minutes taper)
+        em (time/campaign-time->minutes end)
+        t (time/campaign-time->minutes current-time)]
     (cond
       (not animate?) 1
       (< em t) 0
@@ -269,7 +250,7 @@
         ;; efficient precomputation mechanism during an optimization
         ;; pass.
         {:keys [offset current]} time
-        t (+ offset (falcon-time->minutes current))
+        t (+ offset (time/campaign-time->minutes current))
         ;; TODO: Why do we need this 10 here?
         t* (/ t evolution 10)
         max-pressure (:max pressure)
@@ -339,7 +320,7 @@
     (-> weather-params
         (update-in
          [:time :current]
-         add-time
+         time/add-minutes
          delta-t)
         (update
          :origin
@@ -358,9 +339,9 @@
         {:keys [offset current max]} time
         {:keys [direction step]} movement-params
         {:keys [heading speed]} direction
-        ;;now (+ offset (falcon-time->minutes current))
-        now (falcon-time->minutes current)
-        max-t (when max (falcon-time->minutes max))
+        ;;now (+ offset (time/campaign-time->minutes current))
+        now (time/campaign-time->minutes current)
+        max-t (when max (time/campaign-time->minutes max))
         weather-params* (update weather-params
                                 :weather-overrides
                                 #(remove :exclude-from-forecast? %))]
@@ -377,20 +358,20 @@
                      [dx dy :as dpos] (->> [0 1]
                                            (math/rotate (- heading))
                                            (math/scale (* dt (/ speed 60 9))))]]
-           [(minutes->falcon-time t)
+           [(time/minutes->campaign-time t)
             (-> (if (or (= t now)
                         (and max-t
                              (<= t max-t)))
                   weather-params
                   weather-params*)
                 (assoc :x x :y y)
-                (assoc-in [:time :current] (minutes->falcon-time t))
+                (assoc-in [:time :current] (time/minutes->campaign-time t))
                 (assoc-in [:time :offset] (- offset dt))
                 (update :origin math/vector-add dpos)
                 weather)])
          (into (sorted-map-by (fn [a b]
-                                (compare (falcon-time->minutes a)
-                                         (falcon-time->minutes b))))))))
+                                (compare (time/campaign-time->minutes a)
+                                         (time/campaign-time->minutes b))))))))
 
 (defn jump-to-time
   "Return a new weather params that has been moved to the specified
@@ -400,8 +381,8 @@
         {:keys [speed heading]} direction
         {:keys [time]} weather-params
         {:keys [current]} time
-        delta-t (- (falcon-time->minutes t)
-                   (falcon-time->minutes current))
+        delta-t (- (time/campaign-time->minutes t)
+                   (time/campaign-time->minutes current))
         new (-> weather-params
                 (update :origin
                         math/vector-add
@@ -420,8 +401,8 @@
   [weather-params time]
   (let [offset (get-in weather-params [:time :offset])
         current-time (get-in weather-params [:time :current])
-        delta (- (falcon-time->minutes current-time)
-                 (falcon-time->minutes time))]
+        delta (- (time/campaign-time->minutes current-time)
+                 (time/campaign-time->minutes time))]
     (-> weather-params
         (update-in
          [:time :offset]

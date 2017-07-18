@@ -2,6 +2,8 @@
   (:require [weathergen.math :as math]
             [weathergen.model :as model]))
 
+;; (set! *warn-on-infer* true)
+
 (defn byte-writer
   [size]
   (let [ab (js/ArrayBuffer. size)
@@ -12,12 +14,12 @@
     :position (atom 0)}))
 
 (defn write-int32
-  [{:keys [data-view position]} x]
+  [{:keys [^js/DataView data-view position]} x]
   (.setInt32 data-view @position x true)
   (swap! position #(+ % 4)))
 
 (defn write-float32
-  [{:keys [data-view position]} x]
+  [{:keys [^js/DataView data-view position]} x]
   (.setFloat32 data-view @position x true)
   (swap! position #(+ % 4)))
 

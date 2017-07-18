@@ -1,7 +1,8 @@
 (ns weathergen.dtc
   "A library for parsing BMS DTC (ini) files."
   (:require [clojure.string :as str]
-            [clojure.spec :as s]
+            ;;[clojure.spec :as s]
+            [clojure.spec.alpha :as s]
             [taoensso.timbre :as log
              #?@(:cljs [:refer-macros
                         (log trace debug info warn error fatal report

@@ -8,6 +8,8 @@
   (:require-macros
    [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of]]))
 
+;; (set! *warn-on-infer* true)
+
 (defn- image-button-style
   [pressed?]
   {:border-style (if pressed? "inset" "outset")
@@ -50,6 +52,7 @@
    :border-style    "solid"
    :border-color    "#d0d0d0"
    :background      "linear-gradient(white, white 75%, #ededed 100%)"
+   :display         "inline-block"
    :font-family     "Lucida Grande, Lucida Sans Unicode, Tahoma, sans-serif"
    :font-size       "72%"
    :margin          "2px"
@@ -61,9 +64,19 @@
   [:&:active
    {:background "linear-gradient(#c0c0c0, #f0f0f0)"}]])
 
+(comm/register-class!
+ ::latched-div-button
+ [{:background "linear-gradient(#c0c0c0, #f0f0f0)"}])
+
 (defelem a-button
-  "Renders a plain button, but using an anchor tag to better enable styling."
+  "Renders a plain button, but using an anchor tag to better enable
+  styling. Can take a `latched?` attribute, which, if a cell
+  evaluating to true, locks the button in the pressed state."
   [attrs content]
-  (a (merge {:class (comm/class-for ::div-button)}
-            attrs)
-     content))
+  (with-attr-bindings attrs [latched?]
+    (let [down (cell false)]
+      (a (merge attrs
+                {:class (formula-of [latched? down]
+                          {(comm/class-for ::div-button) true
+                           (comm/class-for ::latched-div-button) (or latched? down)})})
+         content))))

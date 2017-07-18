@@ -5,6 +5,8 @@
             [hoplon.svg :as svg]
             [weathergen.wind :as wind]))
 
+;; (set! *warn-on-infer* true)
+
 (defn wind-barb
   [speed heading]
   (svg/svg

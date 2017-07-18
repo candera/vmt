@@ -1,6 +1,16 @@
 (ns weathergen.cljs.macros
   "Macros to support the ClojureScript side of things"
-  (:require [clojure.spec :as s]))
+  (:require [clojure.spec.alpha :as s]))
+
+(defmacro with-trace
+  "Low level macro that will log messages to the JS console before and
+  after executing `body`"
+  [label & body]
+  `(let [lbl# ~label]
+     (.log js/console lbl# "before")
+     (let [result# (do ~@body)]
+       (.log js/console lbl# "after")
+       result#)))
 
 (defmacro with-time
   [timer & body]
@@ -110,9 +120,9 @@
            ~y* (javelin.core/cell 0)
            ~w* (javelin.core/cell 0)
            ~h* (javelin.core/cell 0)
-           ~elem-name ~elem-form
+           ^js/Object ~elem-name ~elem-form
            update-bbox#  #(javelin.core/dosync
-                           (let [bb# (.getBBox ~elem-name)]
+                           (let [^js/SVGRect bb# (.getBBox ~elem-name)]
                              (when (.-x bb#)
                                (reset! ~x* (.-x bb#))
                                (reset! ~y* (.-y bb#))
@@ -134,3 +144,24 @@
   `(let [{:keys ~keys} ~attrs
          ~attrs (dissoc ~attrs ~@(map keyword keys))]
      ~@body))
+
+(defmacro hint->
+  "Adds type hint `type` to `expr`. Intended for use in thread-first
+  `->` expressions"
+  [expr type]
+  (let [sym (gensym)]
+    `(let [~(with-meta sym {:tag type}) ~expr]
+       ~sym)))
+
+(defmacro hint->>
+  "Adds type hint `type` to `expr`. Intended for use in thread-last
+  `->>` expressions"
+  [type expr]
+  (let [sym (gensym)]
+    `(let [~(with-meta sym {:tag type}) ~expr]
+       ~sym)))
+
+(defmacro hint
+  "Adds type hint for Object to expr."
+  [expr]
+  `(hint-> ~expr js/Object))

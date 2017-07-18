@@ -1,21 +1,27 @@
 (ns weathergen.filesystem
   "Filesystem operations on CLJS."
-  (:require [clojure.string :as str]
+  (:require [cljs.nodejs :as node]
+            [clojure.string :as str]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
+            ;;[weathergen.interop.node.filesystem :as fs]
+            [weathergen.interop.node.path :as path]
             [weathergen.util :as util])
-  (:refer-clojure :exclude [exists? identical?]))
+  (:refer-clojure :exclude [exists? identical?])
+  (:require-macros
+   [weathergen.cljs.macros :refer [with-trace]]))
 
 ;; So far we only support Node - not much sense in trying to implement
 ;; something in the browser.
 
-(def filesystem (js/require "fs"))
+;; (set! *warn-on-infer* true)
 
-(def pathlib (js/require "path"))
+(def fs-lib ^js/fs (node/require "fs"))
+(def os-lib ^js/os (node/require "os"))
 
-(def win32? (-> "os" js/require .platform (= "win32")))
+(def win32? (-> os-lib .platform (= "win32")))
 
 (defn- case-desensitize
   "If on a case-sensitive filesystem, try to convert to an existing
@@ -25,11 +31,11 @@
     path
     (reduce (fn [existing child]
               (some->> existing
-                       (.readdirSync filesystem)
+                       (.readdirSync fs-lib)
                        (filter #(= (str/lower-case %)
                                    (str/lower-case child)))
                        first
-                       (.join pathlib existing)))
+                       (path/join existing)))
             "/"
             (remove empty? (str/split path #"/")))))
 
@@ -45,14 +51,14 @@
   "Returns true if the specified file exists."
   [path]
   (when-let [n (-> path normalize case-desensitize)]
-    (.existsSync filesystem n)))
+    (.existsSync fs-lib n)))
 
 (defn path-combine
   "Given two path components, combine them. If the second is absolute, return it."
   ([path1 path2]
-   (if (.isAbsolute pathlib (normalize path2))
+   (if (path/isAbsolute (normalize path2))
      (normalize path2)
-     (.join pathlib (normalize path1) (normalize path2))))
+     (path/join (normalize path1) (normalize path2))))
   ([path1 path2 & paths]
    (apply path-combine (path-combine path1 path2) paths)))
 
@@ -60,7 +66,7 @@
   "Given a path, return the directory that contains it. Returns null
   if at the root."
   [path]
-  (let [p (.dirname pathlib (normalize path))]
+  (let [p (path/dirname (normalize path))]
     (when-not (= p path)
       p)))
 
@@ -71,18 +77,18 @@
   ([path] (basename path {}))
   ([path opts]
    (let [{:keys [omit-extension?]} opts]
-     (let [b (.basename pathlib path)]
+     (let [b (path/basename path)]
        (if-not omit-extension?
          b
-         (let [e (.extname pathlib b)]
+         (let [e (path/extname b)]
            (subs b 0 (- (count b) (count e)))))))))
 
 (defn file-buf
-  "Returns a DataView wrapping the contents of the file at `path`."
+  "Returns a DataView wrappingx the contents of the file at `path`."
   [path]
   (try
     (let [n (-> path normalize case-desensitize)
-          buf (.readFileSync filesystem n)
+          ^js/Buffer buf (.readFileSync fs-lib n)
           ab (.-buffer buf)
           dv (js/DataView. ab)]
       ;; There's an optimization wherein the backing array can have
@@ -97,22 +103,24 @@
 (defn file-buffer
   "Reads the contents of file at `path` as a Node Buffer."
   [path]
-  (->> path normalize case-desensitize (.readFileSync filesystem)))
+  (->> path normalize case-desensitize (.readFileSync fs-lib)))
 
 (defn file-text
   "Returns a string with the contents of the file at `path`."
   [path]
   ;; Not totally sure this will always work...
-  (->> path normalize case-desensitize (.readFileSync filesystem) .toString))
-
+  (let [^js/Buffer buf (->> path normalize case-desensitize (.readFileSync fs-lib))]
+    (.toString buf)))
 
 (defn identical?
   "Returns true if `a` and `b` are the same file."
   [a b]
   (and (exists? a)
        (exists? b)
-       (= (->> a normalize (.statSync filesystem) .-ino)
-          (->> b normalize (.statSync filesystem) .-ino))))
+       (let [^js/fs.Stats stats-a (->> a normalize (.statSync fs-lib))
+             ^js/fs.Stats stats-b (->> b normalize (.statSync fs-lib))]
+         (= (.-ino stats-a)
+            (.-ino stats-b)))))
 
 (defn ancestor?
   "Returns true if `descendant` is a descendant file of `ancestor`."
@@ -136,18 +144,18 @@
     (when (and make-parents? (not (exists? par)))
       (mkdir par true))
     (when (not (exists? path))
-      (.mkdirSync filesystem path))))
+      (.mkdirSync fs-lib path))))
 
 (defn save-data
   "Saves `data` to the filesystem at `path`. Creates the directory if
   necessary."
   [path data]
   (mkdir (parent path) true)
-  (.writeFileSync filesystem path data))
+  (.writeFileSync fs-lib path data))
 
 (defn stat
   "Returns stats for file as map with keys `:size` and `:modified`."
   [path]
-  (let [stats (.statSync filesystem path)]
+  (let [^js/fs.Stats stats (.statSync fs-lib path)]
     {:size (.-size stats)
      :modified (-> stats .-mtime .valueOf)}))

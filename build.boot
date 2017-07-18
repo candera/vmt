@@ -1,18 +1,18 @@
 (def project 'weathergen)
 
 (set-env!
- :dependencies '[[org.clojure/clojure       "1.9.0-alpha15"]
-                 [org.clojure/clojurescript "1.9.521"]
+ :dependencies '[[org.clojure/clojure       "1.9.0-alpha17"]
+                 [org.clojure/clojurescript "1.9.562"]
                  [adzerk/boot-cljs          "2.0.0"]
                  [adzerk/boot-reload        "0.5.1"]
                  ;; [adzerk/boot-cljs-repl     "0.3.3"]
                  ;;[hoplon/javelin "3.9.0"]
-                 [hoplon/hoplon             "7.0.1"]
-                 [org.clojure/core.async    "0.3.442"
+                 [hoplon/hoplon             "7.0.2"]
+                 [org.clojure/core.async    "0.3.443"
                   :exclusions [org.clojure/tools.reader]]
                  [tailrecursion/boot-jetty  "0.1.3"]
                  [cljsjs/jquery-ui "1.11.4-0"]
-                 [org.clojure/data.csv "0.1.3"]
+                 [org.clojure/data.csv "0.1.4"]
                  ;; TODO: Update to later version
                  [com.cognitect/transit-cljs "0.8.239"]
                  [com.cognitect/transit-clj "0.8.300" :scope "test"]
@@ -22,12 +22,10 @@
                  ;;[com.cemerick/url "0.1.1"]
 
                  ;; CLJS REPL dependencies
-                 [com.cemerick/piggieback "0.2.1" :scope "test"]
+                 [com.cemerick/piggieback "0.2.2" :scope "test"]
                  [weasel "0.7.0" :scope "test"]
                  [org.clojure/tools.nrepl "0.2.13" :scope "test"]
 
-                 [cljsjs/tether "1.4.0-0"]
-;;                 [cljsjs/filesaverjs "1.3.3-0"]
                  ;; Had to download as the cljsjs one is pretty far out of date
                  ;;[cljsjs/jszip "2.5.0-0"]
                  [cljsjs/pako "0.2.7-0"]
@@ -37,7 +35,11 @@
                  [funcool/octet "1.0.1"]
                  [org.clojure/core.match "0.3.0-alpha4"]
                  [org.clojure/tools.namespace "0.2.11" :scope "test"]
-                 [quil "2.6.0"]]
+                 [quil "2.6.0"]
+
+                 ;;[io.nervous/cljs-nodejs-externs "0.2.0"]
+                 ;;[cljsjs/nodejs-externs "1.0.4-1"]
+                 ]
  ;; TODO: Really need a way to hook into the repl-server so that dev
  ;; doesn't wind up in the source path for released code.
  :source-paths #{"src" "dev"}
@@ -88,6 +90,9 @@
                             :hashbang false
                             :parallel-build false
                             ;;:externs ["js/slickgrid/slickgrid.ext.js"]
+                            :infer-externs false
+                            :pretty-print true
+                            :pseudo-names true
                             }
          :source-map source-maps)
    (cljs :ids #{"main"}
@@ -96,7 +101,10 @@
                             :closure-defines {'app.main/dev? true}
                             :target :nodejs
                             :hashbang false
-                            :parallel-build true})
+                            :parallel-build true
+                            :infer-externs false
+                            :pretty-print true
+                            :pseudo-names true})
    (target)
    #_(serve :port 8006)))
 
@@ -119,26 +127,50 @@
 
 (deftask electron
   "Compile in a way compatible with electron packaging."
-  [t target-dir TARGETDIR str "Enable source maps"]
-  (let [source-maps true]
+  [t target-dir TARGETDIR str "Enable source maps"
+   d dev-mode bool "Compile in dev mode"]
+  (let [source-maps true
+        ;; I suspect that nil is blowing up the compiler
+        dev-mode (boolean dev-mode)
+        ;; Optimizations apply only to mission UI - main has to comple at simple
+        optimizations :simple]
     (comp
      (hoplon)
-     (cljs :ids #{"worker" "index.html" "mission.html"}
+     (cljs :ids #{"mission.html"}
+           :optimizations optimizations
+           :compiler-options { ;;:target :nodejs
+                              :hashbang false
+                              :parallel-build false
+                              :externs ["externs.ext.js"]
+                              ;;:externs ["js/slickgrid/slickgrid.ext.js"]
+                              :infer-externs true
+                              :pretty-print dev-mode
+                              :pseudo-names dev-mode
+                              }
+           :source-map source-maps
+           )
+     (cljs :ids #{"worker" "index.html" #_"mission.html"}
            :optimizations #_:advanced #_:whitespace :simple
            :compiler-options { ;;:target :nodejs
                               :hashbang false
                               :parallel-build false
+                              :externs ["externs.ext.js"]
                               ;;:externs ["js/slickgrid/slickgrid.ext.js"]
-                              }
-           ;;:source-map source-maps
+                              :pretty-print dev-mode
+                              :pseudo-names dev-mode}
+           :source-map source-maps
            )
      (cljs :ids #{"main"}
            :optimizations :simple
-           :compiler-options {;; :asset-path "target/main.out"
+           :compiler-options { ;; :asset-path "target/main.out"
                               ;; :closure-defines {'app.main/dev? true}
+                              :externs ["externs.ext.js"]
                               :target :nodejs
                               :hashbang false
-                              :parallel-build true})
+                              :parallel-build true
+                              :pretty-print dev-mode
+                              :pseudo-names dev-mode}
+           :source-map source-maps)
      ;; ;; Compile everything except main with advanced opts
      ;; (cljs :ids #{#_"renderer" "worker" "index.html"}
      ;;       :optimizations :simple

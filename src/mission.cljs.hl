@@ -7,7 +7,7 @@
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]))
 
-(def electron (js/require "electron"))
+;; (set! *warn-on-infer* true)
 
 (defmethod ipc/on-message "open-mission"
   [_ event installations path]
@@ -16,7 +16,7 @@
       (log/debug "open-mission" :installations installations :path path)
       (ui/load-mission installations path))
     (ipc/send-to-main "load-complete")
-    (catch :default e
+    (catch :default ^js/Error e
       (log/error e "Load failed" :stack (.-stack e))
       (ipc/send-to-main "load-failed" (.-stack e)))))
 
@@ -26,7 +26,7 @@
     (binding [progress/*reporter* #(ipc/send-to-main "progress-message" %)]
       (ui/load-briefing installations path)
       (ipc/send-to-main "load-complete"))
-    (catch :default e
+    (catch :default ^js/Error e
       (log/error e "Load failed" :stack (.-stack e))
       (ipc/send-to-main "load-failed" (.-stack e)))))
 

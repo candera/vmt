@@ -834,7 +834,7 @@
   :end {:day 1 :hour 9 :minute 0}
   :pressure 28.5
   :strength 0.5}
- (model/falcon-time->minutes {:day 1 :hour 8 :minute 59}))
+ (time/campaign-time->minutes {:day 1 :hour 8 :minute 59}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -1441,7 +1441,17 @@ type: 0x64 -> image
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(let [strings (-> @smpu :database :strings)]
+(let [strings (-> @smpu :strings :fn)]
+  (spit "/tmp/strings.csv"
+        (with-out-str
+          (dotimes [i 4100]
+            (printf "%d,%s\n"
+                    i
+                    (try
+                      (strings i)
+                      (catch Throwable t "")))))))
+
+(let [strings (-> @smpu :names)]
   (spit "/tmp/strings.csv"
         (with-out-str
           (dotimes [i 4100]
@@ -2542,3 +2552,173 @@ type: 0x64 -> image
     ;; It's a carrier
     (let [carrier (some->> mission :units (util/filter= :id airbase-id) util/only)]
       (assoc carrier ::name (@#'mission/carrier-name mission carrier)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(->> "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/loadout-test.tac"
+     (mission/read-mission installs)
+     mission/flights
+     (map :loadouts)
+     (map count)
+     frequencies)
+
+(->> "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/loadout-test.tac"
+     (mission/read-mission installs)
+     mission/flights
+     (map :loadouts)
+     first
+     pprint)
+
+(do
+  (refresh)
+  (binding [octet.buffer/*byte-order* :little-endian]
+    (let [buf (fs/file-buf "/Users/candera/falcon/4.33.3/Data/Terrdata/objects/FALCON4.WCD")
+          wcd (buf/read buf (weathergen.falcon.files/larray buf/uint16 mission/weapon-class-data))
+          ]
+      (->> wcd
+          csv-ize
+          (spit "/tmp/weapon-class-data.csv")))))
+
+(->> "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/loadout-test.tac"
+     (mission/read-mission installs)
+     mission/flights
+     rand-nth
+     ::mission/loadouts)
+
+(def flights (->> "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/loadout-test.tac"
+                  (mission/read-mission installs)
+                  mission/flights))
+
+(->> flights
+     rand-nth
+     ::mission/waypoints
+     pprint)
+
+(->> @smpu
+     :user-ids
+     :name->id
+     keys
+     (filter #(-> % str/lower-case (.contains "arrowhead")))
+     )
+
+;; C++
+       ;; 100kts,          0ft: 100.0
+       ;; 200kts,          0ft: 200.0
+       ;; 300kts,          0ft: 300.0
+       ;; 400kts,          0ft: 400.0
+       ;; 500kts,          0ft: 500.0
+       ;; 600kts,          0ft: 600.0
+       ;; 700kts,          0ft: 699.9
+       ;; 800kts,          0ft: 798.8
+       ;; 900kts,          0ft: 896.5
+       ;; 100kts,       5000ft:  92.9
+       ;; 200kts,       5000ft: 186.0
+       ;; 300kts,       5000ft: 279.7
+       ;; 400kts,       5000ft: 374.0
+       ;; 500kts,       5000ft: 469.2
+       ;; 600kts,       5000ft: 565.2
+       ;; 700kts,       5000ft: 661.7
+       ;; 800kts,       5000ft: 755.5
+       ;; 900kts,       5000ft: 846.7
+       ;; 100kts,      10000ft:  86.0
+       ;; 200kts,      10000ft: 172.5
+       ;; 300kts,      10000ft: 259.9
+       ;; 400kts,      10000ft: 348.6
+       ;; 500kts,      10000ft: 438.8
+       ;; 600kts,      10000ft: 530.7
+       ;; 700kts,      10000ft: 623.6
+       ;; 800kts,      10000ft: 713.1
+       ;; 900kts,      10000ft: 798.4
+       ;; 100kts,      15000ft:  79.4
+       ;; 200kts,      15000ft: 159.5
+       ;; 300kts,      15000ft: 240.8
+       ;; 400kts,      15000ft: 323.9
+       ;; 500kts,      15000ft: 409.1
+       ;; 600kts,      15000ft: 496.6
+       ;; 700kts,      15000ft: 585.7
+       ;; 800kts,      15000ft: 671.2
+       ;; 900kts,      15000ft: 751.5
+       ;; 100kts,      20000ft:  73.1
+       ;; 200kts,      20000ft: 147.0
+       ;; 300kts,      20000ft: 222.4
+       ;; 400kts,      20000ft: 299.9
+       ;; 500kts,      20000ft: 380.1
+       ;; 600kts,      20000ft: 463.1
+       ;; 700kts,      20000ft: 548.0
+       ;; 800kts,      20000ft: 629.5
+       ;; 900kts,      20000ft: 705.5
+       ;; 100kts,      25000ft:  67.1
+       ;; 200kts,      25000ft: 135.0
+       ;; 300kts,      25000ft: 204.7
+       ;; 400kts,      25000ft: 276.7
+       ;; 500kts,      25000ft: 351.7
+       ;; 600kts,      25000ft: 430.2
+       ;; 700kts,      25000ft: 510.6
+       ;; 800kts,      25000ft: 587.9
+       ;; 900kts,      25000ft: 660.2
+       ;; 100kts,      30000ft:  61.3
+       ;; 200kts,      30000ft: 123.6
+       ;; 300kts,      30000ft: 187.6
+       ;; 400kts,      30000ft: 254.3
+       ;; 500kts,      30000ft: 324.2
+       ;; 600kts,      30000ft: 398.0
+       ;; 700kts,      30000ft: 473.7
+       ;; 800kts,      30000ft: 546.5
+       ;; 900kts,      30000ft: 615.0
+       ;; 100kts,      35000ft:  55.8
+       ;; 200kts,      35000ft: 112.6
+       ;; 300kts,      35000ft: 171.3
+       ;; 400kts,      35000ft: 232.7
+       ;; 500kts,      35000ft: 297.6
+       ;; 600kts,      35000ft: 366.7
+       ;; 700kts,      35000ft: 437.4
+       ;; 800kts,      35000ft: 505.6
+       ;; 900kts,      35000ft: 570.0
+       ;; 100kts,      40000ft:  49.8
+       ;; 200kts,      40000ft: 100.5
+       ;; 300kts,      40000ft: 153.0
+       ;; 400kts,      40000ft: 208.2
+       ;; 500kts,      40000ft: 266.8
+       ;; 600kts,      40000ft: 329.6
+       ;; 700kts,      40000ft: 394.3
+       ;; 800kts,      40000ft: 457.0
+       ;; 900kts,      40000ft: 516.7
+       ;; 100kts,      45000ft:  44.1
+       ;; 200kts,      45000ft:  89.1
+       ;; 300kts,      45000ft: 135.8
+       ;; 400kts,      45000ft: 185.1
+       ;; 500kts,      45000ft: 237.6
+       ;; 600kts,      45000ft: 294.1
+       ;; 700kts,      45000ft: 352.7
+       ;; 800kts,      45000ft: 409.9
+       ;; 900kts,      45000ft: 464.7
+
+;; Clojure:
+
+(doseq [alt (range 0.0 50000.0 5000.0)
+        spd (range 100.0 1000.0 100.0)]
+  (printf "%10.0fkts, %10.0fft: %s\n" spd alt (@#'mission/compute-speed spd alt)))
+
+(let [alt 34000.0
+      spd 460.0]
+  (printf "%10.0fkts, %10.0fft: %s\n" spd alt (@#'mission/compute-speed spd alt)))
+
+(->> @smpu
+     mission/flights
+     first
+     ::mission/waypoints
+     (map #(#'mission/waypoint-description @smpu %))
+     pprint)
+
+(-> @smpu strings :fn )
+
+(->> @smpu
+     mission/flights
+     rand-nth
+     ::mission/waypoints
+     rand-nth
+     (into (sorted-map))
+     pprint)
+
+(time/difference-hms {:day 1 :hour 14 :minute 19 :second 06 :millisecond 0}
+                     {:day 1 :hour 14 :minute 39 :second 06 :millisecond 0})

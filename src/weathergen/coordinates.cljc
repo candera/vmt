@@ -26,6 +26,13 @@
   [nm]
   (* nm ft-per-nm))
 
+(defn fgrid->nm
+  "Converts from Falcon grid (km) to nm"
+  [km]
+  (* km nm-per-km))
+
+(def km->nm fgrid->nm)
+
 (defn ft->nm
   [ft]
   (/ ft ft-per-nm))
@@ -124,3 +131,5 @@
           d [dx dy]]
       {:heading (math/heading d)
        :distance (-> d math/magnitude (* nm-per-km))})))
+
+

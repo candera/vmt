@@ -4,7 +4,8 @@
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
-                                spy get-env log-env)]))
+                                spy get-env log-env)]
+            [weathergen.util :as util :refer [has-flag?]]))
 
 ;;; Cross-platform error support
 (def all-errors #?(:clj Throwable
@@ -66,9 +67,9 @@
                       (take-while #(-> % .charCodeAt zero? not))
                       count))))
 
-#_(defn fixed-string
+(defn fixed-string
   "Octet spec for a string of a fixed size. Removes trailing null
-  characters, if any."
+  characters, if any, unline `buf/string`."
   [size]
   (let [spc (buf/string size)]
     (reify
@@ -84,7 +85,7 @@
       (write [_ buff pos value]
         (buf/write! buff spc value {:offset pos})))))
 
-(def fixed-string buf/string)
+#_(def fixed-string buf/string)
 
 (defn larray
   "Octet spec for a length prefixed array."
@@ -147,7 +148,7 @@
                                       item-spec
                                       {:offset pos})]
         [datasize (->> (for [[flag mask] m]
-                         (when-not (zero? (bit-and val mask))
+                         (when (has-flag? val mask)
                            flag))
                        (remove nil?)
                        set)]))))
