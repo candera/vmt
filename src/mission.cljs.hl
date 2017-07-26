@@ -52,6 +52,9 @@
    :id :mission-info
    :sections [:mission-info-section {}
               :save-briefing-section {}]}
+  {:title "Map"
+   :id :map-controls
+   :sections [:map-controls-section {}]}
   {:title    "Air Forces"
    :id       :air-forces
    :sections [:air-forces-section {}]}

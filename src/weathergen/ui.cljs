@@ -13,7 +13,7 @@
              :refer [a
                      br
                      cond-tpl
-                     defelem div do! do-watch
+                     datalist defelem div do! do-watch
                      fieldset for-tpl
                      hr html
                      if-tpl img input
@@ -285,17 +285,21 @@
                                         (- window-height 140)))]
                   [dim dim])))
 
-(defc display-params {:opacity    0.33
-                      :display    :type
-                      :map        :korea
-                      :mouse-mode :select
-                      :overlay    nil #_:wind
+;; These are *weather* display options
+(defc display-params {:opacity       0.33
+                      :display       :type
+                      ;; :map            :korea
+                      :mouse-mode    :select
+                      :overlay       nil #_:wind
                       :pressure-unit :inhg
-                      :flight-paths nil
-                      :multi-save {:mission-name nil
-                                   :from {:day 1 :hour 5 :minute 0}
-                                   :to {:day 1 :hour 10 :minute 0}
-                                   :step 15}})
+                      :flight-paths  nil
+                      :multi-save    {:mission-name nil
+                                      :from         {:day 1 :hour 5 :minute 0}
+                                      :to           {:day 1 :hour 10 :minute 0}
+                                      :step         15}})
+
+(defc map-display {:brightness 0.5
+                   :text-size  1.0})
 
 (defc selected-cell nil)
 
@@ -4304,7 +4308,65 @@
     (buttons/a-button
      :toggle (-> mission :candidate-installs count (= 1) cell=)
      :click #(save-briefing (-> @mission :candidate-installs first) @visible-sides)
-     "Save Briefing (.vmtb)"))))
+     "Save Briefing (.vmtb)")
+    (help-icon [:mission-info :save-briefing]))))
+
+(defn map-controls-section
+  "Controls for how the map is displayed."
+  [_]
+  (control-section
+   :title (with-help [:map-controls :overview] "Map Display Options")
+   (table
+    (tr
+     (td "Map brightness:")
+     (let [id (str (gensym))]
+       (td
+        (datalist
+         :id id
+         (for [val (range 0 101 25)]
+           (option :value val)))
+        (input {:type  "range"
+                :list id
+                :min   0
+                :max   100
+                :value (-> map-display :brightness (* 100) cell=)
+                :input #(swap! map-display
+                               assoc
+                               :brightness
+                               (/ @% 100.0))})))
+     (td
+      (buttons/a-button
+       :click #(swap! map-display
+                      assoc
+                      :brightness
+                      0.5)
+       "Reset")
+      (help-icon [:map-controls :reset-brightness])))
+    (tr
+     (td "Text size:")
+     (let [id (str (gensym))]
+       (td
+        (datalist
+         :id id
+         (for [val (range 0 201 50)]
+           (option :value val)))
+        (input {:type  "range"
+                :list  id
+                :min   0
+                :max   200
+                :value (-> map-display :text-size (* 200) cell=)
+                :input #(swap! map-display
+                               assoc
+                               :text-size
+                               (/ @% 200.0))})))
+     (td
+      (buttons/a-button
+       :click #(swap! map-display
+                      assoc
+                      :text-size
+                      0.5)
+       "Reset")
+      (help-icon [:map-controls :reset-text-size]))))))
 
 ;;; General layout
 
@@ -4434,6 +4496,7 @@
                                         scroll-container (::scroll-container opts)]
                                     (ctor scroll-container)))
    :air-forces-section          air-forces-section
+   :map-controls-section        map-controls-section
    :oob-section                 order-of-battle-section
    :test-section                test-section})
 
