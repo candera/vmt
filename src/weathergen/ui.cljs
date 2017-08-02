@@ -2021,7 +2021,7 @@
 (defn airbase-info-overlay
   "Renders the airbase portion of the info overlay."
   [mission airbase]
-  (let [icon-scale        0.05   ; How big the icons are: converts from
+  (let [icon-scale        0.05 ; How big the icons are: converts from
                                         ; pixels in the Falcon resources to SVG
                                         ; coordinates
         coords            (formula-of [mission airbase] (coords/fgrid->weather mission (:x airbase) (:y airbase)))
@@ -2066,140 +2066,170 @@
                                            :h (* h icon-scale)
                                            :d (-> cy (* icon-scale))}))
               show-airbase-status?    (path-lens map-display [:show-airbase-status?])
-              show-airbase-squadrons? (path-lens map-display [:show-airbase-squadrons?])]
+              show-airbase-squadrons? (path-lens map-display [:show-airbase-squadrons?])
+              width                   1.0
+              height                  0.2
+              x                       (cell= (+ (:x dims) (/ (- (:w dims) width) 2)))
+              y                       (cell= (- (:y dims) (* 2 height)))]
           (svg/g
-           :debug "icon-and-info"
-           :svg/class (formula-of [highlighted?]
-                        (when highlighted? comm/pulse-class))
-           (let [width  1.0
-                 height 0.2
-                 x      (cell= (+ (:x dims) (/ (- (:w dims) width) 2)))
-                 y      (cell= (- (:y dims) (* 2 height)))]
-             (when-tpl show-airbase-status?
-               (svg/g
-                :debug "status"
-                :transform (cell= (comm/svg-scale map-icon-scale))
-                (svg/rect
-                 :x x
-                 :y y
-                 :width width
-                 :height height
-                 :stroke "black"
-                 :stroke-width 0.03
-                 :fill "white")
-                (svg/rect
-                 :x x
-                 :y y
-                 :width (-> width (* status) (/ 100) cell=)
-                 :height height
-                 :stroke "black"
-                 :stroke-width 0.03
-                 :fill (cell= (airbase-status-color status))))))
-           (let [text-y-offset (cell= (+ label-spacing (* map-icon-scale (+ (:y dims) (:h dims)))))
-                 bbox-trigger  (cell= #{included-squadrons label-style text-y-offset})]
-             (with-bbox :y ty :w tw :h th :watch bbox-trigger
-               [^js/SVGElement t (svg/text
-                                  :font-size "3.5%"
-                                  :font-family "Source Code Pro"
-                                  :font-weight 100
-                                  :x (-> dims :x (+ (/ (- (:w dims) tw) 2)) cell=)
-                                  :y line-height
-                                  :stroke color
-                                  :stroke-width 0.03
-                                  :fill color
-                                  (svg/tspan label)
-                                  (for-tpl [indexed (formula-of [airbase included-squadrons label-style]
-                                                      (when (= label-style :all)
-                                                        (->> airbase
-                                                             ::mission/squadrons
-                                                             (filter included-squadrons)
-                                                             (map-indexed vector))))]
-                                    (cell-let [[i squadron] indexed]
-                                      (svg/tspan
-                                       :y (-> i (+ 2) (* line-height) cell=)
-                                       :text-anchor "start"
-                                       :x (-> tw (/ 2) - cell=)
-                                       :dx "0.75em"
-                                       (cell= (gstring/format "%d %s"
-                                                              (->> squadron ::mission/aircraft :quantity)
-                                                              (->> squadron ::mission/aircraft :airframe)))))))]
-               (svg/g
-                (when-tpl (-> label-style (not= :nothing) cell=)
-                  (svg/g
-                   :debug "label"
-                   :transform (cell= (comm/svg-translate 0 text-y-offset))
-                   (svg/g
-                    :transform (cell= (comm/svg-scale map-text-scale))
-                    (when-tpl map-show-text-background?
-                      (let [padding 0.1
-                            tx      (formula-of [dims tw]
-                                      (-> dims :x (+ (/ (- (:w dims) tw) 2))))
-                            rx      (formula-of [tx] (- tx padding))
-                            ry      (formula-of [ty] (- ty padding))
-                            rw      (formula-of [tw] (+ tw padding padding))
-                            rh      (formula-of [th] (+ th padding padding))]
-                        (svg/g
-                         :debug "background"
-                         ;; :transform (cell= (comm/svg-translate (/ tw -2) 0))
-                         (svg/rect
-                          :x rx
-                          :y ry
-                          :width rw
-                          :height rh
-                          :opacity 0.4
-                          :fill contrasting-color
-                          :stroke "none"))))
-                    t)))
+           :debug "airbase-and-highlighter"
+           ;; :opacity (formula-of [highlighted-airbase airbase]
+           ;;            (cond
+           ;;              (= highlighted-airbase airbase) 1
+           ;;              highlighted-airbase 0.7
+           ;;              :else 1))
+           (when-tpl highlighted?
+             (svg/g
+              :debug "highlights"
+              (svg/circle
+               :debug "moving highlight"
+               :svg/class (formula-of [highlighted?]
+                            (when highlighted? comm/collapse-class))
+               :x x
+               :y y
+               :r 60
+               :stroke "yellow"
+               :stroke-width 2
+               :stroke-dasharray "5, 5"
+               :fill "none"
+               :transform (comm/svg-scale 0))
+              (svg/circle
+               :debug "static highlight"
+               :x x
+               :y y
+               :r 2.5
+               :stroke "none"
+               :fill "yellow"
+               :opacity 0.35)))
+           (svg/g
+            :debug "icon-and-info"
+            :svg/class (formula-of [highlighted?]
+                         (when highlighted? comm/pulse-class))
+            (when-tpl show-airbase-status?
+              (svg/g
+               :debug "status"
+               :transform (cell= (comm/svg-scale map-icon-scale))
+               (svg/rect
+                :x x
+                :y y
+                :width width
+                :height height
+                :stroke "black"
+                :stroke-width 0.03
+                :fill "white")
+               (svg/rect
+                :x x
+                :y y
+                :width (-> width (* status) (/ 100) cell=)
+                :height height
+                :stroke "black"
+                :stroke-width 0.03
+                :fill (cell= (airbase-status-color status)))))
+            (let [text-y-offset (cell= (+ label-spacing (* map-icon-scale (+ (:y dims) (:h dims)))))
+                  bbox-trigger  (cell= #{included-squadrons label-style text-y-offset})]
+              (with-bbox :y ty :w tw :h th :watch bbox-trigger
+                [^js/SVGElement t (svg/text
+                                   :font-size "3.5%"
+                                   :font-family "Source Code Pro"
+                                   :font-weight 100
+                                   :x (-> dims :x (+ (/ (- (:w dims) tw) 2)) cell=)
+                                   :y line-height
+                                   :stroke color
+                                   :stroke-width 0.03
+                                   :fill color
+                                   (svg/tspan label)
+                                   (for-tpl [indexed (formula-of [airbase included-squadrons label-style]
+                                                       (when (= label-style :all)
+                                                         (->> airbase
+                                                              ::mission/squadrons
+                                                              (filter included-squadrons)
+                                                              (map-indexed vector))))]
+                                     (cell-let [[i squadron] indexed]
+                                       (svg/tspan
+                                        :y (-> i (+ 2) (* line-height) cell=)
+                                        :text-anchor "start"
+                                        :x (-> tw (/ 2) - cell=)
+                                        :dx "0.75em"
+                                        (cell= (gstring/format "%d %s"
+                                                               (->> squadron ::mission/aircraft :quantity)
+                                                               (->> squadron ::mission/aircraft :airframe)))))))]
                 (svg/g
-                 :transform (cell= (comm/svg-scale map-icon-scale))
-                 (when-tpl show-airbase-squadrons?
+                 (when-tpl (-> label-style (not= :nothing) cell=)
                    (svg/g
-                    :debug "squadron icons"
-                    :transform (comm/svg-translate 0.5 0)
-                    (let [squadron-icon-scale 0.6
-                          squadrons           (formula-of [airbase included-squadrons]
-                                                (->> airbase
-                                                     ::mission/squadrons
-                                                     (filter included-squadrons)
-                                                     (reduce (fn [[squadrons cum-width] squadron]
-                                                               (let [width (->> squadron
-                                                                                ::mission/image
-                                                                                :image-data
-                                                                                :size
-                                                                                first)]
-                                                                 [(conj squadrons (assoc squadron
-                                                                                         ::x-offset
-                                                                                         cum-width))
-                                                                  (+ cum-width (* width icon-scale squadron-icon-scale) 0.1)]))
-                                                             [[] 0])
-                                                     first))]
-                      (for-tpl [squadron squadrons]
-                        (let [info (formula-of [squadron]
-                                     (let [image                (::mission/image squadron)
-                                           {:keys [image-data]} image
-                                           {:keys [size]}       image-data
-                                           [w h]                size]
-                                       {:w   (* icon-scale squadron-icon-scale w)
-                                        :h   (* icon-scale squadron-icon-scale h)
-                                        :src (get-image mission image)}))]
-                          (svg/image
-                           :debug (cell= (gstring/format "ab/y: %f, ab/h: %f, sq/h: %f"
-                                                         (:y dims)
-                                                         (:h dims)
-                                                         (:h info)))
-                           :xlink-href (cell= (:src info))
-                           :x (cell= (-> squadron ::x-offset (+ (/ (:w dims) 2))))
-                           :y (cell= (+ (:y dims) (- (:h dims) (:h info))))
-                           :width (cell= (:w info))
-                           :height (cell= (:h info))))))))
+                    :debug "label"
+                    :transform (cell= (comm/svg-translate 0 text-y-offset))
+                    (svg/g
+                     :transform (cell= (comm/svg-scale map-text-scale))
+                     (when-tpl map-show-text-background?
+                       (let [padding 0.1
+                             tx      (formula-of [dims tw]
+                                       (-> dims :x (+ (/ (- (:w dims) tw) 2))))
+                             rx      (formula-of [tx] (- tx padding))
+                             ry      (formula-of [ty] (- ty padding))
+                             rw      (formula-of [tw] (+ tw padding padding))
+                             rh      (formula-of [th] (+ th padding padding))]
+                         (svg/g
+                          :debug "background"
+                          ;; :transform (cell= (comm/svg-translate (/ tw -2) 0))
+                          (svg/rect
+                           :x rx
+                           :y ry
+                           :width rw
+                           :height rh
+                           :opacity 0.4
+                           :fill contrasting-color
+                           :stroke "none"))))
+                     t)))
                  (svg/g
-                  :debug "airbase icon"
-                  (svg/image
-                   :xlink-href (cell= (get-image mission (::mission/image airbase)))
-                   :x (-> dims :x cell=)
-                   :y (-> dims :y cell=)
-                   :width (-> dims :w cell=)
-                   :height (-> dims :h cell=))))))))))))))
+                  :transform (cell= (comm/svg-scale map-icon-scale))
+                  (when-tpl show-airbase-squadrons?
+                    (svg/g
+                     :debug "squadron icons"
+                     :transform (comm/svg-translate 0.5 0)
+                     (let [squadron-icon-scale 0.6
+                           squadrons           (formula-of [airbase included-squadrons]
+                                                 (->> airbase
+                                                      ::mission/squadrons
+                                                      (filter included-squadrons)
+                                                      (reduce (fn [[squadrons cum-width] squadron]
+                                                                (let [width (->> squadron
+                                                                                 ::mission/image
+                                                                                 :image-data
+                                                                                 :size
+                                                                                 first)]
+                                                                  [(conj squadrons (assoc squadron
+                                                                                          ::x-offset
+                                                                                          cum-width))
+                                                                   (+ cum-width (* width icon-scale squadron-icon-scale) 0.1)]))
+                                                              [[] 0])
+                                                      first))]
+                       (for-tpl [squadron squadrons]
+                         (let [info (formula-of [squadron]
+                                      (let [image                (::mission/image squadron)
+                                            {:keys [image-data]} image
+                                            {:keys [size]}       image-data
+                                            [w h]                size]
+                                        {:w   (* icon-scale squadron-icon-scale w)
+                                         :h   (* icon-scale squadron-icon-scale h)
+                                         :src (get-image mission image)}))]
+                           (svg/image
+                            :debug (cell= (gstring/format "ab/y: %f, ab/h: %f, sq/h: %f"
+                                                          (:y dims)
+                                                          (:h dims)
+                                                          (:h info)))
+                            :xlink-href (cell= (:src info))
+                            :x (cell= (-> squadron ::x-offset (+ (/ (:w dims) 2))))
+                            :y (cell= (+ (:y dims) (- (:h dims) (:h info))))
+                            :width (cell= (:w info))
+                            :height (cell= (:h info))))))))
+                  (svg/g
+                   :debug "airbase icon"
+                   (svg/image
+                    :xlink-href (cell= (get-image mission (::mission/image airbase)))
+                    :x (-> dims :x cell=)
+                    :y (-> dims :y cell=)
+                    :width (-> dims :w cell=)
+                    :height (-> dims :h cell=)))))))))))))))
 
 (def airbases-info-overlay
   (svg/g
@@ -4268,10 +4298,12 @@
                                                                               color color
                                                                               status status))}))
                                    (inl
-                                    :css (formula-of [airbase]
+                                    :css (formula-of [airbase highlighted-airbase]
                                            {:font-weight  "bold"
                                             :color        (team-color (:owner airbase) :dark-text)
-                                            :margin-right "10px"})
+                                            :margin-right "10px"
+                                            :background   (when (= airbase highlighted-airbase)
+                                                            "lightgoldenrodyellow")})
                                     ab-name)
                                    (inl
                                     :css {:margin-right "5px"}

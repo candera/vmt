@@ -524,17 +524,31 @@
   [& xforms]
   (str/join " " xforms))
 
-;; Provides a pulsing effect for highlight animation
 (register-styles!
- ::pulse
- [[(css-style/at-keyframes (class-for ::pulse-animation)
+ ::animations
+ [
+  ;; A pulsing effect for highlight animation
+  [(css-style/at-keyframes (class-for ::pulse-animation)
                            [:from {:opacity 1}]
                            [:to   {:opacity 0}])]
   [(class-selector-for ::pulse) {:animation-duration        "0.45s"
                                  :animation-name            (class-for ::pulse-animation)
                                  :animation-iteration-count "infinite"
                                  :animation-timing-function "ease-in-out"
-                                 :animation-direction       "alternate"}]])
+                                 :animation-direction       "alternate"
+                                 :animation-delay           "0.45s"}]
+  ;; A one-time collapsing scale
+  [(css-style/at-keyframes (class-for ::collapse-animation)
+                           [:from {:transform         (svg-scale 1)
+                                   :stroke-dashoffset 0}]
+                           [:to   {:transform         (svg-scale 0.02)
+                                   :stroke-dashoffset 50}])]
+  [(class-selector-for ::collapse) {:animation-duration        "0.45s"
+                                    :animation-name            (class-for ::collapse-animation)
+                                    :animation-iteration-count 1
+                                    :animation-timing-function "ease-out"
+                                    :animation-direction       "normal"}]])
 
 (def pulse-class (class-for ::pulse))
+(def collapse-class (class-for ::collapse))
 
