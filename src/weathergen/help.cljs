@@ -1,8 +1,9 @@
 (ns weathergen.help
   (:require [goog.string :as gstring]
             [goog.string.format]
-            [hoplon.core :refer [b dl dt dd div em i li p span ul]]
+            [hoplon.core :refer [b dl dt dd div em i img li ol p span strong ul with-timeout]]
             [hoplon.svg :as svg]
+            [javelin.core :refer [cell]]
             [weathergen.wind :as wind]))
 
 ;; (set! *warn-on-infer* true)
@@ -26,7 +27,7 @@
 ;; help in more than one place, and if we simply return a node, it
 ;; will get moved rather than cloned when we attach it to a new place
 ;; in the DOM.
-(def content
+(def help-content-ctors
   {:wind-stability-areas
    #(p "Wind stability areas define regions of the map where the wind
    will not be affected by the weather. Although cloud cover,
@@ -555,4 +556,142 @@ forward and backward in time. ")
                 (div :css {:display "inline-block"
                            :vertical-align "middle"}
                      (wind-barb speed heading))
-                description)))))}})
+                description)))))
+    :mission-time
+    #(p "Shows the time in the Falcon world in the format Day/Hour:Minute.")
+    :weather-time
+    #(p "Shows for what time the weather is being displayed (if
+     weather is being shown). Time is displayed in the format
+     Day/Hour:Minute.")}
+
+   :mission-info
+   {:save-briefing
+    #(div
+      (p "Saves a VMT briefing file. This is a file with a name ending in
+     '.vmtb' that contains information about the mission meant to be
+     shared with mission participants. Pilots can open this file in
+     VMT to view weather and the disposition of friendly forces.
+     Information about hidden enemy forces, future weather, and other
+     information available only to the mission creator will not be
+     viewable.")
+      (p "Check the boxes below the alliances you wish briefing
+      recipients to be able to view in full. For instance, check the
+      box below ROK/US to enable participants to see all information
+      about the ROK and US forces. This includes all flights, ground
+      forces, etc. etc.")
+      (p "Note that some information will still be available for
+      unchecked countries. For instance, the home airbase and strength
+      of enemy squadrons is always available.")
+      (p "Briefing files must be opened on a machine with the
+      indicated version of Falcon BMS and theater installed."))}
+
+   :air-forces
+   {:airbase-filtering
+    #(p "Controls whether airbases will be shown on the map and in
+      the list below based on their status and whether or not they
+      have any aircraft stationed there.")
+
+    :hide-no-squadron-airbases
+    #(p "If checked, airbases that have no airbases stationed at them
+    will hidden. Note that only squadrons of selected types will be
+    considered - a base that has only fighters will be hidden if
+    'Fighter' is unchecked under 'Squadron Types'.")
+
+    :hide-zero-status-airbases
+    #(p "If checked, airbases that are unable to sortie (i.e. that are
+     at 0% status), will not be shown.")
+
+    :squadron-types
+    #(p "Selects which squadron types will be displayed. If a box is
+     not checked, it will be as if squadrons consisting of aircraft of
+     that type do not exist - they will not be displayed on the map or
+     in the list below.")
+
+    :squadron-type-buttons
+    #(p "Use these buttons to quickly check or uncheck all the
+    squadron types.")
+
+    :airbases-and-squadrons
+    #(div
+      (p "This section displays detailed information about all airbases and the squadrons stationed at them. The information is arranged hierarchically: alliances are at the top level, then airbases, then detailed status for each airbase, including the squadrons stationed at each.")
+      (img :src "images/air-forces-tree-help.png")
+      (ol
+       (li (strong "Expand/collapse.")
+           " Use this to show or hide details about this airbase.")
+       (li (strong "Display on map.")
+           " Check this box to have the airbase displayed on the map.")
+       (li (strong "Airbase icon.")
+           " The icon for this airbase as it will be shown on the map.")
+       (li (strong "Airbase status.")
+           " The status of this airbase. The box is colored in
+           proportion to how close to fully operational the airbase
+           is. Green fill indicates status above 75%. Orange status
+           indicates status between 25% and 75%. Red indicates status
+           below 25%. Completely white indicates an airbase that is at
+           0%.")
+       (li (strong "Airbase name.")
+           " The name of the airbase. Colored to indicate the current owner.")
+       (li (strong "Airbase squadron icons.")
+           " Icons for the squadrons deployed at this airbase. Colored
+           to indicate nationality.")
+       (li (strong "Airbase status.")
+           " Status of the airbase.")
+       (li (strong "Airbase squadron details.")
+           " Information about the type and strength of the squadrons
+           deployed at this airbase.")))}})
+
+(defn with-help
+  "Returns UI for content with embedded help. `help-path` is a vector
+  path into the `content` map."
+  ([help-path content] (with-help help-path {} content))
+  ([help-path opts content]
+   (let [help-ctor                 (get-in help-content-ctors help-path)
+         {:keys [underline-color
+                 omit-underline?]}     opts
+         open?                     (cell false)
+         doc-click                 (fn click-fn [e]
+                                     (.removeEventListener js/document "click" click-fn)
+                                     (reset! open? false))]
+     (div
+      :class "help"
+      :css (merge {:cursor        "url(images/helpcursor.png) 4 4, auto"
+                   :border-bottom (when-not omit-underline?
+                                    (if help-ctor
+                                      (str "dashed 1px " (or underline-color "blue"))
+                                      ;; This is to clue me in to write help.
+                                      "dashed 2px red"))}
+                  opts)
+      :click (fn [e]
+               (when (swap! open? not)
+                 (with-timeout 0
+                   (.addEventListener js/document "click" doc-click))))
+      (div
+       :fade-toggle open?
+       :class "content"
+       :css {:white-space "normal"
+             :font-weight "normal"}
+       (if help-ctor
+         (help-ctor)
+         [(p "Help has not yet been written for this feature.")
+          (p (str help-path))]))
+      content))))
+
+(defn help-icon
+  [help-path]
+  (let [help? (get-in help-content-ctors help-path)]
+    (with-help help-path
+      {:omit-underline? true}
+      ;; A circle - maybe want to make this a control at some point
+      (div
+       :css {:width "18px"
+             :height "18px"
+             :color "white"
+             ;; The color change reminds me to write help
+             :background (if help? "darkblue" "darkred")
+             :border-radius "9px"
+             :text-align "center"
+             :display "inline-block"
+             :margin-right "3px"
+             :margin-left "3px"
+             :font-size "80%"}
+       "?"))))

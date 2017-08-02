@@ -74,7 +74,10 @@
   (comp
    (repl-server)
    (watch)
-   (speak)
+   (notify :theme "ordinance"
+           :audible true
+           :visual true
+           :title "VMT")
    (hoplon)
    ;; Doesn't work with web workers
    ;; Tried this fix from Alan, but it's throwing an exception in the

@@ -5,6 +5,7 @@
             [clojure.string :as str]
             [garden.core :refer [css]]
             [garden.selectors :as css-sel]
+            [garden.stylesheet :as css-style]
             [goog.string :as gstring]
             [goog.string.format]
             [hoplon.storage-atom :refer [local-storage]]
@@ -93,7 +94,7 @@
           styles (cell= (css garden))]
       (swap! registered-styles conj key)
       (when-dom head
-        #(.appendChild head (style :type "text/css" styles))))))
+        #(.appendChild head (style :type "text/css" :debug (str key) styles))))))
 
 (defn register-class!
   "Adds a style to the head of a document for abstract class `key`.
@@ -502,3 +503,38 @@
   (local-storage
    (cell default)
    (str key "-" (hash default))))
+
+(defn svg-scale
+  "Returns an SVG scale string."
+  ([s] (gstring/format "scale(%f)" s))
+  ([x y] (gstring/format "scale(%f,%f)" x y)))
+
+(defn svg-translate
+  "Returns an SVG translate string."
+  [x y]
+  (gstring/format "translate(%f,%f)" x y))
+
+(defn svg-rotate
+  "Returns an SVG rotate string."
+  [deg]
+  (gstring/format "rotate(%f)" deg))
+
+(defn svg-xform-combine
+  "Combines xforms into a single SVG transformation string"
+  [& xforms]
+  (str/join " " xforms))
+
+;; Provides a pulsing effect for highlight animation
+(register-styles!
+ ::pulse
+ [[(css-style/at-keyframes (class-for ::pulse-animation)
+                           [:from {:opacity 1}]
+                           [:to   {:opacity 0}])]
+  [(class-selector-for ::pulse) {:animation-duration        "0.45s"
+                                 :animation-name            (class-for ::pulse-animation)
+                                 :animation-iteration-count "infinite"
+                                 :animation-timing-function "ease-in-out"
+                                 :animation-direction       "alternate"}]])
+
+(def pulse-class (class-for ::pulse))
+

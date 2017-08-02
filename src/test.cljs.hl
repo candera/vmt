@@ -62,11 +62,13 @@
  (ui/head)
  (let [b (body)]
    (b
-    (let [mission (cell nil)
+    (let [mission      (cell nil)
           flight-layer (flights/create mission
-                                       (cell 1.0)
-                                       (formula-of [mission]
-                                         (->> mission mission/teams (map mission/team-number) set)))]
+                                       {:map-zoom          (cell 1.0)
+                                        :visible-teams     (formula-of [mission]
+                                                             (->> mission mission/teams (map mission/team-number) set))
+                                        :map-text-scale    (cell 1.0)
+                                        :flight-path-scale (cell 1.0)})]
       (formula-of [mission]
         (.log js/console (clj->js (map mission/team-number (mission/teams mission)))))
       (div
@@ -77,20 +79,20 @@
        (let [ctor (:controls-fn flight-layer)]
          (ctor b))))
     #_(let [latched? (cell false)
-            element (div
-                     :class "element"
-                     :css {:background "green"
-                           :color "white"
-                           :width (px 100)
-                           :height (px 100)}
-                     "Element")
-            content (div
-                     :class "content"
-                     :css {:background "yellow"
-                           :color "black"
-                           :width (px 200)
-                           :height (px 150)}
-                     "Content")
+            element  (div
+                      :class "element"
+                      :css {:background "green"
+                            :color      "white"
+                            :width      (px 100)
+                            :height     (px 100)}
+                      "Element")
+            content  (div
+                      :class "content"
+                      :css {:background "yellow"
+                            :color      "black"
+                            :width      (px 200)
+                            :height     (px 150)}
+                      "Content")
             ;; element (div
             ;;          (div
             ;;           :toggle latched?
@@ -128,45 +130,45 @@
          element
          content))
     #_(grids/table-grid
-       :data [{:foo 1
-               :bar 2
+       :data [{:foo  1
+               :bar  2
                :baaz "a"
                :quux "hi"}
-              {:foo 3
-               :bar 4
+              {:foo  3
+               :bar  4
                :baaz "b"
                :quux "there"}
-              {:foo 10
-               :bar 2034234
+              {:foo  10
+               :bar  2034234
                :baaz "c"
                :quux "long words"}]
        :row-attrs (constantly {})
        :hidden-columns hidden-columns
        :fixed-columns (cell [])
        :movable-columns movable-columns
-       :columns {:foo {:title "foo"
-                       :formatter (fn [item]
-                                    (formula-of [item]
-                                      (:foo item)))
-                       :sort-key :foo
-                       :css (fn [item rownum]
-                              (formula-of [item rownum]
-                                {:background-color (if (odd? rownum)
-                                                     "purple"
-                                                     "pink")}))}
-                 :bar {:title "bar"
-                       :formatter (fn [item]
-                                    (formula-of [item]
-                                      (:bar item)))
-                       :sort-key :bar}
-                 :baaz {:title "baaz"
+       :columns {:foo  {:title     "foo"
+                        :formatter (fn [item]
+                                     (formula-of [item]
+                                       (:foo item)))
+                        :sort-key  :foo
+                        :css       (fn [item rownum]
+                                     (formula-of [item rownum]
+                                       {:background-color (if (odd? rownum)
+                                                            "purple"
+                                                            "pink")}))}
+                 :bar  {:title     "bar"
+                        :formatter (fn [item]
+                                     (formula-of [item]
+                                       (:bar item)))
+                        :sort-key  :bar}
+                 :baaz {:title     "baaz"
                         :formatter (fn [item]
                                      (formula-of [item]
                                        (:baaz item)))
-                        :sort-key :baaz}
-                 :quux {:title "quux"
+                        :sort-key  :baaz}
+                 :quux {:title     "quux"
                         :formatter (fn [item]
                                      (formula-of [item]
                                        (:quux item)))
-                        :sort-key :quux}}))))
+                        :sort-key  :quux}}))))
 

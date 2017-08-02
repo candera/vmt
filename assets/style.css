@@ -222,6 +222,7 @@ rect.inclement {
     left: 28px;
     border: 1px solid black;
     background: #f9f29a;
+    color: black;
     width: auto;
     min-width: 300px;
     z-index: 100;
