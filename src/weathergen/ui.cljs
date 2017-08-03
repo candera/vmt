@@ -2095,12 +2095,14 @@
                :transform (comm/svg-scale 0))
               (svg/circle
                :debug "static highlight"
+               :svg/class (formula-of [highlighted?]
+                            (when highlighted? comm/delayed-fade-out-class))
                :x x
                :y y
                :r 2.5
                :stroke "none"
                :fill "yellow"
-               :opacity 0.35)))
+               :opacity 0)))
            (svg/g
             :debug "icon-and-info"
             :svg/class (formula-of [highlighted?]
