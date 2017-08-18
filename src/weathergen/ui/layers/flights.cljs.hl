@@ -135,10 +135,11 @@
   "Returns UI for the info/details display of the flight given a cell for the flight."
   [flight]
   (let [col  (fn col
-               ([title f] (col title {} f))
-               ([title opts f]
+               ([title help-key f] (col title help-key {} f))
+               ([title help-key opts f]
                 (let [{:keys [align]} opts]
-                  {:title        title
+                  {:title        (with-help [:flights :waypoint-columns help-key]
+                                   title)
                    :disable-sort true
                    :sort-key     f
                    :formatter    (fn [waypoint]
@@ -158,11 +159,11 @@
      (table
       :class (comm/class-for ::briefing-summary)
       (tr (td (bold "Mission"))  (td (formula-of [flight]
-                                  (-> flight ::mission/mission :name))))
+                                       (-> flight ::mission/mission :name))))
       (tr (td (bold "Package"))  (td (formula-of [flight]
-                                  (-> flight ::mission/package :name))))
+                                       (-> flight ::mission/package :name))))
       (tr (td (bold "Aircraft")) (td (formula-of [flight]
-                                         (flight-aircraft flight))))
+                                       (flight-aircraft flight))))
       ;;(tr (td "Time on Station") (td "TODO"))
       )
      (hr)
@@ -177,28 +178,69 @@
       :fixed-columns [:number]
       :movable-columns movable-steerpoints-columns
       :hidden-columns hidden-steerpoints-columns
-      :columns {:number      (col "#" {:align :right} ::mission/number)
-                :description (col "Desc" ::mission/description)
-                :action      (col "Action" ::mission/action-name)
-                :enroute     (col "Enroute" ::mission/enroute-action-name)
-                :arrive      (col "Time" #(-> % :arrive (format-time {:seconds? true}) (or "--")))
-                :depart      (col "Depart" #(-> % :depart (format-time {:seconds? true}) (or "--")))
-                :remain      (col "Remain" #(-> %
-                                                ::mission/remain
-                                                (format-time {:omit-day? true :seconds? true})
-                                                (or "--")))
+      :columns {:number      (col "#"
+                                  :number
+                                  {:align :right}
+                                  ::mission/number)
+                :description (col "Desc"
+                                  :description
+                                  ::mission/description)
+                :action      (col "Action"
+                                  :action
+                                  ::mission/action-name)
+                :enroute     (col "Enroute"
+                                  :enroute
+                                  ::mission/enroute-action-name)
+                :arrive      (col "Time"
+                                  :arrive
+                                  #(-> % :arrive (format-time {:seconds? true}) (or "--")))
+                :depart      (col "Depart"
+                                  :depart
+                                  #(-> % :depart (format-time {:seconds? true}) (or "--")))
+                :remain      (col "Remain"
+                                  :remain
+                                  #(-> %
+                                       ::mission/remain
+                                       (format-time {:omit-day? true :seconds? true})
+                                       (or "--")))
                 ;; Couldn't figure out where to get the formation text from
                 ;; :formation (col "Formation" :formation #_::mission/formation-name)
-                :distance    (col "Dist"     {:align :right} #(-> % ::mission/distance format-distance (or "--")))
-                :heading     (col "Hdg"      {:align :right} #(-> % ::mission/heading  format-heading  (or "--")))
-                :speed-cas   (col "CAS"      {:align :right} #(-> % ::mission/speed-cas format-speed (or "--")))
-                :speed-ias   (col "IAS"      {:align :right} #(-> % ::mission/speed-ias format-speed (or "--")))
-                :speed-tas   (col "TAS"      {:align :right} #(-> % ::mission/speed-tas format-speed (or "--")))
-                :speed-gnd   (col "Gnd Spd"  {:align :right} #(-> % ::mission/speed-gnd format-speed (or "--")))
-                :speed-mach  (col "Mach"     {:align :right} #(-> % ::mission/speed-mach format-mach (or "--")))
+                :distance    (col "Dist"
+                                  :distance
+                                  {:align :right}
+                                  #(-> % ::mission/distance format-distance (or "--")))
+                :heading     (col "Hdg"
+                                  :heading
+                                  {:align :right}
+                                  #(-> % ::mission/heading  format-heading  (or "--")))
+                :speed-cas   (col "CAS"
+                                  :speed-cas
+                                  {:align :right}
+                                  #(-> % ::mission/speed-cas format-speed (or "--")))
+                :speed-ias   (col "IAS"
+                                  :speed-ias
+                                  {:align :right}
+                                  #(-> % ::mission/speed-ias format-speed (or "--")))
+                :speed-tas   (col "TAS"
+                                  :speed-tas
+                                  {:align :right}
+                                  #(-> % ::mission/speed-tas format-speed (or "--")))
+                :speed-gnd   (col "Gnd Spd"
+                                  :speed-gnd
+                                  {:align :right}
+                                  #(-> % ::mission/speed-gnd format-speed (or "--")))
+                :speed-mach  (col "Mach"
+                                  :speed-mach
+                                  {:align :right}
+                                  #(-> % ::mission/speed-mach format-mach (or "--")))
                 ;; :speed-locked? (col "Spd lck?" #(if (has-flag? % c/WPF_SPEED_LOCKED) "Yes" "No"))
-                :altitude    (col "Alt"      {:aligh :right} ::mission/altitude)
-                :comments    (col "Comments" ::mission/comments)})
+                :altitude    (col "Alt"
+                                  :altitude
+                                  {:aligh :right}
+                                  ::mission/altitude)
+                :comments    (col "Comments"
+                                  :comments
+                                  ::mission/comments)})
      (hr)
      (div
       :css {:font-weight "bold"
@@ -214,7 +256,8 @@
         :css {:display        "flex"
               :flex-direction "row"
               :flex-wrap      "wrap"}
-        (for-tpl [indexed (cell= (map-indexed vector (::mission/loadouts flight)))]
+        (for-tpl [indexed (formula-of [flight]
+                            (map-indexed vector (::mission/loadouts flight)))]
           (cell-let [[index loadout] indexed
                      {:keys [quantity name]} loadout]
             (div
@@ -325,191 +368,212 @@
                                                                                             (- elem-top 25))}
                                                                           300)))))))))))))))
 
+(defn flight-path-display-controls
+  "Returns a control section for affecting the way flight-paths
+  render on the map."
+  [title state]
+  (control-section
+   :title (with-help [:flights :display-options :overview]
+            title)
+   (let [{:keys [map-flight-path-size]} state
+         {:keys [label key init min max]}
+         {:label "Flight path size:"
+          :key   :map-flight-path-size
+          :init  0
+          :min   -1.0
+          :max   1.0}]
+     (div
+      (with-help [:flights :display-options key]
+        label)
+      (let [id (str (gensym))]
+        (inl
+         :css {:vertical-align "middle"
+               :margin (px 0 5)}
+         (datalist
+          :id id
+          (for [val (range (* 100 min) (* 100 (inc max)) (* (- max min) 25))]
+            (option :value val)))
+         (input {:type  "range"
+                 :list  id
+                 :min   (long (* min 100))
+                 :max   (long (* max 100))
+                 :value (-> map-flight-path-size (* 100) cell=)
+                 :input #(reset! map-flight-path-size
+                                 (/ @% 100.0))})))
+      (inl
+       (buttons/a-button
+        :click #(reset! map-flight-path-size init)
+        "Reset")
+       (help-icon [:flights :display-options (keyword (str "reset-" (name key)))]))))))
+
 (defn controls
   [{:keys [all-flights checked-flights display highlighted-flight
-           map-flight-path-size mission selected-teams visible-teams scroll-container]}]
-  (let [heading (fn heading
-                  ([content] (heading {} content))
-                  ([{:keys [margin-top]} content]
-                   (div
-                    :css {:color         "white"
-                          :background    "black"
-                          :margin-top    (px (or margin-top 15))
-                          :margin-bottom (px 5)
-                          :padding       (px 2)}
-                    content)))]
-    (control-section
-     :title "Flights"
-     (cond-tpl
-       (-> mission not cell=)
-       "No mission loaded"
+           mission selected-teams visible-teams scroll-container]
+    :as state}]
+  (cond-tpl
+    (-> mission not cell=)
+    "No mission loaded"
 
-       (-> all-flights count zero? cell=)
-       "No flights present in the mission"
+    (-> all-flights count zero? cell=)
+    "No flights present in the mission"
 
-       :else
-       (div
-        (fieldset
-         :css {:margin-bottom "3px"}
-         (legend "Mission Key")
+    :else
+    (div
+     (control-section
+      :title (with-help [:flights :mission-key]
+               "Mission Key")
+      :css {:margin-bottom "3px"}
+      (div
+       :css {:display   "flex"
+             :flex-wrap "wrap"
+             :max-width "400px"}
+       (for [[id name] mission-category-names]
          (div
-          :css {:display   "flex"
-                :flex-wrap "wrap"
-                :max-width "400px"}
-          (for [[id name] mission-category-names]
-            (div
-             :css {:white-space "nowrap"}
-             (inl
-              :css {:margin-right "3px"}
-              :click (constantly false)
-              (comm/color-picker
-               :value (formula-of [mission-category-colors] (mission-category-colors id))
-               :change #(swap! mission-category-colors assoc id @%)))
-             (inl :css {:width "70px"} name))))
-         (buttons/a-button
-          :click #(reset! mission-category-colors default-mission-category-colors)
-          "Reset to defaults"))
-        (heading "Display Options")
-        (let [min  -1.0
-              max  1.0
-              init 0
-              id   (str (gensym))]
-          (div
-           (with-help [:map-controls :flight-path-size]
-             "Flight path size:")
-           (datalist
-            :id id
-            (for [val (range (* 100 min) (* 100 (inc max)) (* (- max min) 25))]
-              (option :value val)))
-           (input
-            :css {:margin-left (px 7)
-                  :margin-right (px 7)
-                  :vertical-align "middle"}
-            :type  "range"
-            :list  id
-            :min   (long (* min 100))
-            :max   (long (* max 100))
-            :value (-> map-flight-path-size (* 100) cell=)
-            :input #(reset! map-flight-path-size
-                            (/ @% 100.0)))
-           (buttons/a-button
-            :click #(reset! map-flight-path-size init)
-            "Reset")))
-        (heading "Team Visibiligy")
-        (comm/team-selector
-         :mission mission
-         :selected-teams selected-teams
-         :selectable-teams visible-teams)
-        (heading "Flight Info")
-        (let [detailed-flight (cell nil)]
-          (grids/table-grid
-           :data (formula-of [mission all-flights selected-teams]
-                   (->> all-flights
-                        (filter #(contains? selected-teams (:owner %)))))
-           :when-empty (text "No flights to show")
-           :row-attrs (fn [flight rownum]
-                        (when (and flight rownum)
-                          {:css        (formula-of [rownum flight highlighted-flight]
-                                         {:background (if (= highlighted-flight flight)
-                                                        "lightgoldenrodyellow"
-                                                        (row-color rownum))})
-                           :mouseenter #(reset! highlighted-flight @flight)
-                           :mouseleave #(reset! highlighted-flight nil)
-                           :click      #(do
-                                          ;; It's confusing if we click something to
-                                          ;; hide it, but it stays visible due to
-                                          ;; highlighting.
-                                          (dosync
-                                           (swap! checked-flights util/toggle-set-membership @flight)
-                                           (reset! highlighted-flight (@checked-flights @flight))))
-                           :class      (cell= {:highlighted (= highlighted-flight flight)})}))
-           :hidden-columns hidden-flights-columns
-           :fixed-columns (cell [:show? :info])
-           :movable-columns movable-flights-columns
-           :columns (let [col (fn [title f]
-                                {:title     title
-                                 :sort-key  #(f @mission %)
+          :css {:white-space "nowrap"}
+          (inl
+           :css {:margin-right "3px"}
+           :click (constantly false)
+           (comm/color-picker
+            :value (formula-of [mission-category-colors] (mission-category-colors id))
+            :change #(swap! mission-category-colors assoc id @%)))
+          (inl :css {:width "70px"} name))))
+      (buttons/a-button
+       :click #(reset! mission-category-colors default-mission-category-colors)
+       "Reset to defaults")
+      (help-icon [:flights :mission-key-reset]))
+     (flight-path-display-controls "Display Options" state)
+     (control-section
+      :title (with-help [:flights :team-visibility]
+               "Team Visibility")
+      (comm/team-selector
+       :mission mission
+       :selected-teams selected-teams
+       :selectable-teams visible-teams))
+     (control-section
+      :title (with-help [:flights :flight-info]
+               "Flight Info")
+      (let [detailed-flight (cell nil)]
+        (grids/table-grid
+         :data (formula-of [mission all-flights selected-teams]
+                 (->> all-flights
+                      (filter #(contains? selected-teams (:owner %)))))
+         :when-empty (text "No flights to show")
+         :row-attrs (fn [flight rownum]
+                      (when (and flight rownum)
+                        {:css        (formula-of [rownum flight highlighted-flight]
+                                       {:background (if (= highlighted-flight flight)
+                                                      "lightgoldenrodyellow"
+                                                      (row-color rownum))})
+                         :mouseenter #(reset! highlighted-flight @flight)
+                         :mouseleave #(reset! highlighted-flight nil)
+                         :click      #(do
+                                        ;; It's confusing if we click something to
+                                        ;; hide it, but it stays visible due to
+                                        ;; highlighting.
+                                        (dosync
+                                         (swap! checked-flights util/toggle-set-membership @flight)
+                                         (reset! highlighted-flight (@checked-flights @flight))))
+                         :class      (cell= {:highlighted (= highlighted-flight flight)})}))
+         :hidden-columns hidden-flights-columns
+         :fixed-columns (cell [:show? :info])
+         :movable-columns movable-flights-columns
+         :columns (let [col (fn [title help-key f]
+                              {:title     (with-help [:flights :columns help-key]
+                                            title)
+                               :sort-key  #(f @mission %)
+                               :formatter (fn [flight]
+                                            (formula-of [mission flight]
+                                              (f mission flight)))})]
+                    {:show?     {:title     (with-help [:flights :columns :show?]
+                                              "Show?")
+                                 :sort-key  (fn [flight]
+                                              (not (@checked-flights flight)))
                                  :formatter (fn [flight]
-                                              (formula-of [mission flight]
-                                                (f mission flight)))})]
-                      {:show?     {:title     "Show?"
-                                   :sort-key  (fn [flight]
-                                                (not (@checked-flights flight)))
-                                   :formatter (fn [flight]
-                                                (cell-let [{:keys [camp-id]} flight]
-                                                  (let [visible? (formula-of [checked-flights flight]
-                                                                   (checked-flights flight))]
-                                                    [(input :camp-id camp-id
-                                                            :type "checkbox"
-                                                            :value visible?)
-                                                     (inl
-                                                      :css {:margin-right   "2px"
-                                                            :vertical-align "middle"}
-                                                      :click (constantly false)
-                                                      (comm/color-picker
-                                                       :value (formula-of [mission flight camp-id display mission-category-colors]
-                                                                (if-let [c (get-in display [camp-id :color])]
-                                                                  c
-                                                                  (flight-mission-color mission
-                                                                                        flight
-                                                                                        mission-category-colors)))
-                                                       :change #(swap! display assoc-in [@camp-id :color] @%)))])))}
-                       :info      {:title        "Info"
-                                   :disable-sort true
-                                   :formatter    (flight-info-formatter detailed-flight scroll-container)}
-                       :combatant {:title     "Who"
-                                   :sort-key  #(->> %
-                                                    :owner
-                                                    (mission/team-name @mission))
-                                   :formatter #(let [team (cell= (:owner %))]
-                                                 (inl
-                                                  :css (cell= {:color (team-color team :dark-text)})
-                                                  (cell= (mission/team-name mission team))))}
-                       :package   (col "Package"
-                                       (fn [mission flight]
-                                         (->> flight
-                                              ::mission/package
-                                              :name)))
-                       :squadron  (col "Squadron"
-                                       (fn [mission flight]
-                                         (->> flight
-                                              ::mission/squadron
-                                              :name)))
-                       :airbase   (col "Airbase"
-                                       (fn [mission flight]
-                                         (some->> flight
-                                                  ::mission/airbase
-                                                  :name)))
-                       :airframe  (col "Aircraft"
-                                       (fn [mission flight]
-                                         (flight-aircraft flight)))
-                       :callsign  (col "Callsign"
-                                       (fn [_ flight] (:name flight)))
-                       :mission   {:title     "Mission"
-                                   :sort-key  (fn [flight]
-                                                (->> flight ::mission/mission :name))
-                                   :formatter (fn [flight]
-                                                (formula-of [flight]
-                                                  (-> flight ::mission/mission :name)))
-                                   :css       (fn [flight rownum]
-                                                (formula-of [mission flight mission-category-colors rownum]
-                                                  (let [color    (flight-mission-color mission
-                                                                                       flight
-                                                                                       mission-category-colors)
-                                                        contrast (comm/contrasting color
-                                                                                   row-tertiary-color
-                                                                                   (row-color rownum))]
-                                                    {:background contrast
-                                                     :color      color})))}
-                       :takeoff   (col "T/O"
-                                       (fn [_ flight]
-                                         (->> flight :waypoints first :depart format-time)))
-                       :tot       (col "TOT"
-                                       (fn [_ flight]
-                                         (->> flight :time-on-target format-time)))
-                       :egress    (col "Egress"
-                                       (fn [_ flight]
-                                         (->> flight :mission-over-time format-time)))}))))))))
+                                              (cell-let [{:keys [camp-id]} flight]
+                                                (let [visible? (formula-of [checked-flights flight]
+                                                                 (checked-flights flight))]
+                                                  [(input :camp-id camp-id
+                                                          :type "checkbox"
+                                                          :value visible?)
+                                                   (inl
+                                                    :css {:margin-right   "2px"
+                                                          :vertical-align "middle"}
+                                                    :click (constantly false)
+                                                    (comm/color-picker
+                                                     :value (formula-of [mission flight camp-id display mission-category-colors]
+                                                              (if-let [c (get-in display [camp-id :color])]
+                                                                c
+                                                                (flight-mission-color mission
+                                                                                      flight
+                                                                                      mission-category-colors)))
+                                                     :change #(swap! display assoc-in [@camp-id :color] @%)))])))}
+                     :info      {:title        (with-help [:flights :columns :info]
+                                                 "Info")
+                                 :disable-sort true
+                                 :formatter    (flight-info-formatter detailed-flight scroll-container)}
+                     :combatant {:title     (with-help [:flights :columns :combatant]
+                                              "Who")
+                                 :sort-key  #(->> %
+                                                  :owner
+                                                  (mission/team-name @mission))
+                                 :formatter #(let [team (cell= (:owner %))]
+                                               (inl
+                                                :css (cell= {:color (team-color team :dark-text)})
+                                                (cell= (mission/team-name mission team))))}
+                     :package   (col "Package"
+                                     :package
+                                     (fn [mission flight]
+                                       (->> flight
+                                            ::mission/package
+                                            :name)))
+                     :squadron  (col "Squadron"
+                                     :squadron
+                                     (fn [mission flight]
+                                       (->> flight
+                                            ::mission/squadron
+                                            :name)))
+                     :airbase   (col "Airbase"
+                                     :airbase
+                                     (fn [mission flight]
+                                       (some->> flight
+                                                ::mission/airbase
+                                                :name)))
+                     :airframe  (col "Aircraft"
+                                     :airframe
+                                     (fn [mission flight]
+                                       (flight-aircraft flight)))
+                     :callsign  (col "Callsign"
+                                     :callsign
+                                     (fn [_ flight] (:name flight)))
+                     :mission   {:title     (with-help [:flights :columns :mission]
+                                              "Mission")
+                                 :sort-key  (fn [flight]
+                                              (->> flight ::mission/mission :name))
+                                 :formatter (fn [flight]
+                                              (formula-of [flight]
+                                                (-> flight ::mission/mission :name)))
+                                 :css       (fn [flight rownum]
+                                              (formula-of [mission flight mission-category-colors rownum]
+                                                (let [color    (flight-mission-color mission
+                                                                                     flight
+                                                                                     mission-category-colors)
+                                                      contrast (comm/contrasting color
+                                                                                 row-tertiary-color
+                                                                                 (row-color rownum))]
+                                                  {:background contrast
+                                                   :color      color})))}
+                     :takeoff   (col "T/O"
+                                     :takeoff
+                                     (fn [_ flight]
+                                       (->> flight :waypoints first :depart format-time)))
+                     :tot       (col "TOT"
+                                     :tot
+                                     (fn [_ flight]
+                                       (->> flight :time-on-target format-time)))
+                     :egress    (col "Egress"
+                                     :egress
+                                     (fn [_ flight]
+                                       (->> flight :mission-over-time format-time)))})))))))
 
 (defn waypoint-grid-coords
   "Given a BMS waypoint, return an x/y map of its weatherspace coordinates."
@@ -683,18 +747,18 @@
 (defn create
   [mission {:keys [map-zoom map-text-scale visible-teams] :as opts}]
   (let [map-flight-path-size  (cell 0)
-        map-flight-path-scale (->> map-flight-path-size (Math/pow 4.0) cell=)
-        state                 (merge opts
-                                     {:mission               mission
-                                      :checked-flights       (cell #{})
-                                      :highlighted-flight    (cell nil)
-                                      :display               (cell {})
-                                      :map-flight-path-scale map-flight-path-scale
-                                      :map-flight-path-size  map-flight-path-size
-                                      :all-flights           (cell= (some->> mission mission/flights))
-                                      :selected-teams        (cell #{})})
-        watchable             (formula-of [mission visible-teams]
-                                [mission visible-teams])]
+        map-flight-path-scale (cell= (Math/pow 4.0 map-flight-path-size))
+        state                (merge opts
+                                    {:mission              mission
+                                     :checked-flights      (cell #{})
+                                     :highlighted-flight   (cell nil)
+                                     :display              (cell {})
+                                     :all-flights          (cell= (some->> mission mission/flights))
+                                     :selected-teams       (cell #{})
+                                     :map-flight-path-size  map-flight-path-size
+                                     :map-flight-path-scale map-flight-path-scale})
+        watchable            (formula-of [mission visible-teams]
+                               [mission visible-teams])]
     (do-watch watchable
               ::reset-on-mission-change
               (fn [_ [mission visible-teams]]
@@ -717,5 +781,6 @@
     (assoc state
            :controls-fn (fn [scroll-container]
                           (controls (assoc state :scroll-container scroll-container)))
+           :map-display-controls-fn #(flight-path-display-controls % state)
            :overlay (overlay state))))
 

@@ -54,7 +54,8 @@
               :save-briefing-section {}]}
   {:title "Map"
    :id :map-controls
-   :sections [:map-controls-section {}]}
+   :sections [:map-controls-section {}
+              :weather-display-controls {:title "Weather Display Options"}]}
   {:title    "Air Forces"
    :id       :air-forces
    :sections [:air-forces-section {}]}
@@ -65,15 +66,15 @@
    :id       :weather
    :sections [:serialization-controls {}
               :step-controls {}
-              :display-controls {}
+              :weather-display-controls {}
               :weather-parameters {}
               :forecast-section {:forecast-link? false}
-              ;;:flightpath-controls {}
+              ;;:flight-path-controls {}
               :weather-type-configuration {}
               :cloud-controls {}
               :wind-stability-parameters {}
               :weather-override-parameters {}
               :advanced-controls {}]}
-  {:title    "Test and Debug"
+  #_{:title    "Test and Debug"
    :id       :test
    :sections [:test-section {}]}])

@@ -468,28 +468,36 @@
   keys."
   [attrs _]
   ;; TODO: Let choices be a cell if we ever need that.
+  ;; TODO: Maybe choices should be a map from values to labels, since
+  ;; values have to be unique
   (with-attr-bindings attrs [value choices]
-    (let [indexed  (map-indexed (fn [i c] [(str i) c])
+    (let [indexed  (map-indexed (fn [i c] [(str i) (assoc c ::index (str i))])
                                 choices)
           by-index (into {} indexed)]
       (with-let [s (select)]
         (s
          (assoc attrs
+                :value (formula-of [value]
+                         (->> indexed
+                              vals
+                              (filter #(= value (:value %)))
+                              first
+                              ::index))
                 :change (fn [v]
-                          (log/debug "resetting dropdown value to"
-                                     :v (pr-str @v)
-                                     :by-index (-> @v by-index pr-str)
-                                     :value (-> @v by-index :value pr-str))
                           (reset! value (-> @v by-index :value))))
          (for [[index choice] indexed]
-           (with-let [o (option)]
-             (o
-              {:value    index
-               :selected (formula-of [value]
-                           (with-let [selected? (= value (:value choice))]
-                             (when selected?
-                               (aset o "index" (aget s "selectedIndex")))))}
-              (:label choice)))))))))
+           (option
+            :value index
+            :selected (cell= (= value (:value choice)))
+            (:label choice))
+           #_(with-let [o (option)]
+               (o
+                {:value    index
+                 :selected (formula-of [value]
+                             (with-let [selected? (= value (:value choice))]
+                               #_(when selected?
+                                   (aset o "index" (aget s "selectedIndex")))))}
+                (:label choice)))))))))
 
 ;; Note that if we ever go back to a default we've used before, we'll
 ;; pick up whatever the old saved value is. That's a little weird but
@@ -564,4 +572,26 @@
 (def pulse-class (class-for ::pulse))
 (def collapse-class (class-for ::collapse))
 (def delayed-fade-out-class (class-for ::delayed-fade-out))
+
+(defn heading
+  "Renders a heading - white text on a black background"
+  ([content] (heading {} content))
+  ([{:keys [margin-top]} content]
+   (div
+    :css {:color         "white"
+          :background    "black"
+          :margin-top    (px (or margin-top 15))
+          :margin-bottom (px 5)
+          :padding       (px 2)}
+    content)))
+
+(defn path-lens
+  "Returns a lens over a `get-in` style path `p` into cell `c`."
+  [c p]
+  (lens
+   (formula-of
+    [c]
+    (get-in c p))
+   (fn [v]
+     (swap! c assoc-in p v))))
 

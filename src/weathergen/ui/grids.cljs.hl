@@ -7,6 +7,7 @@
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
+            [weathergen.help :as help]
             [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [inl px register-styles! triangle]])
   (:require-macros
@@ -233,7 +234,8 @@ Column description:
            :width (px 16)
            :title "Settings"
            :latched? editing-columns?
-           :click #(swap! editing-columns? not))))
+           :click #(swap! editing-columns? not))
+          (help/help-icon [:table-grid :settings])))
         (tr (for [n (range num-columns)]
               (let [column-id    (formula-of [column-order]
                                    (nth column-order n))

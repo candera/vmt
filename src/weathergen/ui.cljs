@@ -55,7 +55,8 @@
             [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [colors control-section
                                                    get-image
-                                                   format-time inl pre-cell px
+                                                   format-time inl
+                                                   path-lens pct pre-cell px
                                                    styled team-color triangle]]
             [weathergen.ui.grids :as grids]
             [weathergen.ui.layers.flights]
@@ -301,6 +302,7 @@
 (defc map-display {:brightness              0.5 ; Range [0 1]
                    :text-size               0   ; Range [-1 1]
                    :icon-size               0   ; Range [-1 1]
+                   :flight-path-size        0   ; Range [-1 1]
                    :show-text-background?   true
                    :show-airbase-status?    true
                    :show-airbase-squadrons? true
@@ -413,11 +415,13 @@
 
 ;;; Components
 
-(def flight-paths-layer (weathergen.ui.layers.flights/create mission
-                                                             {:map-zoom                  map-zoom
-                                                              :map-text-scale            map-text-scale
-                                                              :map-show-text-background? map-show-text-background?
-                                                              :visible-teams             visible-teams}))
+(def flight-paths-layer
+  (weathergen.ui.layers.flights/create
+   mission
+   {:map-zoom                  map-zoom
+    :map-text-scale            map-text-scale
+    :map-show-text-background? map-show-text-background?
+    :visible-teams             visible-teams}))
 
 ;;; Formulas
 
@@ -446,7 +450,7 @@
                      60
                      6)))))
 
-(defc= airbases (->> (db/airbases (:map display-params))
+#_(defc= airbases (->> (db/airbases (:map display-params))
                      (map :name)
                      sort))
 
@@ -951,14 +955,16 @@
     :filters  [{:name      "VMT Briefing"
                 :extension ["vmtb"]}]}))
 
-(def zipbuilder-worker
+(def weather-worker
   (let [^js/Worker worker (js/Worker. "worker.js")
         command-ch (async/chan)
         result-ch (async/chan)
         output-ch (async/chan)]
     (-> worker
         .-onmessage
-        (set! #(go (async/>! result-ch (-> % (get "data") decode)))))
+        (set! (fn [e]
+                #_(.log js/console "weather-worker received message" e)
+                (go (async/>! result-ch (-> e .-data decode))))))
     {:command-ch command-ch
      :worker worker
      :output-ch output-ch
@@ -998,12 +1004,12 @@
                      (settings-filename mission-name))
           (reset! progress nil))
         (do
-          (async/>! (:command-ch zipbuilder-worker)
+          (async/>! (:command-ch weather-worker)
                     (-> weather-params
                         (assoc-in [:time :current]
                                   (time/minutes->campaign-time t))
                         (assoc :cells cells)))
-          (let [data (async/<! (:output-ch zipbuilder-worker))
+          (let [data (async/<! (:output-ch weather-worker))
                 blob (fmap/get-blob data nx ny)]
             (when-not first-done?
               (save-blob blob
@@ -1245,16 +1251,6 @@
   (go
     (async/<! (async/timeout interval))
     (f)))
-
-(defn path-lens
-  "Returns a lens over a `get-in` style path `p` into cell `c`."
-  [c p]
-  (lens
-   (formula-of
-    [c]
-    (get-in c p))
-   (fn [v]
-     (swap! c assoc-in p v))))
 
 ;;; Global Styles
 (def resize-handle-size 0.75)
@@ -1557,6 +1553,9 @@
 (defn update-primary-layer
   [weather-data display-params]
   (with-time "update-primary-layer"
+    #_(log/debug "updating primary layer"
+               :display (:display display-params)
+               :sample (get weather-data [20 20]))
     (doseq [[[x y] weather] weather-data
             :let [[r g b a] (fill-color (:display display-params) weather)
                   ^js/SVGRectElement cell (gdom/getElement (str "grid-primary-cell-" x "-" y))]]
@@ -2383,9 +2382,7 @@
                                :css (cell= {:opacity (-> display-params :opacity)}))
         wind-overlay          (svg/g
                                :id "wind-overlay"
-                               :toggle (cell= (-> display-params
-                                                  :overlay
-                                                  (= :wind))))
+                               :toggle (-> display-params :overlay (= :wind) cell=))
         text-overlay          (svg/g
                                :id "text-overlay"
                                :attr (cell= {:class (str "text-overlay "
@@ -2610,6 +2607,7 @@
                                         :multi-save))]
           (formula-of
             [weather-data display-params*]
+            #_(log/debug "grid should be updating now")
             (update-grid weather-data display-params*)))))))
 
 
@@ -2679,12 +2677,12 @@
     (fn [s]
       (formula-of
        [s]
-       (let [parsed (parse-int s)
-             valid? (and parsed (<= from parsed to))]
-         {:valid? parsed
-          :message (when-not parsed
-                     message)
-          :value parsed})))))
+        (let [parsed (parse-int s)
+              valid? (and parsed (<= from parsed to))]
+          {:valid?  valid?
+           :message (when-not valid?
+                      message)
+           :value   parsed})))))
 
 (defn float-conformer
   "Returns a conformer that will ensure a value parses to a floating
@@ -2757,8 +2755,8 @@
        :css (merge {:position     "relative"
                     :overflow     "show"
                     :white-space  "nowrap"
-                    :width        (or width "125px")
-                    :margin-right "3px"}
+                    :width        (px (or width 125))
+                    :margin-right (px 3)}
                    css)
        (let [i (input :type "text"
                       :placeholder placeholder
@@ -2792,17 +2790,20 @@
                                   (reset! state :set))))
                       :css (formula-of
                              [state valid? align]
-                             {:font-style (if (= state :editing)
-                                            "italic"
-                                            "")
-                              :color      (if valid?
-                                            ""
-                                            (colors :invalid))
-                              :background (if valid?
-                                            ""
-                                            (colors :invalid-background))
-                              :width      (or width "125px")
-                              :text-align (when align align)})
+                             {:font-style    (if (= state :editing)
+                                               "italic"
+                                               "")
+                              :color         (if valid?
+                                               ""
+                                               (colors :invalid))
+                              :background    (if valid?
+                                               ""
+                                               (colors :invalid-background))
+                              :width         (px (- (or width 125)
+                                                    (if valid? 0 20)))
+                              :padding-right (when-not valid? (px 20))
+                              :margin-right  (when-not valid? (px -20))
+                              :text-align    (when align align)})
                       :value value)]
          [^js/HTMLImageElement i
           (img :src "images/error.png"
@@ -2811,10 +2812,10 @@
                :css (formula-of
                       [valid?]
                       {:position       "relative"
-                       :right          "20px"
-                       :width          "14px"
-                       :margin-left    "3px"
-                       :margin-bottom  "2px"
+                       :right          0
+                       :width          (px 14)
+                       :margin-left    (px 3)
+                       :margin-bottom  (px 2)
                        :vertical-align "middle"
                        :opacity        (if valid?
                                          "0"
@@ -2822,13 +2823,13 @@
        (div
         :toggle (cell= (and (not valid?) focused?))
         :css {:position     "absolute"
-              :top          "24px"
-              :font-size    "75%"
+              :top          (px 24)
+              :font-size    (pct 75)
               :background   "rgba(221,221,221,0.95)"
               :border       "1px solid #888"
-              :min-width    "100%"
-              :max-width    "500px"
-              :padding-left "2px"
+              :min-width    (pct 100)
+              :max-width    (px 500)
+              :padding-left (px 2)
               :z-index      1}
         (cell= (:message parsed)))))))
 
@@ -2838,13 +2839,13 @@
   [{:keys [source update] :as attrs} _]
   (validating-edit
    attrs
-   :width "65px"
+   :width 65
    :fmt format-time
    :placeholder "dd/hhmm"
    :conform (fn [val]
               (formula-of
                [val]
-               (let [[all dd hh mm] (re-matches #"(\d+)/(\d\d)(\d\d)" val)
+               (let [[all dd hh mm] (re-matches #"(\d+)/(\d\d):(\d\d)" val)
                      day            (->> dd js/Number. long)
                      hour           (->> hh js/Number. long)
                      min            (->> mm js/Number. long)
@@ -2866,7 +2867,7 @@
                                             (time/campaign-time->minutes val)))]
                  {:valid? (and valid? (not over-max?))
                   :message (cond
-                             (not valid?) "Time must be in the format 'dd/hhmm'"
+                             (not valid?) "Time must be in the format 'dd/hh:mm'"
                              over-max? (str "Time cannot be set later than "
                                             (-> @weather-params :time :max format-time)))
                   :value {:day    day
@@ -3003,8 +3004,8 @@
                              (edit-field cell selector)))
                     (or extra []))))))
 
-(defn display-controls
-  [{:keys [prevent-map-change?]}]
+(defn weather-display-controls
+  [{:keys [prevent-map-change? title]}]
   (let [field       (fn [& kids] (apply div :class "field" kids))
         field-help  (fn [& kids] (apply div :class "field-elem field-help" kids))
         field-input (fn [& kids] (apply div :class "field-elem field-input" kids))
@@ -3012,11 +3013,11 @@
                       (with-help help-path
                         (apply div :class "field-elem field-label" kids)))]
     (control-section
-     :title "Display controls"
-     :id "display-controls-section"
+     :title (or title "Display Options")
+     :id "weather-display-controls-section"
      (control-layout
       (let [opts {:cell      display-params
-                  :help-base :display-controls}]
+                  :help-base :weather-display-controls}]
         [["Display"
           [:display]
           (merge opts
@@ -3245,7 +3246,7 @@
                          :weather-overrides
                          (fn [overrides]
                            (remove-nth overrides @index))))
-         (img
+         (buttons/image-button
           :click #(swap! weather-params
                          update-in
                          [:weather-overrides @index :editing?]
@@ -3535,14 +3536,14 @@
                              [:stratus-top]
                              path))]
                     (div
-                     :css {:margin-right "5px"
+                     :css {:margin-right (px 5)
                            :text-align   "right"}
                      (if-tpl (cell= (= display-mode :briefing))
                        (div :css (assoc literal-style
                                         :width
                                         (if (= column :visibility)
-                                          "35px"
-                                          "55px"))
+                                          (px 35)
+                                          (px 55)))
                             (formula-of [l]
                               (if (= column :visibility)
                                 (format-visibility l)
@@ -3558,8 +3559,8 @@
                                        "altitude")
                         :align "right"
                         :width (if (= column :visibility)
-                                 "35px"
-                                 "55px")))))))))))))))
+                                 35
+                                 55)))))))))))))))
 
 (defn advanced-controls
   [_]
@@ -3613,7 +3614,7 @@
        (tr (map td [(with-help [:step]
                       "Step interval")
                     (validating-edit
-                     :width "50px"
+                     :width 50
                      :source (cell= (:step movement-params))
                      :conform conform-positive-integer
                      :update #(swap! movement-params assoc :step %)
@@ -3748,7 +3749,7 @@
          (row "Step:"
               [:serialization-controls :multi-save :step]
               (validating-edit
-               :width "32px"
+               :width 32
                :source (path-lens display-params [:multi-save :step])
                :conform conform-positive-integer
                :fmt str
@@ -3939,10 +3940,10 @@
                     (swap! path assoc :color @val)))]))))
 
 ;; TODO: Maybe remove
-#_(defn flightpath-controls
+#_(defn flight-path-controls
   [_]
   (control-section
-   :id "flightpath-controls"
+   :id "flight-path-controls"
    :title (with-help [:flight-paths :section]
             "Flight Paths")
    (let [indexes (formula-of
@@ -4075,39 +4076,59 @@
          ::mission/squadrons
          (sort-by (juxt ::mission/squadron-type :name)))))
 
+(defn airbase-display-controls
+  "Returns a control section that affects how airbases display on the
+  map."
+  [title]
+  (control-section
+   :title (with-help [:air-forces :display-options :overview]
+            title)
+   (let [map-airbase-label-style (path-lens map-display [:airbase-label-style])]
+     (div
+      (with-help [:air-forces :display-options :airbase-labels]
+        {:margin (px 0 5)}
+        (label "Airbase labels:"))
+      (comm/dropdown
+       :value map-airbase-label-style
+       :choices [{:label "Airbase name only"
+                  :value :name-only}
+                 {:label "Airbase name and squadrons"
+                  :value :all}
+                 {:label "No label"
+                  :value :nothing}])))
+   (let [map-airbase-show-status? (path-lens map-display [:show-airbase-status?])]
+     (div
+      (input :type "checkbox"
+             :value map-airbase-show-status?
+             :change #(swap! map-airbase-show-status? not))
+      (with-help [:air-forces :display-options :show-airbase-status?]
+        (label "Show airbase status?"))))
+   (let [map-airbase-show-squadrons? (path-lens map-display [:show-airbase-squadrons?])]
+     (div
+      (input :type "checkbox"
+             :value map-airbase-show-squadrons?
+             :change #(swap! map-airbase-show-squadrons? not))
+      (with-help [:air-forces :display-options :show-airbase-squadrons?]
+        (label "Show airbase squadrons?"))))))
+
 (defn air-forces-section
   [_]
-  (control-section
-   :title "Air Forces"
-   (let [expand-state (cell [:expand-through-level 1])
-         row          (fn [& args] (apply div :class "row" args))
-         heading      (fn heading
-                        ([content] (heading {} content))
-                        ([{:keys [margin-top]} content]
-                         (row
-                          (div
-                           :css {:color         "white"
-                                 :background    "black"
-                                 :margin-top    (px (or margin-top 15))
-                                 :margin-bottom (px 5)
-                                 :padding       (px 2)}
-                           content))))]
-     (cond-tpl
-       (-> mission not cell=)
-       "No mission loaded"
+  (let [expand-state (cell [:expand-through-level 1])
+        row          (fn [& args] (apply div :class "row" args))]
+    (cond-tpl
+      (-> mission not cell=)
+      "No mission loaded"
 
-       (-> all-airbases count zero? cell=)
-       "No airbases present in the mission."
+      (-> all-airbases count zero? cell=)
+      "No airbases present in the mission."
 
-       :else
-       (styled
-        :garden [[:div.row {:margin-bottom "3px"}]
-                 [:button {:margin-right "3px"}]]
-        (heading
-         {:margin-top 0}
-         (with-help [:air-forces :airbase-filtering]
-           {:underline-color "lightblue"}
-           "Airbase Filtering"))
+      :else
+      (styled
+       :garden [[:div.row {:margin-bottom "3px"}]
+                [:button {:margin-right "3px"}]]
+       (control-section
+        :title (with-help [:air-forces :airbase-filtering]
+                 "Airbase Filtering")
         (row
          (input :type "checkbox"
                 :value hide-empty-airbases?
@@ -4119,11 +4140,10 @@
                 :value hide-inoperable-airbases?
                 :change #(swap! hide-inoperable-airbases? not))
          (with-help [:air-forces :hide-zero-status-airbases]
-           (label "Hide airbases at 0% status")))
-        (heading
-         (with-help [:air-forces :squadron-types]
-           {:underline-color "lightblue"}
-           "Squadron Types"))
+           (label "Hide airbases at 0% status"))))
+       (control-section
+        :title (with-help [:air-forces :squadron-types]
+                 "Squadron Types")
         (row
          (buttons/a-button
           :click #(reset! included-squadron-types @all-squadron-types)
@@ -4144,43 +4164,15 @@
               (input :type "checkbox"
                      :value val
                      :change #(do
-                                (log/debug "included-squadron-types changing"
+                                #_(log/debug "included-squadron-types changing"
                                            :val @val
                                            :type @squadron-type)
                                 (swap! included-squadron-types (if @val disj conj) @squadron-type))))
-            (label squadron-type))))
-        (heading "Display Options")
-        (let [map-airbase-label-style (path-lens map-display [:airbase-label-style])]
-          (row
-           (with-help [:air-forces :airbase-labels]
-             {:margin (px 0 5)}
-             (label "Airbase labels:"))
-           (comm/dropdown
-            :value map-airbase-label-style
-            :choices [{:label "Airbase name only"
-                       :value :name-only}
-                      {:label "Airbase name and squadrons"
-                       :value :all}
-                      {:label "No label"
-                       :value :nothing}])))
-        (let [map-airbase-show-status? (path-lens map-display [:show-airbase-status?])]
-          (row
-           (input :type "checkbox"
-                  :value map-airbase-show-status?
-                  :change #(swap! map-airbase-show-status? not))
-           (with-help [:air-forces :show-airbase-status?]
-             (label "Show airbase status?"))))
-        (let [map-airbase-show-squadrons? (path-lens map-display [:show-airbase-squadrons?])]
-          (row
-           (input :type "checkbox"
-                  :value map-airbase-show-squadrons?
-                  :change #(swap! map-airbase-show-squadrons? not))
-           (with-help [:air-forces :show-airbase-squadrons?]
-             (label "Show airbase squadrons?"))))
-        (heading
-         (with-help [:air-forces :airbases-and-squadrons]
-           {:underline-color "lightblue"}
-           "Airbases and Squadrons"))
+            (label squadron-type)))))
+       (airbase-display-controls "Display Options")
+       (control-section
+        :title (with-help [:air-forces :airbases-and-squadrons]
+                 "Airbases and Squadrons")
         (row
          (buttons/a-button
           :click #(reset! expand-state :all-expanded)
@@ -4460,59 +4452,62 @@
 (defn map-controls-section
   "Controls for how the map is displayed."
   [_]
-  (control-section
-   :title (with-help [:map-controls :overview] "Map Display Options")
-   (let [row (fn [{:keys [label key init min max]}]
-               (tr
-                (with-help [:map-controls key]
-                  (td label))
-                (let [id (str (gensym))]
-                  (td
-                   (datalist
-                    :id id
-                    (for [val (range (* 100 min) (* 100 (inc max)) (* (- max min) 25))]
-                      (option :value val)))
-                   (input {:type  "range"
-                           :list id
-                           :min   (long (* min 100))
-                           :max   (long (* max 100))
-                           :value (-> map-display (get key) (* 100) cell=)
-                           :input #(swap! map-display
-                                          assoc
-                                          key
-                                          (/ @% 100.0))})))
-                (td
-                 (buttons/a-button
-                  :click #(swap! map-display
-                                 assoc
-                                 key
-                                 init)
-                  "Reset")
-                 (help-icon [:map-controls (keyword (str "reset-" (name key)))]))))]
-     (table
-      (row {:label "Brightness:"
-            :key :brightness
-            :init 0.5
-            :min 0
-            :max 1.0})
-      (row {:label "Text size:"
-            :key :text-size
-            :init 0
-            :min -1.0
-            :max 1.0})
-      (row {:label "Icon size:"
-            :key :icon-size
-            :init 0
-            :min -1.0
-            :max 1.0})
-      (tr
-       (td
-        :colspan 2
+  (div
+   (control-section
+    :title (with-help [:map-controls :general] "General Display Options")
+    (let [slider-row                  (fn [{:keys [label key init min max]}]
+                                        (tr
+                                         (with-help [:map-controls key]
+                                           (td label))
+                                         (let [id (str (gensym))]
+                                           (td
+                                            (datalist
+                                             :id id
+                                             (for [val (range (* 100 min) (* 100 (inc max)) (* (- max min) 25))]
+                                               (option :value val)))
+                                            (input {:type  "range"
+                                                    :list  id
+                                                    :min   (long (* min 100))
+                                                    :max   (long (* max 100))
+                                                    :value (-> map-display (get key) (* 100) cell=)
+                                                    :input #(swap! map-display
+                                                                   assoc
+                                                                   key
+                                                                   (/ @% 100.0))})))
+                                         (td
+                                          (buttons/a-button
+                                           :click #(swap! map-display
+                                                          assoc
+                                                          key
+                                                          init)
+                                           "Reset")
+                                          (help-icon [:map-controls (keyword (str "reset-" (name key)))]))))]
+      (div
+       (table
+        (slider-row {:label "Brightness:"
+                     :key   :brightness
+                     :init  0.5
+                     :min   0
+                     :max   1.0})
+        (slider-row {:label "Text size:"
+                     :key   :text-size
+                     :init  0
+                     :min   -1.0
+                     :max   1.0})
+        (slider-row {:label "Icon size:"
+                     :key   :icon-size
+                     :init  0
+                     :min   -1.0
+                     :max   1.0}))
+       (div
         (input :type "checkbox"
                :value (-> map-display :show-text-background? cell=)
                :change #(swap! map-display update :show-text-background? not))
-           (with-help [:map-controls :show-text-background?]
-             (label "Display text with contrasting background"))))))))
+        (with-help [:map-controls :show-text-background?]
+          (label "Display text with contrasting background"))))))
+   (airbase-display-controls "Airbase Display Options")
+   (let [flight-path-display-controls (:map-display-controls-fn flight-paths-layer)]
+     (flight-path-display-controls "Flight Path Display Options"))))
 
 ;;; General layout
 
@@ -4628,7 +4623,7 @@
    :save-briefing-section       save-briefing-section
    :serialization-controls      serialization-controls
    :step-controls               step-controls
-   :display-controls            display-controls
+   :weather-display-controls    weather-display-controls
    :weather-parameters          weather-parameters
    :forecast-section            forecast-section
    :weather-type-configuration  weather-type-configuration
@@ -4636,7 +4631,7 @@
    :wind-stability-parameters   wind-stability-parameters
    :weather-override-parameters weather-override-parameters
    :advanced-controls           advanced-controls
-   ;; :flightpath-controls flightpath-controls
+   ;; :flight-path-controls flight-path-controls
    :flights-section             (fn [opts]
                                   (let [ctor             (:controls-fn flight-paths-layer)
                                         scroll-container (::scroll-container opts)]

@@ -231,12 +231,20 @@ rect.inclement {
     padding: 0 4px;
 }
 
+.help .content dt {
+    font-weight: bold;
+}
+
 .help .hidden {
     display: none;
 }
 
 .help .content p {
     margin-top: 0;
+    margin-bottom: 0.5em;
+}
+
+.help .content p:last-child {
     margin-bottom: 0;
 }
 
@@ -548,7 +556,7 @@ rect.inclement {
 }
 
 #advanced-params-section .field-input input {
-    width: 35px;
+    width: 55px;
 }
 
 /* Swatch colors */

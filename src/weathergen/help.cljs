@@ -1,9 +1,11 @@
 (ns weathergen.help
   (:require [goog.string :as gstring]
             [goog.string.format]
-            [hoplon.core :refer [b dl dt dd div em i img li ol p span strong ul with-timeout]]
+            [hoplon.core :refer [b dl dt dd div do-watch em i img li ol p span strong ul with-timeout]]
             [hoplon.svg :as svg]
-            [javelin.core :refer [cell]]
+            [javelin.core :refer [cell cell= with-let]]
+            [weathergen.ui.buttons :as buttons]
+            [weathergen.ui.common :as comm :refer [inl px]]
             [weathergen.wind :as wind]))
 
 ;; (set! *warn-on-infer* true)
@@ -107,7 +109,7 @@
      weather is being generated. This value will be used to name the
      generated .twx and .fmap files.")}}
 
-   :display-controls
+   :weather-display-controls
    {:map
     #(p "Chooses the map image displayed in the background.")
 
@@ -122,10 +124,10 @@
    and precipitation in Falcon. Note that unlike a radar map you might
    see on TV, green does " (em "not") " indicate rain."
             (dl
-             (dt "Red") (dd "Inclement weather")
+             (dt "Red")    (dd "Inclement weather")
              (dt "Yellow") (dd "Poor weather")
-             (dt "Green" (dd "Fair weather"))
-             (dt "Clear" (dd "Sunny weather"))))
+             (dt "Green")  (dd "Fair weather")
+             (dt "Clear")  (dd "Sunny weather")))
         (dt "Pressure")
         (dd "The barometric pressure will be displayed. Red indicates
       low pressure, white indicates high pressure. Use the pressure
@@ -142,9 +144,9 @@
     bent line, with the tail(s) in the direction the wind is coming
     from. Each full tail indicates ten knots of wind speed, and a half
     tail adds five.")
-       (p "Text overlays may be hard to read when the map grid is small.
-     Use the Make Bigger button above the map to enlarge. Or click a
-     cell to read the same data from the forecast section.")])
+       (p "Text overlays may be hard to read when the map grid is
+     small. Zoom the map to enlarge. Or click a cell to read the same
+     data from the forecast section.")])
 
     :pressure
     (fn []
@@ -274,7 +276,7 @@ forward and backward in time. ")
    :movement-params
    {:direction
     {:heading #(p "The direction the weather pattern will move in.")
-     :speed #(p "The speed at which the weather pattern will move.")}}
+     :speed   #(p "The speed at which the weather pattern will move.")}}
 
    :step
    #(p "The number of minutes each click of the 'Step forward' or 'Step
@@ -497,8 +499,8 @@ forward and backward in time. ")
                      (div
                       (div :css {:background "lightgray"
                                  :margin-top "3px"
-                                 :padding "0 0 2px 3px"
-                                 :font-size "105%"}
+                                 :padding    "0 0 2px 3px"
+                                 :font-size  "105%"}
                            title)
                       contents))]
        (div
@@ -523,20 +525,20 @@ forward and backward in time. ")
             (div
              :css {:display "inline-block"}
              (span
-              :css {:width "20px"
-                    :height "20px"
-                    :display "inline-block"
-                    :border "solid 1px black"
-                    :margin-right "3px"
+              :css {:width          "20px"
+                    :height         "20px"
+                    :display        "inline-block"
+                    :border         "solid 1px black"
+                    :margin-right   "3px"
                     :vertical-align "middle"
-                    :background color}
+                    :background     color}
               ""))
             (div
              :css {:display "inline-block"}
              (div
-              :css {:display "inline-block"
+              :css {:display      "inline-block"
                     :margin-right "3px"}
-              (span :css {:font-weight "900"
+              (span :css {:font-weight  "900"
                           :margin-right "3px"}
                     type)
               "-")
@@ -553,7 +555,7 @@ forward and backward in time. ")
                 [25 270 "Wind at 25 knots from the west."]
                 [115 134 "Wind at 115 knots from the southeast."]]]
            (div :css {:white-space "nowrap"}
-                (div :css {:display "inline-block"
+                (div :css {:display        "inline-block"
                            :vertical-align "middle"}
                      (wind-barb speed heading))
                 description)))))
@@ -611,10 +613,72 @@ forward and backward in time. ")
     #(p "Use these buttons to quickly check or uncheck all the
     squadron types.")
 
+    :display-options
+    {:overview
+     #(div
+       (p "Use this section to control the way airbases are displayed
+      on the map. Airbases are shown as icons with up to three other
+      pieces of information around them:")
+       (img :src "images/help/airbase-map-display.png")
+       (ol
+        (li (strong "Airbase icon.")
+            " The icon for the airbase.")
+        (li (strong "Airbase status.")
+            " The status of the airbase. Shown as a colored rectangle
+           filled in proportion to how much damage the airbase has
+           taken:"
+            (ul
+             (li (strong "Green.")
+                 " 75% or greater strength.")
+             (li (strong "Orange.")
+                 " Between 25% and 75% strength.")
+             (li (strong "Red.")
+                 " Less than 25% strength."))
+            "If the rectangle is completely white, the airbase is at 0%
+           strength and cannot sortie.")
+        (li (strong "Squadron icons.")
+            " One icon will be shown for each squadron (for squadron
+           types that have been selected). The icon indicates the type
+           of aircraft in the squadron.")
+        (li (strong "Airbase name.")
+            " The name of the airbase.")
+        (li (strong "Squadron details.")
+            " For each squadron deployed at the airbase, one line of
+           text will be shown, indicating the numerical strength of
+           and airframe for that squadron. For example, \"14 F-5E\"
+           indicates that a squadron consisting of fourteen F-5E Tiger
+           II aircraft is located at this airbase.")))
+
+     :airbase-labels
+     #(div
+       (p "Use this dropdown to control how airbase labels will be shown on the map.")
+       (dl
+        (dt "Airbase name only")
+        (dd "Only the airbase name will be shown below the airbase.")
+
+        (dt "Airbase name and squadrons")
+        (dd "The airbase name will be shown followed by a list of
+       squadrons located at that airbase, one line per squadron. Note
+       that only squadrons whose type has been selected will be
+       shown.")
+
+        (dt "No label")
+        (dd "No label will be displayed below the airbase")))
+
+     :show-airbase-status?
+     #(div
+       (p "If checked, the status of each airbase will be displayed
+      above the airbase icon on the map."))
+
+     :show-airbase-squadrons?
+     #(div
+       (p "If checked, squadron icons will be shown to the right of the
+      airbase icon on the map."))}
+
     :airbases-and-squadrons
     #(div
       (p "This section displays detailed information about all airbases and the squadrons stationed at them. The information is arranged hierarchically: alliances are at the top level, then airbases, then detailed status for each airbase, including the squadrons stationed at each.")
-      (img :src "images/air-forces-tree-help.png")
+      (img :src "images/help/air-forces-tree.png")
       (ol
        (li (strong "Expand/collapse.")
            " Use this to show or hide details about this airbase.")
@@ -638,43 +702,328 @@ forward and backward in time. ")
            " Status of the airbase.")
        (li (strong "Airbase squadron details.")
            " Information about the type and strength of the squadrons
-           deployed at this airbase.")))}})
+           deployed at this airbase.")))
 
-(defn with-help
-  "Returns UI for content with embedded help. `help-path` is a vector
+    :tree-collapse-buttons
+    #(div
+      (p "Use these buttons to show different levels of detail in the airbase list below.")
+      (dl
+       (dt "Expand all")
+       (dd "Show all available levels of detail for all visible airbases.")
+
+       (dt "Collapse all")
+       (dd "Collapse the airbase list so that only alliances/teams are visible.")
+
+       (dt "Collapse to airbases")
+       (dd "Show all visible airbases in the list below, but do not
+       show their detailed status. This is the default view.")))
+
+    :airbase-selection-buttons
+    #(div
+      (p "Use these buttons to quickly hide or show all airbases on
+      the map. Has the same effect as checking or unchecking each of
+      the airbases in the list below."))}
+
+   :map-controls
+   {:general
+    #(p "Use the controls in this section to affect the overall appearance of the map.")
+
+    :brightness
+    #(div
+      (p "When centered, the map will appear as it does in the
+  simulation. When moved to the left, the map will be 'dimmed' towards
+  black. When moved to the right, the map will be 'brightened' towards
+  white. Full left/right will cause the map to be completely replaced
+  by black/white.")
+      (p "Use this to increase the visibility of icons, labels, flight
+      paths, etc."))
+
+    :text-size
+    #(div
+      (p "Use this slider to make the text used in labels larger or
+    smaller. Smaller is to the left, larger to the right."))
+
+    :icon-size
+    #(div
+      (p "Use this slider to make the icons on the map larger or
+      smaller. Smaller is to the left, larger to the right."))
+
+    :flight-path-size
+    #(div
+      (p "Use this slider to make flight paths wider or narrower.
+      Narrower is to the left, wider to the right."))
+
+    :show-text-background?
+    #(div
+      (p "When checked, labels will be shown against a semitransparent
+      background of a contrasting color."))
+
+    :reset-brightness
+    #(div
+      (p "Click this button to reset the brightness to its default value."))
+
+    :reset-text-size
+    #(div
+      (p "Click this button to reset the text size to its default value."))
+
+    :reset-icon-size
+    #(div
+      (p "Click this button to reset the icon sizing to its default value."))}
+
+   :flights
+   {:mission-key
+    #(div
+      (p "Displays the default colors for flights by mission type.
+    Click the colored box to make changes. Changes will be remembered
+    from session to session."))
+
+    :mission-key-reset
+    #(div
+      (p "Click this button to restore all mission type colors to
+      their defaults."))
+
+    :team-visibility
+    #(div
+      (p "Filters the flight list by country. Check the boxes below
+      each flag to list flights for that country in the flights
+      list. Uncheck the box to hide flights from that country."))
+
+    :display-options
+    {:overview
+     #(div
+       (p "Use this section to control the way flight paths are shown
+       on the map."))
+
+     :map-flight-path-size
+     #(div
+       (p "Slide this control to the left to render flight paths and
+       steerpoint markers with narrower lines. Slide it to the right
+       to render them with wider lines."))
+
+     :reset-map-flight-path-size
+     #(div
+       (p "Click this button to restore flight paths to their default
+       width."))}
+
+    :flight-info
+    #(div
+      (p "This section lists all the upcoming and in-progress flights
+      for the teams selected above. Click the settings button "
+         (buttons/image-button
+          :src "images/settings.svg"
+          :width (px 16))
+         " to make changes to the way the information is displayed."))
+
+    :columns
+    {:show?
+     #(div
+       (p "Check the box to display the flight path for this flight on
+       the map. Click the colored square to change the color in which
+       the flight path is displayed from the default (as determined by
+       mission type)."))
+
+     :info
+     #(div
+       (p "Click the "
+          (buttons/a-button
+           :css {:border-radius "50%"
+                 :width         (px 12)
+                 :height        (px 12)
+                 :text-align    "center"
+                 :font-weight   "bold"
+                 :font-family   "serif"
+                 :font-size     "110%"
+                 :line-height   (px 12)}
+           "i")
+          " button to display additional information about the flight,
+          including munitions and detailed flight plan info."))
+
+     :combatant
+     #(div
+       (p "The 'owner' of this flight."))
+
+     :package
+     #(div
+       (p "The package number (if any) to which this flight belongs.
+       Sort by this column to see package flights listed near each
+       other."))
+
+     :squadron
+     #(div
+       (p "The squadron to which this flight belongs."))
+
+     :airbase
+     #(div
+       (p "The airbase that is home to this flight's squadron."))
+
+     :airframe
+     #(div
+       (p "The type and quantity of the aircraft in this flight."))
+
+     :callsign
+     #(div
+       (p "The callsign of this flight."))
+
+     :mission
+     #(div
+       (p "The type of mission this flight is performing. Color coded
+       according to the mission key above."))
+
+     :takeoff
+     #(div
+       (p "The takeoff time for this flight in DAY/HH:MM format."))
+
+     :tot
+     #(div
+       (p "The Time-On-Target for this flight in DAY/HH:MM format."))
+
+     :egress
+     #(div
+       (p "The mission end time for this fligth in DAY/HH:MM format."))}
+
+    :waypoint-columns
+    {:number
+     #(div (p "The steerpoint number."))
+
+     :description
+     #(div (p "A brief description of the steerpoint."))
+
+     :action
+     #(div (p "The action to be taken at the steerpoint, if any."))
+
+     :enroute
+     #(div (p "The action to be taken enroute to the steerpoint, if any."))
+
+     :arrive
+     #(div (p "The scheduled arrival time at the steerpoint, in DAY/HH:MM:SS format."))
+
+     :depart
+     #(div (p "The scheduled departure time at the steerpoint, in DAY/HH:MM:SS format."))
+
+     :remain
+     #(div (p "The scheduled duration to remain at the steerpoint, if any, in HH:MM:SS format"))
+
+     :distance
+     #(div (p "The distance to this steerpoint from the previous, in nm."))
+
+     :heading
+     #(div (p "The heading to this steerpoint from the previous."))
+
+     :speed-cas
+     #(div (p "The calibrated airspeed to fly en route to this steerpoint."))
+
+     :speed-tas
+     #(div (p "The true airspeed to fly en route to this steerpoint."))
+
+     :speed-gnd
+     #(div (p "The ground speed to fly en route to this steerpoint"))
+
+     :speed-mach
+     #(div (p "The speed in mach to fly en route to this steerpoint."))
+
+     :altitude
+     #(div (p "The altitude to fly en route to this steerpoint."))
+
+     :comments
+     #(div (p "Miscellaneous comments, if any."))}}
+
+   ;; TODO: I wish this could be modular somehow. Like, maybe we
+   ;; should be able to register additional keys in the help content
+   ;; map dyamically.
+   :table-grid
+   {:settings
+    #(div
+      (p "Press this button to toggle column configuration. When the
+      button is depressed, columns can be added, hidden, and
+      rearranged.")
+      (p "To hide a column, click the checkbox next to the column name
+      until it shows a red "
+         (span :css {:color "red"}
+               "✗")
+         "."
+         "To show a column, click the checkbox next to the column name
+      until it shows a green "
+         (span :css {:color "green"}
+               "✓")
+         ".")
+      (p "To move a column to the right, click the > button next to
+      the column name. To move a column to the left, click the <
+      button next to the column name.")
+      (p "To sort a column, click the "
+         (inl
+          :class "sorters"
+          (svg/svg
+           :width "20px"
+           :viewBox "-100 -100 200 200"
+           (comm/triangle :transform "rotate(180) translate(0 -50)"
+                          :r 50
+                          :stroke "black"
+                          :stroke-width "2"
+                          :fill "none")
+           (comm/triangle :transform "translate(0 -50)"
+                          :r 50
+                          :stroke "black"
+                          :stroke-width "2"
+                          :fill "none")))
+         " icon next to the column name. Clicking will cycle between
+         sorting in ascending and descending order.")
+      (p "Note that some columns may not permit hiding, moving, or
+      sorting.")
+      (p "When you are happy with the column configuration, click the
+      settings button again."))}})
+
+(let [open-instance (cell nil)]
+  (defn with-help
+    "Returns UI for content with embedded help. `help-path` is a vector
   path into the `content` map."
-  ([help-path content] (with-help help-path {} content))
-  ([help-path opts content]
-   (let [help-ctor                 (get-in help-content-ctors help-path)
-         {:keys [underline-color
-                 omit-underline?]}     opts
-         open?                     (cell false)
-         doc-click                 (fn click-fn [e]
-                                     (.removeEventListener js/document "click" click-fn)
-                                     (reset! open? false))]
-     (div
-      :class "help"
-      :css (merge {:cursor        "url(images/helpcursor.png) 4 4, auto"
-                   :border-bottom (when-not omit-underline?
-                                    (if help-ctor
-                                      (str "dashed 1px " (or underline-color "blue"))
-                                      ;; This is to clue me in to write help.
-                                      "dashed 2px red"))}
-                  opts)
-      :click (fn [e]
-               (when (swap! open? not)
-                 (with-timeout 0
-                   (.addEventListener js/document "click" doc-click))))
-      (div
-       :fade-toggle open?
-       :class "content"
-       :css {:white-space "normal"
-             :font-weight "normal"}
-       (if help-ctor
-         (help-ctor)
-         [(p "Help has not yet been written for this feature.")
-          (p (str help-path))]))
-      content))))
+    ([help-path content] (with-help help-path {} content))
+    ([help-path opts content]
+     (let [help-ctor            (get-in help-content-ctors help-path)
+           {:keys [underline-color
+                   omit-underline?
+                   eat-click?]} opts
+           this-instance        (gensym)
+           open?                (cell= (= open-instance this-instance))
+           doc-click            (fn click-fn [e]
+                                  (.removeEventListener js/document "click" click-fn)
+                                  (reset! open-instance nil))]
+       (div
+        :class "help"
+        :css (merge {:cursor        "url(images/helpcursor.png) 4 4, auto"
+                     :border-bottom (when-not omit-underline?
+                                      (if help-ctor
+                                        (str "dashed 1px " (or underline-color "blue"))
+                                        ;; This is to clue me in to write help.
+                                        "dashed 2px red"))}
+                    opts)
+        :click (fn [e]
+                 (if (= @open-instance this-instance)
+                   (reset! open-instance nil)
+                   (do
+                     (reset! open-instance this-instance)
+                     (with-timeout 0
+                       (.addEventListener js/document "click" doc-click))))
+                 false)
+        (with-let [e (div
+                      :fade-toggle open?
+                      :class "content"
+                      :css {:white-space "normal"
+                            :font-weight "normal"}
+                      ;; Unfortunately this isn't really working. Not sure why
+                      :blur (fn [e]
+                              (.log js/console "Blur firing")
+                              (reset! open-instance nil))
+                      (if help-ctor
+                        (help-ctor)
+                        [(p "Help has not yet been written for this feature.")
+                         (p (str help-path))]))]
+          (do-watch open?
+                    (fn [old new]
+                      (when (and (not old) new)
+                        ;; (.log js/console "Focusing help element")
+                        (with-timeout 0
+                          (.focus e))))))
+        content)))))
 
 (defn help-icon
   [help-path]

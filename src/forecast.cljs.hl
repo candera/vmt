@@ -62,4 +62,4 @@
  :display-controls {:prevent-map-change? true}
  :step-controls {:mode :browse}
  :forecast-section {:forecast-link? false}
- :flightpath-controls {})
+ :flight-path-controls {})
