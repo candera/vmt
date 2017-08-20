@@ -306,6 +306,7 @@
                    :show-text-background?   true
                    :show-airbase-status?    true
                    :show-airbase-squadrons? true
+                   :show-bullseye?          true
                    :airbase-label-style     :all})
 
 (defc= map-text-scale
@@ -2275,34 +2276,35 @@
 (defn bullseye-overlay
   "Renders the UI for display of bullseye."
   [mission]
-  (let [stroke-width 0.025               ; TODO: Adjust for zoom?
-        bw (formula-of
-             [mission]
-             (let [{:keys [campaign-info]} mission
-                   {bx :bullseye-x by :bullseye-y} campaign-info]
-               (coords/fgrid->weather mission bx by)))
-        bx (cell= (:x bw))
-        by (cell= (:y bw))]
-    (svg/g
-     :attr {:debug "bullseye"}
-     :svg/transform (cell= (comm/svg-translate bx by))
-     (for [r (range 30 200 30)]
-       (svg/circle
-        :stroke "black"
-        :fill "none"
-        :stroke-width stroke-width
-        :cx 0
-        :cy 0
-        :r (cell= (coords/nm->weather mission r))))
-     (for [theta (range 0 180 30)]
-       (svg/line
-        :attr {:transform (comm/svg-rotate theta)}
-        :stroke "black"
-        :stroke-width stroke-width
-        :x1 0
-        :y1 (cell= (coords/nm->weather mission -200))
-        :x2 0
-        :y2 (cell= (coords/nm->weather mission 200)))))))
+  (when-tpl (-> map-display :show-bullseye? cell=)
+    (let [stroke-width 0.025            ; TODO: Adjust for zoom?
+          bw (formula-of
+               [mission]
+               (let [{:keys [campaign-info]} mission
+                     {bx :bullseye-x by :bullseye-y} campaign-info]
+                 (coords/fgrid->weather mission bx by)))
+          bx (cell= (:x bw))
+          by (cell= (:y bw))]
+      (svg/g
+       :attr {:debug "bullseye"}
+       :svg/transform (cell= (comm/svg-translate bx by))
+       (for [r (range 30 200 30)]
+         (svg/circle
+          :stroke "black"
+          :fill "none"
+          :stroke-width stroke-width
+          :cx 0
+          :cy 0
+          :r (cell= (coords/nm->weather mission r))))
+       (for [theta (range 0 180 30)]
+         (svg/line
+          :attr {:transform (comm/svg-rotate theta)}
+          :stroke "black"
+          :stroke-width stroke-width
+          :x1 0
+          :y1 (cell= (coords/nm->weather mission -200))
+          :x2 0
+          :y2 (cell= (coords/nm->weather mission 200))))))))
 
 (defn- limit-pan
   "Given a map pan as an x/y map, return a new map that doesn't permit showing areas outside the map."
@@ -4522,7 +4524,13 @@
                :value (-> map-display :show-text-background? cell=)
                :change #(swap! map-display update :show-text-background? not))
         (with-help [:map-controls :show-text-background?]
-          (label "Display text with contrasting background"))))))
+          (label "Display text with contrasting background")))
+       (div
+        (input :type "checkbox"
+               :value (-> map-display :show-bullseye? cell=)
+               :change #(swap! map-display update :show-bullseye? not))
+        (with-help [:map-controls :show-bullseye?]
+          (label "Show bullseye"))))))
    (airbase-display-controls "Airbase Display Options")
    (let [flight-path-display-controls (:map-display-controls-fn flight-paths-layer)]
      (flight-path-display-controls "Flight Path Display Options"))))

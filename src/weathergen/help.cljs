@@ -758,6 +758,12 @@ forward and backward in time. ")
       (p "When checked, labels will be shown against a semitransparent
       background of a contrasting color."))
 
+    :show-bullseye?
+    #(div
+      (p "When checked, the bullseye \"spiderweb\" will be shown on
+      the map, with range rings every 30nm up to 180nm and bearing
+      lines every 30 degrees."))
+
     :reset-brightness
     #(div
       (p "Click this button to reset the brightness to its default value."))
