@@ -372,6 +372,9 @@
 (defc map-zoom 1)
 (defc map-pan {:x 0 :y 0})
 
+(def zoom-min 1)
+(def zoom-max 200)
+
 (def map-viewbox
   (formula-of [weather-params map-zoom map-pan]
     (let [[nx ny] (:cell-count weather-params)
@@ -2313,11 +2316,28 @@
   "Converts an x/y offset in pixels to an x/y offset in weatherspace units."
   [[dx dy]]
   (let [zoom           @map-zoom
-        browser-zoom   (.-devicePixelRatio js/window)
         [nx ny]        (:cell-count @weather-params)
         [width height] @map-size]
-    [(-> dx (* nx) #_(/ browser-zoom) (/ width)  (/ zoom))
-     (-> dy (* ny) #_(/ browser-zoom) (/ height) (/ zoom))]))
+    [(-> dx (* nx) (/ width)  (/ zoom))
+     (-> dy (* ny) (/ height) (/ zoom))]))
+
+(defn- zoom-map!
+  "Changes the map zoom by a factor of `amount`, centered on `[cx cy]`
+  coordinates in weather space, which has dimensions `[nx ny]`."
+  [[cx cy] amount]
+  (let [[nx ny]         (:cell-count @weather-params)
+        {px0 :x py0 :y} @map-pan
+        z'              (->> @map-zoom
+                             (* amount)
+                             (math/clamp zoom-min zoom-max))
+        dz              (/ z' @map-zoom)
+        px1             (- cx (/ (- cx px0) dz))
+        py1             (- cy (/ (- cy py0) dz))
+        px              (-> px1 (- px0) (+ px0))
+        py              (-> py1 (- py0) (+ py0))]
+    (dosync
+     (reset! map-zoom z')
+     (reset! map-pan (limit-pan [nx ny] z' {:x px :y py})))))
 
 (defelem grid
   [{:keys [display-params
@@ -2341,20 +2361,20 @@
                                 (swap! drag-handler #(or % h)))
         doc-move              (fn [^js/MouseEvent e]
                                 (if-let [h @drag-handler]
-                                  (let [x              (aget e "offsetX")
-                                        y              (aget e "offsetY")
-                                        [sx sy]        @drag-start
-                                        dx             (- x sx)
-                                        dy             (- y sy)]
+                                  (let [x       (aget e "offsetX")
+                                        y       (aget e "offsetY")
+                                        [sx sy] @drag-start
+                                        dx      (- x sx)
+                                        dy      (- y sy)]
                                     (h (pixels->weather [dx dy]) false)
                                     (.preventDefault e))))
         doc-up                (fn doc-up [e]
                                 (when-let [h @drag-handler]
-                                  (let [x (aget e "offsetX")
-                                        y (aget e "offsetY")
+                                  (let [x       (aget e "offsetX")
+                                        y       (aget e "offsetY")
                                         [sx sy] @drag-start
-                                        dx (- x sx)
-                                        dy (- y sy)]
+                                        dx      (- x sx)
+                                        dy      (- y sy)]
                                     (h (pixels->weather [dx dy]) true)))
                                 (reset! drag-start nil)
                                 (reset! drag-handler nil))
@@ -2424,13 +2444,13 @@
                                               weather-overrides))
                                   nil
                                   hover-cell))
-        #_info-overlay          #_(formula-of
-                                    [effective-hover-cell weather-data pressure-unit cloud-params]
-                                    (info-overlay effective-hover-cell
-                                                  weather-data
-                                                  pressure-unit
-                                                  nx ny
-                                                  cloud-params))]
+        #_info-overlay        #_ (formula-of
+                                   [effective-hover-cell weather-data pressure-unit cloud-params]
+                                   (info-overlay effective-hover-cell
+                                                 weather-data
+                                                 pressure-unit
+                                                 nx ny
+                                                 cloud-params))]
     (with-let [elem (svg/svg
                      :id "grid"
                      (let [dims (formula-of
@@ -2515,21 +2535,9 @@
                       gevents/MouseWheelHandler.EventType.MOUSEWHEEL
                       (fn [^js/MouseWheelEvent e]
                         (.preventDefault e)
-                        (let [[mx my]       (mouse-weather-coords e)
-                              {px0 :x py0 :y} @map-pan
-                              browser-zoom  (.-devicePixelRatio js/window)
-                              z'            (->> @map-zoom
-                                                 (* (Math/pow @zoom-speed (aget e "deltaY")))
-                                                 (math/clamp 1 200))
-                              dz            (/ z' @map-zoom)
-                              ;; TODO: Need to figure out how to deal with browser zoom
-                              px1            (- mx (/ (- mx px0) dz))
-                              py1            (- my (/ (- my py0) dz))
-                              px             (-> px1 (- px0) #_(/ browser-zoom) (+ px0))
-                              py             (-> py1 (- py0) #_(/ browser-zoom) (+ py0))]
-                          (dosync
-                           (reset! map-zoom z')
-                           (reset! map-pan (limit-pan [nx ny] z' {:x px :y py}))))))
+                        (let [amount (* (Math/pow @zoom-speed (aget e "deltaY")))]
+                          (zoom-map! (mouse-weather-coords e)
+                                     amount))))
       ;; TODO: We're capturing the value of the number of cells, but it
       ;; never changes. One of these days I should probably factor this
       ;; out. Either that or just react to changes in the number of
@@ -2561,10 +2569,10 @@
             (let [frag (.createDocumentFragment js/document)]
               (doseq [x (range nx)
                       y (range ny)]
-                (let [^js/SVGElement g (.createElementNS
-                                        js/document
-                                        "http://www.w3.org/2000/svg"
-                                        "g")
+                (let [^js/SVGElement g    (.createElementNS
+                                           js/document
+                                           "http://www.w3.org/2000/svg"
+                                           "g")
                       ^js/SVGUseElement r (.createElementNS
                                            js/document
                                            "http://www.w3.org/2000/svg"
@@ -2912,42 +2920,52 @@
          (assoc :update #(swap! source assoc-in path %))))))
 
 (defn button-bar
+  "Returns UI for the 'button bar' that goes across the top of the
+  map."
   []
   (div :class "button-bar"
        :css (formula-of
               [map-size]
               {:position "relative"
-               :width (-> map-size first (str "px"))
-               :margin "0 0 3px 0"})
-       #_(button :id "enlarge-grid"
-                 :click #(swap! display-params
-                                update
-                                :dimensions
-                                (fn [[x y]]
-                                  [(+ x 50) (+ y 50)]))
-                 :title "Enlarge grid"
-                 (img
-                  :css {:width "24px"
-                        :height "24px"}
-                  :src "images/bigger.png"))
-       #_(button :id "shrink-grid"
-                 :click #(swap! display-params
-                                update
-                                :dimensions
-                                (fn [[x y]]
-                                  [(- x 50) (- y 50)]))
-                 :title "Shrink grid"
-                 (img
-                  :css {:width "24px"
-                        :height "24px"}
-                  :src "images/smaller.png"))
+               :width    (-> map-size first px)
+               :margin   "0 0 3px 0"})
+       ;; Map legend
        (with-help [:map :legend]
          {:margin-left (px 5)}
          (span "Map Legend"))
+       ;; Zoom in/out buttons
+       (let [button-size 18
+             map-center  (fn []
+                           (let [{:keys [x y width height]} @map-viewbox]
+                             [(+ x (/ width 2))
+                              (+ y (/ height 2))]))]
+         (inl
+          :css {:margin-left (px 10)}
+          (inl
+           (buttons/a-button
+            :click #(zoom-map! (map-center)
+                               1.1)
+            (img
+             :css {:vertical-align "bottom"}
+             :width (px button-size)
+             :height (px button-size)
+             :src "images/zoomin.svg"
+             :title "Zoom Map In"))
+           (inl
+            (buttons/a-button
+             :click #(zoom-map! (map-center)
+                                (/ 1.0 1.1))
+             (img
+              :css {:vertical-align "bottom"}
+              :width (px button-size)
+              :height (px button-size)
+              :src "images/zoomout.svg"
+              :title "Zoom Map Out"))))))
+       ;; Time indicators
        (div
         :css {:position "absolute"
-              :right "27px"
-              :bottom "0"}
+              :right    (px 27)
+              :bottom   0}
         (span
          (with-help [:map :mission-time]
            "Mission Time:")
@@ -2959,16 +2977,16 @@
                (format-time t)
                "--/----"))))
         (span
-         :css {:margin-left "7px"}
+         :css {:margin-left (px 7)}
          (with-help [:map :weather-time]
            "Weather Time:")
          " "
          (formula-of
-                            [weather-data-params]
-                            (let [t (-> weather-data-params :time :current)]
-                              (if t
-                                (format-time t)
-                                "--/----")))))
+           [weather-data-params]
+           (let [t (-> weather-data-params :time :current)]
+             (if t
+               (format-time t)
+               "--/----")))))
        (formula-of
          [computing]
          (if-not computing
@@ -2977,9 +2995,9 @@
                 :width "24px"
                 :height "24px"
                 :css {:vertical-align "bottom"
-                      :position "absolute"
-                      :right "3px"
-                      :bottom "0"})))))
+                      :position       "absolute"
+                      :right          "3px"
+                      :bottom         "0"})))))
 
 (defn control-layout
   "Lays out controls for a control section. `controls` is a sequence

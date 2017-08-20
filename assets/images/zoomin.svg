@@ -1,0 +1,21 @@
+<?xml version="1.0" ?>
+<svg version="1.1"
+ viewBox="0 0 100 100"
+ xmlns="http://www.w3.org/2000/svg"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+  <title/>
+  <desc/>
+  <defs/>
+  <g stroke="black" stroke-width="10">
+    <rect x="0" y="0" width="100" height="100" fill="none" stroke="none" />
+    <g transform="translate(42,42)"
+       stroke-linecap="round">
+      <circle cx="0" cy="0" r="30" fill="none" />
+      <line x1="-16" y1="0" x2="16" y2="0" />
+      <line x1="0" y1="-16" x2="0" y2="16" />
+    </g>
+    <g transform="translate(42,42) rotate(45) translate(30,0)">
+      <line x1="0" y1="0" x2="34" y2="0" stroke-width="17"/>
+    </g>
+  </g>
+</svg>
