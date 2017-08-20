@@ -2412,17 +2412,17 @@
                                :toggle (cell= (-> display-params
                                                   :overlay
                                                   #{:pressure :temperature :type})))
-        selected-cell-overlay (formula-of
-                                [selected-cell]
-                                (let [[x y] (:coordinates selected-cell)]
-                                  (if (and x y)
+        selected-cell-overlay (let [coords (cell= (:coordinates selected-cell))]
+                                (cell-let [[x y] coords]
+                                  (when-tpl (formula-of [x y]
+                                              (and x y))
                                     (svg/rect
                                      :id "selected-cell-overlay"
+                                     :click #(reset! selected-cell nil)
                                      :x x
                                      :y y
                                      :width 1
-                                     :height 1)
-                                    [])))
+                                     :height 1))))
         wind-stability-areas  (formula-of
                                 [weather-params]
                                 (:wind-stability-areas weather-params))
