@@ -1364,7 +1364,7 @@
               (option :value index
                       :selected (cell= (= ab (:location selected-cell)))
                       (cell= (mission/objective-name mission ab))))))))
-     (vector
+     #_(vector
       (a :css {:margin-left "5px"}
          :href (formula-of
                  [weather-params
