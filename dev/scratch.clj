@@ -2722,3 +2722,55 @@ type: 0x64 -> image
 
 (time/difference-hms {:day 1 :hour 14 :minute 19 :second 06 :millisecond 0}
                      {:day 1 :hour 14 :minute 39 :second 06 :millisecond 0})
+
+(def blacklight
+  (mission/read-mission
+   installs
+   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/Operation_Blacklight.tac"))
+
+(->> blacklight
+     :objectives
+     (map #(mission/objective-name blacklight %))
+     count)
+
+(let [{:keys [names]} blacklight]
+  (names 1665))
+
+(->> blacklight
+     :objectives
+     (filter #(-> % :name-id (= 5112)))
+     first)
+
+(mission/objective-name blacklight (mission/find-objective blacklight :id {:name 2691 :creator 0}))
+
+(defn read-strings
+  "Given a directory with a `name`.idx and `name`.wch files, return a
+  function that given an index that will yield the string at that
+  index."
+  [dir name]
+  (log/debug "read-strings" :dir dir :name name)
+  (let [idx-buf (fs/file-buf (fs/path-combine dir (str name ".idx")))]
+    (binding [octet.buffer/*byte-order* :little-endian]
+      (let [n       (buf/read idx-buf buf/uint16)
+            indices (buf/read idx-buf
+                              (buf/repeat n buf/uint16)
+                              {:offset 2})
+            strings (fs/file-text (fs/path-combine dir (str name ".wch")))]
+        (fn [idx]
+          (log/debug "read-strings"
+                     :idx idx
+                     :n n
+                     :len (count strings)
+                     :indexes-count (count indices)
+                     :start (nth indices idx)
+                     :end  (if (= idx (dec n))
+                             (count strings)
+                             (nth indices (inc idx)))
+                     )
+          (log/spy (subs strings (nth indices idx)
+                         (log/spy (if (= idx (dec n))
+                                    (log/spy (count strings))
+                                    (log/spy (nth indices (inc idx))))))))))))
+
+(let [korea (read-strings "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE" "korea")]
+  (korea 1663))

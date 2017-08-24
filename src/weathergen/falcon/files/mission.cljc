@@ -136,7 +136,10 @@
       "N/A"
 
       (not (zero? name-id))
-      (names name-id)
+      ;; This is sort of a hack - it's barfing on carrier objectives
+      ;; because the name id is invalid as an index. But we've already
+      ;; set the name, so we can fall back on that for now.
+      (or (names name-id) (::name objective) "Unnamed objective")
 
       :else
       (if-let [parent (->> objective :parent (find-objective mission :id))]
@@ -307,20 +310,23 @@
 (defn read-strings
   "Given a directory with a `name`.idx and `name`.wch files, return a
   function that given an index that will yield the string at that
-  index."
+  index, or nil if the index is not in range."
   [dir name]
-  (log/debug "read-strings" :dir dir :name name)
-  (let [idx-buf (fs/file-buf (fs/path-combine dir (str name ".idx")))
-        wch-buf (fs/file-buf (fs/path-combine dir (str name ".wch")))]
+  #_(log/debug "read-strings" :dir dir :name name)
+  (let [idx-buf (fs/file-buf (fs/path-combine dir (str name ".idx")))]
     (binding [octet.buffer/*byte-order* :little-endian]
       (let [n (buf/read idx-buf buf/uint16)
             indices (buf/read idx-buf
                               (buf/repeat n buf/uint16)
                               {:offset 2})
-            strings (buf/read wch-buf
-                              (fixed-string (nth indices (dec n))))]
-        (fn [n]
-          (subs strings (nth indices n) (nth indices (inc n))))))))
+            strings (fs/file-text (fs/path-combine dir (str name ".wch")))]
+        (fn [idx]
+          (when (< idx (dec n))
+            (subs strings
+                  (nth indices idx)
+                  (if (= idx (dec n))
+                    (count strings)
+                    (nth indices (inc idx))))))))))
 
 ;; Ref campstr.cpp(129)
 (defn read-strings-file
