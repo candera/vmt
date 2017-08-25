@@ -1825,7 +1825,8 @@
   be one of `:big-vert-dark`, `:big-vert`, `:big-horiz`, and
   `:small-horiz`."
   [mission team flag-type]
-  (let [icon-index (get-in c/FlagImageID [(team-number team) flag-type])
+  (let [team-info (get-in mission [:campaign-info :team-info (team-number team)])
+        icon-index (get-in c/FlagImageID [(:flag team-info) flag-type])
         image-id (get-in mission [:image-ids :id->name icon-index])]
     (im/make-descriptor mission
                         "resource/main"
