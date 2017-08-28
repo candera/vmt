@@ -1,9 +1,9 @@
 * Change Log
 ** v047 [2017-08-25 Fri]
 - Use correct flags for teams.
-** v046
+** v046 [2017-08-24 Thu]
 - Fix errors loading related to objective names.
   - Error when reading the last string in the strings file.
   - Error when reading the objective name of a carrier objective.
-** v045
+** v045 [2017-08-23 Wed]
 - Initial public release
