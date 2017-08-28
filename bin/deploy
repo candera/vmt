@@ -57,6 +57,8 @@ mkdir -p $PACKAGEPATH
 
 cd $(dirname $0)/../
 
+LINKS=$(mktemp)
+
 for TYPE in "darwin,x64" "win32,ia32" "win32,x64"; do
     PLATFORM=${TYPE%,*}
     ARCH=${TYPE##*,}
@@ -71,9 +73,12 @@ PLATFORM=${PLATFORM}
 ARCH=${ARCH}
 CHANNEL=${CHANNEL}
 UPDATE=${UPDATE_BASE}/${CHANNEL}/latest.txt
+DOWNLOAD_URL=$DOWNLOAD_URL
 EOF
     zip -r ../"$ZIPFILE" . -i \*
     aws s3 cp ../"$ZIPFILE" s3://org.craigandera.vmt/${CHANNEL}/
+    aws s3 cp build.txt s3://org.craigandera.vmt/${CHANNEL}/latest.txt
     popd
-    echo "Download link: ${UPDATE_BASE}/${CHANNEL}/${ZIPFILE}"
 done
+
+cat $LINKS
