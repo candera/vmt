@@ -44,7 +44,7 @@
  ;; doesn't wind up in the source path for released code.
  :source-paths #{"src" "dev"}
  :asset-paths  #{"assets"}
- :repl-server-port 5559
+ :repl-server-port 8728
  :repl-server-name (str project)
  :repl-server-init-ns 'user)
 
