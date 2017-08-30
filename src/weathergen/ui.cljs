@@ -12,7 +12,7 @@
              :as h
              :refer [a
                      br
-                     cond-tpl
+                     code cond-tpl
                      datalist defelem div do! do-watch
                      fieldset for-tpl
                      hr html
@@ -21,7 +21,7 @@
                      ol optgroup option
                      p progress
                      script select span style
-                     table tbody td text thead title tr timeout
+                     table tbody td text textarea thead title tr timeout
                      when-dom when-tpl with-dom with-init! with-timeout]]
             [hoplon.svg :as svg]
             [garden.selectors :as css-sel]
@@ -416,6 +416,9 @@
             (filter #(->> % (mission/side mission) effective-visible-sides))
             (map mission/team-number))
        (mission/teams mission)))))
+
+;; Free-form text briefing notes
+(defc briefing-notes "")
 
 ;;; Components
 
@@ -939,7 +942,8 @@
                                   (assoc-in [:time :max] (mission/mission-time mission-data))))
        (reset! cloud-params (-> vmtb :weather :cloud-params))
        (reset! movement-params (-> vmtb :weather :movement-params))
-       (reset! display-params (-> vmtb :weather :display-params))))))
+       (reset! display-params (-> vmtb :weather :display-params))
+       (reset! briefing-notes (-> vmtb :briefing-notes (or "")))))))
 
 (defn save-briefing
   "Prompts the user for a path and saves a briefing file to it."
@@ -951,7 +955,8 @@
                                     :cloud-params    @cloud-params
                                     :movement-params @movement-params
                                     :display-params  @display-params}
-                    :visible-sides visible-sides}
+                    :visible-sides visible-sides
+                    :briefing-notes @briefing-notes}
                    encode
                    compress)
     :title    "Save a briefing file"
@@ -4469,6 +4474,35 @@
      "Save Briefing (.vmtb)")
     (help-icon [:mission-info :save-briefing]))))
 
+;; TODO: Make this into something other than straight text at some point
+(defn briefing-notes-section
+  "Returns UI for the briefing notes section"
+  [_]
+  (control-section
+   :title (formula-of [display-mode]
+            (with-help [:mission-info :briefing-notes display-mode]
+              "Briefing Notes"))
+   (div
+    (if-tpl (cell= (= display-mode :edit))
+      (textarea
+       :css {:font-family "monospace"
+             :font-size   (pct 110)
+             :width       (pct 100)}
+       :rows 10
+       :value briefing-notes
+       :placeholder "Enter briefing notes here"
+       :change #(reset! briefing-notes @%))
+      (div
+       :css {:font-family  "monospace"
+             :font-size    (pct 110)
+             :white-space  "pre-wrap"
+             :padding      (px 10)
+             :background   "white"
+             :border-width (px 1)
+             :border-color "lightgray"
+             :border-style "solid"}
+       (text briefing-notes))))))
+
 (defn map-controls-section
   "Controls for how the map is displayed."
   [_]
@@ -4647,6 +4681,7 @@
 (def section-ctor
   {:mission-info-section        mission-info-section
    :save-briefing-section       save-briefing-section
+   :briefing-notes-section      briefing-notes-section
    :serialization-controls      serialization-controls
    :step-controls               step-controls
    :weather-display-controls    weather-display-controls

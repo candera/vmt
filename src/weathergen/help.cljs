@@ -585,7 +585,18 @@ forward and backward in time. ")
       unchecked countries. For instance, the home airbase and strength
       of enemy squadrons is always available.")
       (p "Briefing files must be opened on a machine with the
-      indicated version of Falcon BMS and theater installed."))}
+      indicated version of Falcon BMS and theater installed."))
+
+    :briefing-notes
+    {:edit
+     #(div
+       (p "Textual notes that will appear in the briefing file.
+      Currently, no formatting is supported - at some point VMT will
+      permit links, highlighting, etc."))
+
+     :briefing
+     #(div
+       (p "Notes provided by the mission creator. Not editable."))}}
 
    :air-forces
    {:airbase-filtering

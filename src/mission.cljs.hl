@@ -51,7 +51,8 @@
  [{:title "Mission"
    :id :mission-info
    :sections [:mission-info-section {}
-              :save-briefing-section {}]}
+              :save-briefing-section {}
+              :briefing-notes-section {}]}
   {:title "Map"
    :id :map-controls
    :sections [:map-controls-section {}
