@@ -6,47 +6,6 @@ body {
     background-color: #FDFFD9;
 }
 
-#titlebar {
-    background: black;
-    color: white;
-    padding: 4px 13px;
-    margin-bottom: 2px;
-    height: 64px;
-}
-
-#words {
-    padding-top: 16px;
-    font-size: 200%;
-    display: inline-block;
-}
-
-#byline {
-    font-size: 50%;
-    padding-left: 10px;
-}
-
-#byline a {
-    padding-left: 5px;
-}
-
-#byline a:link {
-    color: white;
-}
-
-#byline a:visited {
-    color: white;
-}
-
-#byline a:hover {
-    color: lightblue;
-}
-
-#winglogo {
-    height: 64px;
-    display: inline-block;
-    float: right;
-}
-
 /* Weather category config ********************/
 
 #category-params input {
@@ -256,25 +215,6 @@ rect.inclement {
 
 .weather-type.inclement {
     color: white;
-}
-
-#helpstring {
-    font-size: 50%;
-    position: absolute;
-    right: 100px;
-    top: 45px;
-}
-
-#helpstring a {
-    margin-left: 0.2em;
-}
-
-#helpstring a:visited {
-    color: white
-}
-
-#helpstring a {
-    color: white
 }
 
 .button-container {

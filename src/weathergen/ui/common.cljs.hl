@@ -31,19 +31,30 @@
     (.-exports js/module)
     js/tinycolor))
 
-(defn px
-  "Returns a pixel measurement string, e.g. '2px'. Allows multiple
+(defn measurement
+  "Returns a measurement string, e.g. '2px'. Allows multiple
   arguments, in which case it will return a margin-style string,
-  e.g. `(px 1 2)` returns '1px 2px'."
-  [& ns]
+  e.g. `(measurement \"px\" 1 2)` returns '1px 2px'."
+  [unit & ns]
   (->> ns
-       (map #(str % "px"))
+       (map #(str % unit))
        (str/join " ")))
 
+(defn px
+  "Returns a pixel measurement string, e.g. '2px'. See `measurement`."
+  [& ns]
+  (apply measurement "px" ns))
+
 (defn pct
-  "Returns a percentage measurement string, e.g. '50%'"
-  [n]
-  (str n "%"))
+  "Returns a percentage measurement string, e.g. '50%'. See `measurement`."
+  [& ns]
+  (apply measurement "%" ns))
+
+;; Named to avoid conflict with Hoplon's `em`
+(defn ems
+  "Returns a measurement string in em, e.g. '2em'. See `measurement`."
+  [& ns]
+  (apply measurement "em" ns))
 
 (def colors
   {:invalid       "#c70505"

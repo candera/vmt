@@ -54,6 +54,7 @@
             [weathergen.twx :as twx]
             [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [colors control-section
+                                                   ems
                                                    get-image
                                                    format-time inl
                                                    path-lens pct pre-cell px
@@ -419,6 +420,30 @@
 
 ;; Free-form text briefing notes
 (defc briefing-notes "")
+
+(defn- parse-build-info
+  "Parses the contents of the build.txt file into a map."
+  [build-info]
+  (->> build-info
+       str/split-lines
+       (remove str/blank?)
+       (map (fn [line]
+              (let [[name value] (str/split line #"=")]
+                [(or name "")
+                 (or value "")])))
+       (into {})))
+
+;; Data from the build.txt file
+(defc build-info
+  (let [path (-> electron
+                 .-remote
+                 .-app
+                 .getAppPath
+                 (fs/path-combine "build.txt"))]
+    (when (fs/exists? path)
+      (->> path
+           fs/file-text
+           parse-build-info))))
 
 ;;; Components
 
@@ -3875,13 +3900,15 @@
    :title "Test"
    (tabs/tabs
     :selected (cell :one)
-    :tabs [{:title "One"
+    :tabs [{:title "Version"
             :id :one
-            :ui (div "This is one"
-                     (hoplon.core/button "button"))}
-           {:title "Two"
+            :ui (div (cell= (get build-info "VERSION")))}
+           {:title "App Path"
             :id :two
-            :ui (div "This is two")}
+            :ui (div (-> electron
+                         .-remote
+                         .-app
+                         .getAppPath))}
            {:title "Three"
             :id :three
             :ui (div "This is three")}])
@@ -3891,16 +3918,16 @@
    ;; (pre-cell "display-mode" display-mode)
    ;; (pre-cell "selected-cell" selected-cell)
    #_(let [color (cell (comm/to-hex-str "blue"))]
-     (vector
-      (inl
-       (comm/color-picker
-        :value color
-        :change (fn [e] (log/debug "Color picker 1 changed " :color @e))))
-      (inl
-       (comm/color-picker
-        :value color
-        :change (fn [e] (log/debug "Color picker 2 changed " :color @e))))
-      (button :click #(reset! color (comm/to-hex-str "green")) "Green")))
+       (vector
+        (inl
+         (comm/color-picker
+          :value color
+          :change (fn [e] (log/debug "Color picker 1 changed " :color @e))))
+        (inl
+         (comm/color-picker
+          :value color
+          :change (fn [e] (log/debug "Color picker 2 changed " :color @e))))
+        (button :click #(reset! color (comm/to-hex-str "green")) "Green")))
    #_(let [expand-state (cell :all-expanded)]
        (trees/tree
         expand-state
@@ -4658,25 +4685,73 @@
 (defn titlebar
   "Returns UI that renders the titlebar."
   []
-  (div :id "titlebar"
-       (div :id "words"
-            (span :id "title"
-                  "Virtual Mission Tools")
-            (span :id "byline"
-                  "by"
-                  (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
-                     :target "_blank"
-                     "Tyrant"))
-            (span :id "helpstring"
-                  "Help? Bug? Feature request? Click"
-                  (a :href "help.html"
-                     :target "_blank"
-                     "here")
-                  "."))
-       (a :href "http://firstfighterwing.com"
+  (div
+   :debug "titlebar"
+   :css {:background    "black"
+         :color         "white"
+         :padding       (px 4 13)
+         :margin-bottom (px 2)
+         :height        (px 64)}
+   (inl
+    :debug "titlebar-contents"
+    (inl
+     :debug "left-words"
+     :css {:margin-top (px 14)}
+     (span
+      :debug "title"
+      :css {:padding-top (px 16)
+            :font-size   (pct 200)}
+      "Virtual Mission Tools")
+     (span
+      :debug "version"
+      :css {:padding-left (px 10)}
+      (formula-of [build-info]
+        (let [{:strs [VERSION CHANNEL]} build-info]
+          (str "("
+               (or VERSION "dev build")
+               (when CHANNEL
+                 (str "@" CHANNEL))
+               ")"))))
+     (span
+      :debug "byline"
+      :css {:padding-left (px 5)}
+      "by"
+      (styled
+       :css {:display "inline-block"}
+       :garden [[:a         {:padding-left (px 5)}]
+                [:a:link    {:color "white"}]
+                [:a:visited {:color "white"}]
+                [:a:hover   {:color "lightblue"}]]
+       (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
           :target "_blank"
-          (img :id "winglogo"
-               :src "images/1stVFW_Insignia-64.png"))))
+          "Tyrant"))))
+    (inl
+     :debug "right-words"
+     (styled
+      :debug "helpstring"
+      :garden [[:span {:position "absolute"
+                       :right    (px 100)
+                       :top      (px 45)}]
+               [:a {:color       "white"
+                    :margin-left (ems 0.2)}]
+               [:a:visited {:color "white"}]
+               [:a:hover {:color "lightblue"} ]]
+      (span
+       "Help? Bug? Feature request? Click"
+       (a :href "help.html"
+          :target "_blank"
+          "here")
+       "."))
+     (a
+      :css {:position "absolute"
+            :right    (px 20)
+            :top      (px 12)}
+      :href "http://firstfighterwing.com"
+      :target "_blank"
+      (img
+       :css {:display "inline-block"
+             :height  (px 64)}
+       :src "images/1stVFW_Insignia-64.png"))))))
 
 (def section-ctor
   {:mission-info-section        mission-info-section
