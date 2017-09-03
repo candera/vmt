@@ -4708,8 +4708,9 @@
       (formula-of [build-info]
         (let [{:strs [VERSION CHANNEL]} build-info]
           (str "("
-               (or VERSION "dev build")
-               (when CHANNEL
+               (or VERSION "dev-build")
+               (when (and CHANNEL
+                          (not= CHANNEL "stable"))
                  (str "@" CHANNEL))
                ")"))))
      (span
