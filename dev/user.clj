@@ -224,3 +224,80 @@
        :unit-class-data
        csv-ize
        (spit (fs/path-combine dir "unit-classes.csv"))))
+
+;; TODO: This is super crude, but works. Should return data, not
+;; print, and take seqs of weapons and objectives, not names to match.
+;; Works for now.
+(defn damage-computer
+  "Prints a table of the number of hits needed to destroy each feature
+  at an objective. `weapon-name` is a regex for the weapons to
+  include. `obj-name` is the name of the objective."
+  [mission weapon-name obj-name]
+  (let [weapons                 (->> mission
+                                     :weapon-class-data
+                                     (filter #(re-matches weapon-name (:name %))))
+        {:keys [class-table
+                objective-class-data
+                feature-class-data
+                feature-entry-data
+                point-header-data
+                objectives]}    mission
+        obj                     (->> objectives
+                                     (filter #(= (str/lower-case (mission/objective-name mission %))
+                                                 (str/lower-case obj-name)))
+                                     first)
+        oce                     (mission/objective-class-entry mission obj)
+        {:keys [features
+                first-feature]} oce
+        feature-info      (map #(nth feature-entry-data %)
+                               (range first-feature (+ first-feature features)))
+        feature-class-info      (map (fn [feature]
+                                       (let [ci (-> feature
+                                                    :index
+                                                    (->> (nth class-table)))]
+                                         (assoc ci
+                                                :feature-class-info
+                                                (-> ci
+                                                    :data-pointer
+                                                    (->> (nth feature-class-data))))))
+                                     feature-info)
+        feature-status          (for [f (range features)]
+                                  (let [i  (-> f (/ 4) long)
+                                        f* (- f (* i 4))]
+                                    (if (or (neg? f*)
+                                            (< 255 f*)
+                                            ;; For some weird
+                                            ;; reason (objectiv.cpp[259], there
+                                            ;; can be more features than status
+                                            ;; slots in the objective, in which
+                                            ;; case they zero.
+                                            (<= (count (:f-status obj)) i))
+                                      0
+                                      (-> obj
+                                          :f-status
+                                          (nth i 0)
+                                          (bit-shift-right (* f* 2))
+                                          (bit-and 0x03)))))
+        feature-info            (map (fn [fi fs fci]
+                                       (assoc fi
+                                              :status fs
+                                              :class-info fci
+                                              ))
+                                     feature-info
+                                     feature-status
+                                     feature-class-info)]
+    (println "Recon Order,Target,Weapon,Hits Required")
+    (doseq [[index feature] (map-indexed vector feature-info)
+            weapon          weapons]
+      (let [feature-name    (-> feature :class-info :feature-class-info :name)
+            hit-points      (-> feature :class-info :feature-class-info :hit-points)
+            damage-mods     (-> feature :class-info :feature-class-info :damage-mod)
+            weapon-name     (:name weapon)
+            damage-type     (:damage-type weapon)
+            damage-strength (:strength weapon)
+            damage-mod      (nth damage-mods damage-type)]
+        (printf "%d,%s,%s,%.2f\n"
+                (inc index)
+                feature-name
+                weapon-name
+                (/ hit-points (* (/ damage-strength 100.0) damage-mod)))))))
