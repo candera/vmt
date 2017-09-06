@@ -9,10 +9,29 @@
 
 ;; (set! *warn-on-infer* true)
 
+(defn- make-progress-reporter
+  []
+  (reify progress/Reporter
+    (-start-step [this step-name parent]
+      (let [step-id (str (gensym))]
+        (ipc/send-to-main "load-step-started" {:id     step-id
+                                               :name   step-name
+                                               :parent (when parent (progress/-id parent))})
+        (reify progress/Step
+          (-id [this] step-id)
+          (-succeeded [this]
+            (ipc/send-to-main "load-step-succeeded" {:id step-id}))
+          (-warn [this message]
+            (ipc/send-to-main "load-step-warning" {:id      step-id
+                                                   :message message}))
+          (-failed [this message]
+            (ipc/send-to-main "load-step-failed" {:id      step-id
+                                                  :message message})))))))
+
 (defmethod ipc/on-message "open-mission"
   [_ event installations path]
   (try
-    (binding [progress/*reporter* #(ipc/send-to-main "progress-message" %)]
+    (binding [progress/*reporter* (make-progress-reporter)]
       (log/debug "open-mission" :installations installations :path path)
       (ui/load-mission installations path))
     (ipc/send-to-main "load-complete")
@@ -23,7 +42,7 @@
 (defmethod ipc/on-message "open-briefing"
   [_ event installations path]
   (try
-    (binding [progress/*reporter* #(ipc/send-to-main "progress-message" %)]
+    (binding [progress/*reporter* (make-progress-reporter)]
       (ui/load-briefing installations path)
       (ipc/send-to-main "load-complete"))
     (catch :default ^js/Error e

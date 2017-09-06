@@ -76,19 +76,14 @@
   [_ event path]
   (open path :briefing))
 
-(defmethod ipc/on-message "progress-message"
-  [_ event message]
-  (ipc/send-to-renderer @app-window "progress-message" message))
-
 (defmethod ipc/on-message "load-complete"
   [_ event]
   (->> event .-sender .-id (get @mission-windows) .show)
   (ipc/send-to-renderer @app-window "load-complete"))
 
-(defmethod ipc/on-message "load-failed"
-  [_ event err]
-  (.log js/console "Load failed" err)
-  (ipc/send-to-renderer @app-window "load-failed" err))
+(defmethod ipc/on-message :default
+  [msg-name event msg]
+  (ipc/send-to-renderer @app-window msg-name msg))
 
 (defn init-browser []
   (reset! app-window (mk-window 800 600 true false))

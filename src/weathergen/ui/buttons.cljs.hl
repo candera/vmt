@@ -68,15 +68,24 @@
  ::latched-div-button
  [{:background "linear-gradient(#c0c0c0, #f0f0f0)"}])
 
+(comm/register-class!
+ ::disabled-button
+ [{:pointer-events "none"
+   :color          "grey"
+   :cursor         "default"}])
+
 (defelem a-button
   "Renders a plain button, but using an anchor tag to better enable
   styling. Can take a `latched?` attribute, which, if a cell
-  evaluating to true, locks the button in the pressed state."
+  evaluating to true, locks the button in the pressed state. Can take
+  a `disabled?` attribute, which, if a cell evalating to true,
+  disables the button."
   [attrs content]
-  (with-attr-bindings attrs [latched?]
+  (with-attr-bindings attrs [latched? disabled?]
     (let [down (cell false)]
       (a (merge attrs
-                {:class (formula-of [latched? down]
+                {:class (formula-of [latched? down disabled?]
                           {(comm/class-for ::div-button) true
-                           (comm/class-for ::latched-div-button) (or latched? down)})})
+                           (comm/class-for ::latched-div-button) (or latched? down)
+                           (comm/class-for ::disabled-button) disabled?})})
          content))))

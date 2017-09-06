@@ -554,8 +554,9 @@
   (log/debug "read-embedded-file"
              :type type
              :file-name (:file-name entry))
-  (progress/report (str "Reading " (get file-type-description type "data")))
-  (read-embedded-file* type entry buf database))
+  (progress/with-step (str "Reading " (get file-type-description type "data"))
+    (fn []
+     (read-embedded-file* type entry buf database))))
 
 (def directory-entry
   (buf/spec :file-name (lstring buf/ubyte)
@@ -796,16 +797,18 @@
         strings       (read-strings-file (campaign-dir installation theater))
         database      (assoc (load-initial-database installation theater)
                              :strings strings)
-        _             (progress/report (str "Reading mission files from" path))
-        mission-files (read-embedded-files path database)
+        mission-files (progress/with-step (str "Reading mission files from " path)
+                        (fn []
+                          (read-embedded-files path database)))
         {:keys [theater-name scenario]} (->> mission-files :campaign-info)
         names         (read-strings (campaign-dir installation theater)
                                     theater-name)
         scenario-file (str scenario (extension path))
         scenario-path (fs/path-combine (fs/parent path) scenario-file)
-        _              (progress/report (str "Reading scenario file: "
-                                             scenario-file))
-        scenario-files (read-embedded-files scenario-path database)
+        scenario-files (progress/with-step (str "Reading scenario file: "
+                                                scenario-file)
+                         (fn []
+                          (read-embedded-files scenario-path database)))
         mission (merge database
                        mission-files
                        ;; TODO: Figure out if we need to merge persistent objects
@@ -874,9 +877,9 @@
         scenario-file        (str scenario (:extension briefing))
         scenario-path        (fs/path-combine (campaign-dir installation theater)
                                               scenario-file)
-        _                    (progress/report (str "Reading scenario file: "
-                                                   scenario-file))
-        scenario-files       (read-embedded-files scenario-path database)
+        scenario-files       (progress/with-step (str "Reading scenario file: " scenario-file)
+                               (fn []
+                                 (read-embedded-files scenario-path database)))
         mission              (merge database
                                     briefing
                                     ;; TODO: Figure out if we need to merge persistent objects

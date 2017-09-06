@@ -900,18 +900,18 @@
     "load-mission"
     (let [mission-data (with-time "read-mission"
                          (mission/read-mission installs path))]
-      (dosync
-       (progress/report "Preparing views")
-       (reset! mission mission-data)
-       ;; TODO: We'll have to keep this information elsewhere when we
-       ;; refactor away from being WeatherGen
-       (let [current (mission/mission-time @mission)]
-         (reset! visible-sides
-                 (->> mission-data
-                      mission/last-player-team
-                      (mission/side mission-data)
-                      (hint->> cljs.core/Hashable)
-                      hash-set)))))))
+      (progress/with-step "Preparing views"
+        #(dosync
+          (reset! mission mission-data)
+          ;; TODO: We'll have to keep this information elsewhere when we
+          ;; refactor away from being WeatherGen
+          (let [current (mission/mission-time @mission)]
+            (reset! visible-sides
+                    (->> mission-data
+                         mission/last-player-team
+                         (mission/side mission-data)
+                         (hint->> cljs.core/Hashable)
+                         hash-set))))))))
 
 (defn compress
   "Compresses a buffer, returing a new buffer with the compressed
@@ -941,34 +941,37 @@
   "Loads a briefing (.vmtb) file given a path to a briefing and a map
   from installation names to their directories."
   [installations path]
-  (progress/report "Reading briefing file")
-  (let [{:keys [revision install-id briefing] :as vmtb}
-        (->> path
-             fs/file-buffer
-             decompress
-             decode)]
-    (log/debug "load-briefing"
-               :installations installations
-               :revision revision
-               :briefing? (some? briefing))
-    (progress/report (str "Loading briefing from " path))
-    (let [mission-data (mission/briefing->mission installations briefing)
-          unedit (fn [m] (assoc m :editing? false))]
-      (progress/report "Preparing views")
-      (dosync
-       (reset! display-mode :briefing)
-       (reset! mission mission-data)
-       (reset! visible-sides (:visible-sides vmtb))
-       (reset! weather-params (-> vmtb
-                                  :weather
-                                  :weather-params
-                                  (update :wind-stability-areas #(map unedit %))
-                                  (update :weather-overrides #(map unedit %))
-                                  (assoc-in [:time :max] (mission/mission-time mission-data))))
-       (reset! cloud-params (-> vmtb :weather :cloud-params))
-       (reset! movement-params (-> vmtb :weather :movement-params))
-       (reset! display-params (-> vmtb :weather :display-params))
-       (reset! briefing-notes (-> vmtb :briefing-notes (or "")))))))
+  (progress/with-step "Reading briefing file"
+    (fn []
+      (let [{:keys [revision install-id briefing] :as vmtb}
+            (->> path
+                 fs/file-buffer
+                 decompress
+                 decode)]
+        (log/debug "load-briefing"
+                   :installations installations
+                   :revision revision
+                   :briefing? (some? briefing))
+        (let [mission-data (progress/with-step (str "Loading briefing from " path)
+                             (fn []
+                               (mission/briefing->mission installations briefing)))
+              unedit (fn [m] (assoc m :editing? false))]
+          (progress/with-step "Preparing views"
+            (fn []
+              (dosync
+               (reset! display-mode :briefing)
+               (reset! mission mission-data)
+               (reset! visible-sides (:visible-sides vmtb))
+               (reset! weather-params (-> vmtb
+                                          :weather
+                                          :weather-params
+                                          (update :wind-stability-areas #(map unedit %))
+                                          (update :weather-overrides #(map unedit %))
+                                          (assoc-in [:time :max] (mission/mission-time mission-data))))
+               (reset! cloud-params (-> vmtb :weather :cloud-params))
+               (reset! movement-params (-> vmtb :weather :movement-params))
+               (reset! display-params (-> vmtb :weather :display-params))
+               (reset! briefing-notes (-> vmtb :briefing-notes (or "")))))))))))
 
 (defn save-briefing
   "Prompts the user for a path and saves a briefing file to it."

@@ -39,6 +39,7 @@
              (attrs item)
              {})
            (inl
+            :css {:white-space "nowrap"}
             (inl :css {:width "15px"
                        :font-size "120%"
                        :vertical-align "top"}
@@ -46,7 +47,7 @@
                    (div :css {:display "inline-block"
                               :cursor "pointer"
                               :position "relative"
-                              :background "white"}
+                              :background "transparent"}
                         :click (fn []
                                  (dosync
                                   (swap! expanded? not)

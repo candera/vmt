@@ -2852,3 +2852,24 @@ type: 0x64 -> image
               (/ hit-points (* (/ damage-strength 100.0) damage-mod))))))
 
 (damage-computer @fnpu #".*Mk-84.*" "haeju shipyard")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(let [messages [{:type :started :id "1" :name "Reading briefing file"}
+                {:type :started :id "2" :name "Something else"}]]
+  (->> messages
+       (reduce (fn [status message]
+                 (let [{:keys [id type message name]} message
+                       {:keys [steps order]} status]
+                   (if (contains? steps id)
+                     (cond-> status
+                       message (update-in [:steps id :messages] conj message)
+                       true    (assoc-in  [:steps id :state] type))
+                     (-> status
+                         (update :order conj id)
+                         (assoc-in [:steps id] {:state    type
+                                                :id       id
+                                                :name     name
+                                                :messages (when message [message])})))))
+               {})
+       pprint))
