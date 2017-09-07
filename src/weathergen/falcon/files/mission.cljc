@@ -612,26 +612,33 @@
 (defn read-theater-def
   "Reads the theater TDF from the given path, relative to `data-dir`."
   [data-dir path]
-  (let [d (->> path
-               (fs/path-combine data-dir)
-               fs/file-text
-               str/split-lines
-               (map str/trim)
-               (remove str/blank?)
-               (remove #(.startsWith % "#"))
-               (map parse-theater-def-line)
-               (into {:path path}))]
-    (-> d
-        (set/rename-keys {:artdir :art-dir
-                          :misctexdir :misc-tex-dir
-                          :objectdir :object-dir
-                          :terraindir :terrain-dir
-                          :campaigndir :campaign-dir
-                          :simdatadir :sim-data-dir
-                          :mintact :min-tacan
-                          :3ddatadir :3d-data-dir
-                          :sounddir :sound-dir})
-        adjust-art-dir)))
+  (let [defpath (fs/path-combine data-dir path)]
+    (if-not (fs/exists? defpath)
+      (let [msg (str "Can't find theater definition at "
+                     defpath
+                     ". Ignoring theater.")]
+        (log/warn msg)
+        (progress/step-warn msg)
+        nil)
+      (let [d (->> defpath
+                   fs/file-text
+                   str/split-lines
+                   (map str/trim)
+                   (remove str/blank?)
+                   (remove #(.startsWith % "#"))
+                   (map parse-theater-def-line)
+                   (into {:path path}))]
+        (-> d
+            (set/rename-keys {:artdir :art-dir
+                              :misctexdir :misc-tex-dir
+                              :objectdir :object-dir
+                              :terraindir :terrain-dir
+                              :campaigndir :campaign-dir
+                              :simdatadir :sim-data-dir
+                              :mintact :min-tacan
+                              :3ddatadir :3d-data-dir
+                              :sounddir :sound-dir})
+            adjust-art-dir)))))
 
 (defn read-theater-defs
   "Read, parse, and return information about the installled theaters
@@ -644,7 +651,8 @@
        (map str/trim)
        (remove #(.startsWith % "#"))
        (remove str/blank?)
-       (map #(read-theater-def data-dir %))))
+       (mapv #(read-theater-def data-dir %))
+       (remove nil?)))
 
 (defn read-id-list-file
   "Reads an id list file consisting of pairs of names and ids. Returns
