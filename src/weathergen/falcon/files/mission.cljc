@@ -791,24 +791,28 @@
   "Given a path to a mission (.cam/.tac/.trn) file, read,
   parse, and return it."
   [installs path]
-  (let [install-dir   (find-install-dir path)
-        installation  (load-installation install-dir)
-        theater       (find-theater installation path)
-        strings       (read-strings-file (campaign-dir installation theater))
-        database      (assoc (load-initial-database installation theater)
-                             :strings strings)
+  (let [install-dir   (progress/with-step "Locating installation directory"
+                        #(find-install-dir path))
+        installation  (progress/with-step (str "Scanning Falcon installation at " install-dir)
+                        #(load-installation install-dir))
+        theater       (progress/with-step "Determining theater"
+                        #(find-theater installation path))
+        strings       (progress/with-step "Reading theater strings"
+                        #(read-strings-file (campaign-dir installation theater)))
+        database      (progress/with-step "Reading theater data"
+                        #(assoc (load-initial-database installation theater)
+                               :strings strings))
         mission-files (progress/with-step (str "Reading mission files from " path)
-                        (fn []
-                          (read-embedded-files path database)))
+                        #(read-embedded-files path database))
         {:keys [theater-name scenario]} (->> mission-files :campaign-info)
-        names         (read-strings (campaign-dir installation theater)
-                                    theater-name)
+        names         (progress/with-step "Reading theater names"
+                        #(read-strings (campaign-dir installation theater)
+                                      theater-name))
         scenario-file (str scenario (extension path))
         scenario-path (fs/path-combine (fs/parent path) scenario-file)
         scenario-files (progress/with-step (str "Reading scenario file: "
                                                 scenario-file)
-                         (fn []
-                          (read-embedded-files scenario-path database)))
+                         #(read-embedded-files scenario-path database))
         mission (merge database
                        mission-files
                        ;; TODO: Figure out if we need to merge persistent objects

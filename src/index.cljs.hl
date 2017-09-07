@@ -64,10 +64,16 @@
 (defmethod ipc/on-message "load-failed"
   [_ _ err]
   (.log js/console "load-failed" err)
-  (swap! load-status update-for-id ::root #(-> %
-                                               (assoc :state :failed)
-                                               (update :messages conj {:type :error
-                                                                       :text err}))))
+  (dosync
+   (swap! load-status #(->> %
+                            (map (fn [step]
+                                   (if (= (:state step) :started)
+                                     (assoc step :state :failed)
+                                     step)))))
+   (swap! load-status update-for-id ::root #(-> %
+                                                (assoc :state :failed)
+                                                (update :messages conj {:type :error
+                                                                        :text err})))))
 
 (defn load-mission
   []
@@ -148,25 +154,30 @@
                                               (cell-let [{:keys [id messages state name]} item]
                                                 (inl
                                                  (inl
+                                                  :css {:vertical-align "top"}
                                                   (case-tpl state
-                                                    :succeeded (inl :css {:font-weight "bold"
-                                                                          :color       "green"
-                                                                          :width       (px 24)}
+                                                    :succeeded (inl :css {:font-weight    "bold"
+                                                                          :color          "green"
+                                                                          :width          (px 24)
+                                                                          :vertical-align "top"}
                                                                     "✓")
-                                                    :failed    (inl :css {:font-weight "bold"
-                                                                          :color       "red"
-                                                                          :width       (px 24)}
+                                                    :failed    (inl :css {:font-weight    "bold"
+                                                                          :color          "red"
+                                                                          :width          (px 24)
+                                                                          :vertical-align "top"}
                                                                     "✗")
-                                                    :started   (img :css {:width          (px 24)
-                                                                          :vertical-align "middle"
-                                                                          :margin-top     (px -5)}
+                                                    :started   (img :css {:width      (px 24)
+                                                                          :vertical-align "top"
+                                                                          :margin-top (px 5)}
                                                                     :src "images/spinner.gif")
-                                                    :warning   (img :css {:width          (px 24)
-                                                                          :vertical-align "middle"
-                                                                          :margin-top     (px -5)
-                                                                          :margin-right   (px 3)}
+                                                    :warning   (img :css {:width        (px 24)
+                                                                          :vertical-align "top"
+                                                                          :margin-top   (px 5)
+                                                                          :margin-right (px 3)}
                                                                     :src "images/warning.svg"))
-                                                  name)
+                                                  (inl
+                                                   :css {:white-space "normal"}
+                                                   name))
                                                  (table
                                                   :css {:margin-left (px 30)}
                                                   (for-tpl [message messages]
@@ -186,10 +197,11 @@
                                                        (td
                                                         (div
                                                          :css (formula-of [type]
-                                                                (when (= type :error)
+                                                                (if (= type :error)
                                                                   {:white-space "pre"
                                                                    :font-family "monospace"
-                                                                   :margin-top  (px 7)}))
+                                                                   :margin-top  (px 7)}
+                                                                  {:white-space "normal"}))
                                                          text)))))))))
                                  :children  (fn [item]
                                               (formula-of [item load-status]
