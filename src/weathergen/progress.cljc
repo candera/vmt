@@ -56,12 +56,23 @@
   arguments."
   [step-name f]
   (let [step (start-step step-name *current-step*)]
-    (try
-      (binding [*current-step* step]
+    (binding [*current-step* step]
+      (try
         (let [val (f)]
-          (step-succeeded step)
-          val))
-      (catch #?(:clj Throwable :cljs :default) x
-        (step-failed #?(:clj (.getStackTrace x)
-                        :cljs (.-stack x)))
-        (throw x)))))
+          (step-succeeded)
+          val)
+        (catch #?(:clj Throwable :cljs :default) x
+          #?(:cljs (.error js/console "Caught error"
+                           "propagated?" (-> x ex-data :type (= ::propagated-error))
+                           ":x" x
+                           ":data" (ex-data x)))
+          (step-failed (let [{:keys [type omit-stack-trace?]} (ex-data x)]
+                         (cond
+                           (= type ::propagated-error) nil
+                           omit-stack-trace? #?(:clj (.getMessage x)
+                                                :cljs (.-message x))
+                           :else #?(:clj (.getStackTrace x)
+                                    :cljs (.-stack x)))))
+          ;; Cascade the fact that the step failed, but not the error
+          ;; message
+          (throw (ex-info "Propagated error" {:type ::propagated-error} x)))))))

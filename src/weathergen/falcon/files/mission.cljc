@@ -842,7 +842,7 @@
                                                            (and (fs/exists? dir)
                                                                 (fs/exists? install-dir)
                                                                 (fs/identical? dir install-dir))))
-                                                 (mapv key))
+                                                 (into {}))
                         :mission-name   (fs/basename path)
                         :theater        theater})]
     (-> mission
@@ -865,7 +865,16 @@
   [installs briefing]
   (let [{:keys [theaterdef-name
                 install-id]} briefing
-        install-dir          (get installs install-id)
+        install-dir          (progress/with-step (str "Looking for installation of BMS version '"
+                                                      install-id
+                                                      "'.")
+                               (fn []
+                                 (or (get installs install-id)
+                                     (throw (ex-info "Not found"
+                                                     {:reason            ::install-not-found
+                                                      :omit-stack-trace? true
+                                                      :installs          installs
+                                                      :install-id        install-id})))))
         installation         (load-installation install-dir)
         theater              (->> installation
                                   :theaters

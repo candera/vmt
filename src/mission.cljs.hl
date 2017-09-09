@@ -37,17 +37,25 @@
     (ipc/send-to-main "load-complete")
     (catch :default ^js/Error e
       (log/error e "Load failed" :stack (.-stack e))
-      (ipc/send-to-main "load-failed" (.-stack e)))))
+      (ipc/send-to-main "load-failed"
+                        (when-not (-> e ex-data :type (= ::progress/propagated-error))
+                          (.-stack e))))))
 
 (defmethod ipc/on-message "open-briefing"
   [_ event installations path]
   (try
     (binding [progress/*reporter* (make-progress-reporter)]
-      (ui/load-briefing installations path)
-      (ipc/send-to-main "load-complete"))
+      (log/debug "open-mission" :installations installations :path path)
+      (ui/load-briefing installations path))
+    (ipc/send-to-main "load-complete")
     (catch :default ^js/Error e
-      (log/error e "Load failed" :stack (.-stack e))
-      (ipc/send-to-main "load-failed" (.-stack e)))))
+      (log/error e "Load failed"
+                 :ex-data (ex-data e)
+                 :propagated? (-> e ex-data :type (= ::progress/propagated-error))
+                 :stack (.-stack e))
+      (ipc/send-to-main "load-failed"
+                        (when-not (-> e ex-data :type (= ::progress/propagated-error))
+                          (.-stack e))))))
 
 (reset! ui/weather-params
         ui/default-weather-params)

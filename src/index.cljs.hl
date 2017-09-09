@@ -19,6 +19,8 @@
 (defc load-status
   [])
 
+(defc loading? false)
+
 (defn- update-for-id
   "Updates the entry in `status` whose id is `id`, by replacing it with
   the result of calling `f` on it."
@@ -30,41 +32,51 @@
 
 (defmethod ipc/on-message "load-step-started"
   [_ _ {:keys [id name parent]}]
-  (swap! load-status conj {:state    :started
-                           :id       id
-                           :name     name
-                           :messages []
-                           :parent   (or parent ::root)}))
+  (when @loading?
+    (swap! load-status conj {:state    :started
+                             :id       id
+                             :name     name
+                             :messages []
+                             :parent   (or parent ::root)})))
 
 (defmethod ipc/on-message "load-step-succeeded"
   [_ _ {:keys [id]}]
-  (swap! load-status update-for-id id #(assoc % :state :succeeded)))
+  (when @loading?
+    (swap! load-status update-for-id id #(assoc % :state :succeeded))))
 
 (defmethod ipc/on-message "load-step-warning"
   [_ _ {:keys [id message]}]
-  (swap! load-status update-for-id id #(-> %
-                                           (assoc :state :warning)
-                                           (update :messages conj {:type :warning
-                                                                   :text message}))))
+  (when @loading?
+    (swap! load-status update-for-id id #(-> %
+                                             (assoc :state :warning)
+                                             (update :messages conj {:type :warning
+                                                                     :text message})))))
 
 (defmethod ipc/on-message "load-step-failed"
   [_ _ {:keys [id message]}]
-  (swap! load-status update-for-id id #(-> %
-                                           (assoc :state :failed)
-                                           (update :messages conj {:type :error
-                                                                   :text message}))))
+  (when @loading?
+    (swap! load-status update-for-id id #(-> %
+                                             (assoc :state :failed)
+                                             (update :messages (fn [messages]
+                                                                 (if message
+                                                                   (conj messages {:type :error
+                                                                                   :text message})
+                                                                   messages)))))))
 
 
 (defmethod ipc/on-message "load-complete"
   [_ event]
   (.log js/console "load-complete")
-  (swap! load-status update-for-id ::root #(-> %
-                                               (assoc :state :succeeded))))
+  (dosync
+   (reset! loading? false)
+   (swap! load-status update-for-id ::root #(-> %
+                                                (assoc :state :succeeded)))))
 
 (defmethod ipc/on-message "load-failed"
   [_ _ err]
   (.log js/console "load-failed" err)
   (dosync
+   (reset! loading? false)
    (swap! load-status #(->> %
                             (map (fn [step]
                                    (if (= (:state step) :started)
@@ -72,8 +84,11 @@
                                      step)))))
    (swap! load-status update-for-id ::root #(-> %
                                                 (assoc :state :failed)
-                                                (update :messages conj {:type :error
-                                                                        :text err})))))
+                                                (update :messages (fn [messages]
+                                                                    (if err
+                                                                      (conj messages {:type :error
+                                                                                      :text err})
+                                                                      messages)))))))
 
 (defn load-mission
   []
@@ -87,9 +102,11 @@
                                                  :extensions ["cam"]}
                                                 {:name       "Tactical engagement file"
                                                  :extensions ["tac"]}]})))]
-    (reset! load-status [{:id    ::root
-                          :state :started
-                          :name  "Loading mission"}])
+    (dosync
+     (reset! loading? true)
+     (reset! load-status [{:id    ::root
+                           :state :started
+                           :name  "Loading mission"}]))
     (ipc/send-to-main "open-mission" path)))
 
 (defn load-briefing
@@ -102,157 +119,113 @@
                               :openFile true
                               :filters #js [#js {:name "VMT Briefing"
                                                  :extensions #js ["vmtb"]}]}))]
-    (reset! load-status [{:id    ::root
-                          :state :started
-                          :name  "Loading briefing"}])
+    (dosync
+     (reset! loading? true)
+     (reset! load-status [{:id    ::root
+                           :state :started
+                           :name  "Loading briefing"}]))
     (ipc/send-to-main "open-briefing" path)))
 
 (html
  (ui/head)
  (body
   :css {:margin "0"}
-  (let [loading? (formula-of [load-status]
-                   (->> load-status
-                        (filter #(-> % :id (= ::root)))
-                        first
-                        :state
-                        (= :started)))]
-    (div
-     :css {:display        "flex"
-           :flex-direction "column"
-           :height         "100vh"}
+  (div
+   :css {:display        "flex"
+         :flex-direction "column"
+         :height         "100vh"}
+   (div
+    :css {:padding "8px 8px 0"}
+    (ui/titlebar))
+   (let [button-style {:display "inline-block"
+                       :margin  (px 5 10)}]
      (div
-      :css {:padding "8px 8px 0"}
-      (ui/titlebar))
-     (let [button-style {:display "inline-block"
-                         :margin  (px 5 10)}]
-       (div
-        :css {:font-size (pct 150)}
-        (buttons/a-button
-         :disabled? loading?
-         :css button-style
-         :click load-mission
-         "Load mission (.cam/.tac)")
-        (buttons/a-button
-         :disabled? loading?
-         :css button-style
-         :click load-briefing
-         "Load briefing (.vmtb)")))
-     (with-let [elem (div
-                      :css {:overflow-y "auto"
-                            :overflow-x "auto"
-                            :flex       1
-                            :font-size  "150%"
-                            :border     "solid 1px black"
-                            :margin     "0 10px 20px 10px"
-                            :padding    "4px"}
-                      (comm/styled
-                       :garden [:ol {:margin-top 0}]
-                       (trees/tree
-                        (cell :all-expanded)
-                        (repeat {:formatter (fn [expanded? item]
-                                              (cell-let [{:keys [id messages state name]} item]
+      :css {:font-size (pct 150)}
+      (buttons/a-button
+       :disabled? loading?
+       :css button-style
+       :click load-mission
+       "Load mission (.cam/.tac)")
+      (buttons/a-button
+       :disabled? loading?
+       :css button-style
+       :click load-briefing
+       "Load briefing (.vmtb)")))
+   (with-let [elem (div
+                    :css {:overflow-y "auto"
+                          :overflow-x "auto"
+                          :flex       1
+                          :font-size  "150%"
+                          :border     "solid 1px black"
+                          :margin     "0 10px 20px 10px"
+                          :padding    "4px"}
+                    (comm/styled
+                     :garden [:ol {:margin-top 0}]
+                     (trees/tree
+                      (cell :all-expanded)
+                      (repeat {:formatter (fn [expanded? item]
+                                            (cell-let [{:keys [id messages state name]} item]
+                                              (inl
+                                               (inl
+                                                :css {:vertical-align "top"}
+                                                (case-tpl state
+                                                  :succeeded (inl :css {:font-weight    "bold"
+                                                                        :color          "green"
+                                                                        :width          (px 24)
+                                                                        :vertical-align "top"}
+                                                                  "✓")
+                                                  :failed    (inl :css {:font-weight    "bold"
+                                                                        :color          "red"
+                                                                        :width          (px 24)
+                                                                        :vertical-align "top"}
+                                                                  "✗")
+                                                  :started   (img :css {:width      (px 24)
+                                                                        :vertical-align "top"
+                                                                        :margin-top (px 5)}
+                                                                  :src "images/spinner.gif")
+                                                  :warning   (img :css {:width        (px 24)
+                                                                        :vertical-align "top"
+                                                                        :margin-top   (px 5)
+                                                                        :margin-right (px 3)}
+                                                                  :src "images/warning.svg"))
                                                 (inl
-                                                 (inl
-                                                  :css {:vertical-align "top"}
-                                                  (case-tpl state
-                                                    :succeeded (inl :css {:font-weight    "bold"
-                                                                          :color          "green"
-                                                                          :width          (px 24)
-                                                                          :vertical-align "top"}
-                                                                    "✓")
-                                                    :failed    (inl :css {:font-weight    "bold"
-                                                                          :color          "red"
-                                                                          :width          (px 24)
-                                                                          :vertical-align "top"}
-                                                                    "✗")
-                                                    :started   (img :css {:width      (px 24)
-                                                                          :vertical-align "top"
-                                                                          :margin-top (px 5)}
-                                                                    :src "images/spinner.gif")
-                                                    :warning   (img :css {:width        (px 24)
-                                                                          :vertical-align "top"
-                                                                          :margin-top   (px 5)
-                                                                          :margin-right (px 3)}
-                                                                    :src "images/warning.svg"))
-                                                  (inl
-                                                   :css {:white-space "normal"}
-                                                   name))
-                                                 (table
-                                                  :css {:margin-left (px 30)}
-                                                  (for-tpl [message messages]
-                                                    (cell-let [{:keys [type text]} message]
-                                                      (tr
-                                                       (td
-                                                        :css {:vertical-align "top"}
-                                                        (case-tpl type
-                                                          :warning (img :css {:width          (px 24)
-                                                                              :vertical-align "middle"
-                                                                              :margin-top     (px -5)}
-                                                                        :src "images/warning.svg")
-                                                          :error   (inl :css {:font-weight "bold"
-                                                                              :color       "red"
-                                                                              :width       (px 24)}
-                                                                        "✗")))
-                                                       (td
-                                                        (div
-                                                         :css (formula-of [type]
-                                                                (if (= type :error)
-                                                                  {:white-space "pre"
-                                                                   :font-family "monospace"
-                                                                   :margin-top  (px 7)}
-                                                                  {:white-space "normal"}))
-                                                         text)))))))))
-                                 :children  (fn [item]
-                                              (formula-of [item load-status]
-                                                (->> load-status
-                                                     (filter #(-> % :parent (= (:id item)))))))})
-                        (formula-of [load-status]
-                          (->> load-status
-                               (filter #(-> % :parent nil?))))))
-                      #_(for-tpl [message (cell= (butlast progress-messages))]
-                          (div (span :css {:font-weight "bold"
-                                           :color       "green"
-                                           :width       "24px"
-                                           :display     "inline-block"}
-                                     "✓")
-                               message))
-                      #_(let [last-message (cell= (last progress-messages))]
-                          (div
-                           (if-tpl loading?
-                             (img :css {:width          "24px"
-                                        :vertical-align "middle"
-                                        :margin-top     "-5px"}
-                                  :src "images/spinner.gif")
-                             (span :css (formula-of [load-error]
-                                          {:font-weight "bold"
-                                           :color       (if load-error
-                                                          "red"
-                                                          "green")
-                                           :width       "24px"
-                                           :display     "inline-block"})
-                                   (cond-tpl
-                                     (cell= (not last-message)) ""
-                                     load-error "✗"
-                                     :else "✓")))
-                           last-message
-                           (when-tpl load-error
-                             (let [show? (cell false)]
-                               [(span
-                                 :css {:color           "blue"
-                                       :text-decoration "underline"
-                                       :font-size       "70%"
-                                       :margin-left     "5px"}
-                                 :click #(swap! show? not)
-                                 (if-tpl show?
-                                   "Hide error details"
-                                   "Show error details"))
-                                (pre :toggle show?
-                                     :css {:padding-left "10px"}
-                                     load-error)])))))]
-       (add-watch load-status #_progress-messages
-                  ::scroll-notifications
-                  (fn [_ _ _ _]
-                    (with-timeout 0
-                      ;; TODO: Scroll to the bottom of the element, not the top
-                      (-> elem .-scrollTop (set! (.-scrollHeight elem)))))))))))
+                                                 :css {:white-space "normal"}
+                                                 name))
+                                               (table
+                                                :css {:margin-left (px 30)}
+                                                (for-tpl [message messages]
+                                                  (cell-let [{:keys [type text]} message]
+                                                    (tr
+                                                     (td
+                                                      :css {:vertical-align "top"}
+                                                      (case-tpl type
+                                                        :warning (img :css {:width          (px 24)
+                                                                            :vertical-align "middle"
+                                                                            :margin-top     (px -5)}
+                                                                      :src "images/warning.svg")
+                                                        :error   (inl :css {:font-weight "bold"
+                                                                            :color       "red"
+                                                                            :width       (px 24)}
+                                                                      "✗")))
+                                                     (td
+                                                      (div
+                                                       :css (formula-of [type]
+                                                              (if (= type :error)
+                                                                {:white-space "pre"
+                                                                 :font-family "monospace"
+                                                                 :margin-top  (px 7)}
+                                                                {:white-space "normal"}))
+                                                       text)))))))))
+                               :children  (fn [item]
+                                            (formula-of [item load-status]
+                                              (->> load-status
+                                                   (filter #(-> % :parent (= (:id item)))))))})
+                      (formula-of [load-status]
+                        (->> load-status
+                             (filter #(-> % :parent nil?)))))))]
+     (add-watch load-status
+                ::scroll-notifications
+                (fn [_ _ _ _]
+                  (with-timeout 0
+                    ;; TODO: Scroll to the bottom of the element, not the top
+                    (-> elem .-scrollTop (set! (.-scrollHeight elem))))))))))

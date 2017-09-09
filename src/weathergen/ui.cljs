@@ -3914,7 +3914,15 @@
                          .getAppPath))}
            {:title "Three"
             :id :three
-            :ui (div "This is three")}])
+            :ui (let [choice (cell :a)]
+                  (div
+                   (comm/radio-group
+                    :value choice
+                    :choices (cell [{:value :a
+                                     :label "a"}
+                                    {:value :b
+                                     :label "b"}]))
+                   (div (cell= (str "value: " (pr-str choice))))))}])
    ;; (pre-cell "visible-sides" visible-sides)
    ;; (pre-cell "effective-visible-sides" effective-visible-sides)
    ;; (pre-cell "visible-teams" visible-teams)
@@ -4470,39 +4478,61 @@
    :title (with-help [:mission-info :save-briefing]
             "Save Mission Briefing")
    :toggle (cell= (= display-mode :edit))
-   (div
-    :css {:padding "5px"}
-    (div
-     (cond-tpl
-       (-> mission :candidate-installs count (= 1) cell=)
-       (div (span "Briefing will be saved for installation: ")
-            (span :css {:font-family "monospace"
-                        :font-size   "120%"}
-                  (cell= (-> mission :candidate-installs first))))
-
-       (-> mission :candidate-installs count zero? cell=)
-       "Cannot find a matching installation of Falcon BMS for this mission."
-
-       :else "Two or more installed copies of Falcon BMS point at the same directory. Cannot save briefing due to ambiguity. TODO: Tyrant should fix this. :)"))
-    (div
-     :css {:border        "1px solid black"
-           :margin-top    "10px"
-           :margin-bottom "10px"}
+   (let [only-install     (formula-of [mission]
+                            (when (-> mission :candidate-installs count (= 1))
+                              (-> mission :candidate-installs first)))
+         selected-install (cell nil)
+         install-to-save  (formula-of [only-install selected-install]
+                            (or only-install selected-install))]
      (div
-      :css {:color         "white"
-            :background    "black"
-            :margin-bottom "5px"
-            :padding       "2px"}
-      "Visibility")
-     (comm/side-selector
-      :css {:padding "0 0 5px 5px"}
-      :mission mission
-      :selected-sides visible-sides))
-    (buttons/a-button
-     :toggle (-> mission :candidate-installs count (= 1) cell=)
-     :click #(save-briefing (-> @mission :candidate-installs first) @visible-sides)
-     "Save Briefing (.vmtb)")
-    (help-icon [:mission-info :save-briefing]))))
+      :css {:padding "5px"}
+      (div
+       (cond-tpl
+         only-install
+         (div (span "Briefing will be saved for installation: ")
+              (span :css {:font-family "monospace"
+                          :font-size   "120%"}
+                    (cell= (-> mission :candidate-installs first key))))
+
+         (-> mission :candidate-installs count zero? cell=)
+         "Cannot find a matching installation of Falcon BMS for this mission."
+
+         :else
+         (div
+          (div
+           (span "Multiple installed copies of Falcon BMS point at the mission directory, ")
+           (span
+            :css {:font-family "monospace"
+                  :font-size "110%"}
+            (formula-of [mission]
+              (-> mission :candidate-installs first val)))
+           (span ". Select which installation this mission is for:"))
+          (comm/radio-group
+           :value selected-install
+           :choices (formula-of [mission]
+                      (for [[install-name install-path] (:candidate-installs mission)]
+                        {:value install-name
+                         :label (inl install-name)}))))
+         #_""))
+      (div
+       :css {:border        "1px solid black"
+             :margin-top    "10px"
+             :margin-bottom "10px"}
+       (div
+        :css {:color         "white"
+              :background    "black"
+              :margin-bottom "5px"
+              :padding       "2px"}
+        "Visibility")
+       (comm/side-selector
+        :css {:padding "0 0 5px 5px"}
+        :mission mission
+        :selected-sides visible-sides))
+      (buttons/a-button
+       :disabled? (cell= (not install-to-save))
+       :click #(save-briefing @install-to-save @visible-sides)
+       "Save Briefing (.vmtb)")
+      (help-icon [:mission-info :save-briefing])))))
 
 ;; TODO: Make this into something other than straight text at some point
 (defn briefing-notes-section
