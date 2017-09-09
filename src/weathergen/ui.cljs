@@ -4506,7 +4506,7 @@
                   :font-size "110%"}
             (formula-of [mission]
               (-> mission :candidate-installs first val)))
-           (span ". Select which installation this mission is for:"))
+           (span ". Select which installation this mission is for. (If unsure, choose 'Falcon BMS 4.33 U1'.)"))
           (comm/radio-group
            :value selected-install
            :choices (formula-of [mission]
