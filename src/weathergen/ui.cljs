@@ -4561,7 +4561,13 @@
              :border-width (px 1)
              :border-color "lightgray"
              :border-style "solid"}
-       (text briefing-notes))))))
+       (formula-of [briefing-notes]
+         (if (str/blank? briefing-notes)
+           (span
+            :css {:font-style "italic"
+                  :color      "darkgrey"}
+            "No briefing notes were included.")
+           briefing-notes)))))))
 
 (defn map-controls-section
   "Controls for how the map is displayed."
