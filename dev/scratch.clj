@@ -2873,3 +2873,34 @@ type: 0x64 -> image
                                                 :messages (when message [message])})))))
                {})
        pprint))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+(let [tree-level (fn tree-level
+                   [items parent]
+                   (for [item items
+                         :let [{:keys [id]} item
+                               kids (->> items
+                                         (filter #(= (:parent %) id))
+                                         seq)]
+                         :when (= (:parent item) parent)]
+                     {:formatter :formatter
+                      :item item
+                      ;; :id id
+                      ;; :kids kids
+                      :children (when kids
+                                  (tree-level items id))}))
+      load-status [{:id :root
+                    :name "Root"}
+                   {:id :a
+                    :name "Child1"
+                    :parent :root}
+                   {:id :b
+                    :name "Child2"
+                    :parent :root}
+                   {:id :a1
+                    :name "Child 1.1"
+                    :parent :a}]]
+  (pprint (tree-level load-status nil)))

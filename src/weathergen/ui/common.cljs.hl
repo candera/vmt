@@ -105,7 +105,9 @@
           styles (cell= (css garden))]
       (swap! registered-styles conj key)
       (when-dom head
-        #(.appendChild head (style :type "text/css" :debug (str key) styles))))))
+        #(do
+           (log/debug "Registering style" (str key))
+           (.appendChild head (style :type "text/css" :debug (str key) styles)))))))
 
 (defn register-class!
   "Adds a style to the head of a document for abstract class `key`.
