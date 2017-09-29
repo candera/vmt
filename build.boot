@@ -1,4 +1,4 @@
-(def project 'weathergen)
+(def project 'vmt)
 
 (set-env!
  :dependencies '[[org.clojure/clojure       "1.9.0-alpha17"]
@@ -10,9 +10,11 @@
                  [hoplon/hoplon             "7.0.2"]
                  [org.clojure/core.async    "0.3.443"
                   :exclusions [org.clojure/tools.reader]]
-                 [tailrecursion/boot-jetty  "0.1.3"]
+                 ;; [tailrecursion/boot-jetty  "0.1.3"]
                  [cljsjs/jquery-ui "1.11.4-0"]
                  [org.clojure/data.csv "0.1.4"]
+
+                 [rum "0.10.8"]
                  ;; TODO: Update to later version
                  [com.cognitect/transit-cljs "0.8.239"]
                  [com.cognitect/transit-clj "0.8.300" :scope "test"]
@@ -33,7 +35,7 @@
                  [cljsjs/select2 "4.0.3-0"]
                  [garden "1.3.2"]
                  [funcool/octet "1.0.1"]
-                 [org.clojure/core.match "0.3.0-alpha4"]
+                 [org.clojure/core.match "0.3.0-alpha5"]
                  [org.clojure/tools.namespace "0.2.11" :scope "test"]
                  [quil "2.6.0"]
 
@@ -53,7 +55,7 @@
 ;; '[adzerk.boot-cljs-repl    :refer [cljs-repl start-repl]]
  '[adzerk.boot-reload       :refer [reload]]
  '[hoplon.boot-hoplon       :refer [hoplon prerender]]
- '[tailrecursion.boot-jetty :refer [serve]]
+ ;; '[tailrecursion.boot-jetty :refer [serve]]
  'complete.core
  '[octet.core :as buf]
  '[clojure.repl :refer :all]
@@ -73,7 +75,7 @@
   [s source-maps bool "Enable source maps"]
   (comp
    (repl-server)
-   (watch)
+   (watch :verbose true :exclude #{#"~$" #"^#.*#$" #"^\.#" #"#$"})
    (notify :theme "ordinance"
            :audible true
            :visual true
@@ -108,24 +110,6 @@
                             :infer-externs false
                             :pretty-print true
                             :pseudo-names true})
-   (target)
-   #_(serve :port 8006)))
-
-#_(deftask electron-build []
-  (comp
-   (speak)
-   (hoplon)
-   ;; Compile everything except main
-   (cljs      :ids #{"renderer" "worker" "index.html"})
-   ;; Compile JS for main process ==============================
-   ;; path.resolve(".") which is used in CLJS's node shim
-   ;; returns the directory `electron` was invoked in and
-   ;; not the directory our main.js file is in.
-   ;; Because of this we need to override the compilers `:asset-path option`
-   ;; See http://dev.clojure.org/jira/browse/CLJS-1444 for details.
-   (cljs      :ids #{"main"}
-              :compiler-options {;; :asset-path "/main.out"
-                                 :closure-defines {'app.main/dev? false}})
    (target)))
 
 (deftask electron
