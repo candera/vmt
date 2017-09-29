@@ -1615,14 +1615,16 @@
   (with-time "update-grid"
     (update-grid-data weather-data display-params)))
 
-(def wind-vector-defs
+(defn wind-vector-defs
+  []
   (svg/defs
     (for [speed (range 5 (inc max-wind-vector-speed) 5)]
       (svg/g
        :id (wind-vector-id speed)
        (wind/barb speed)))))
 
-(def bullseye-info-box
+(defn bullseye-info-box
+  []
   (let [watched (formula-of [mouse-location map-zoom]
                   [mouse-location map-zoom])]
     (with-bbox :x x :y y :w w :h h :watch watched
@@ -2542,7 +2544,7 @@
                      ;; to drag and drop SVG as images, which would
                      ;; interfere with our drag/resize functionality.
                      :dragstart (constantly false)
-                     wind-vector-defs
+                     (wind-vector-defs)
                      (svg/image
                       :id "map-image"
                       ;;:toggle (cell= (some? mission))
@@ -2565,7 +2567,7 @@
                      selected-cell-overlay
                      (:overlay flight-paths-layer)
                      airbases-info-overlay
-                     bullseye-info-box)]
+                     (bullseye-info-box))]
       (gevents/listen (gevents/MouseWheelHandler. elem)
                       gevents/MouseWheelHandler.EventType.MOUSEWHEEL
                       (fn [^js/MouseWheelEvent e]
@@ -4907,3 +4909,14 @@
         (log/debug "Trying again")
         (async/<! (async/timeout 500))
         (recur)))))
+
+#_(defmethod hoplon.core/on! :hoplon.core/default
+  [elem event callback]
+  (when-dom elem #(do
+                    (.log js/console "Executing default on! method"
+                           "elem" elem "event" event "callback" callback)
+                    (.on (js/jQuery elem) (name event) callback))))
+
+#_(defmethod hoplon.core/do! :hoplon.core/default
+  [elem key val]
+  (hoplonc.core/do! elem :attr {key val}))
