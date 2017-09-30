@@ -1,4 +1,15 @@
 * Change Log
+** v048 [2017-09-30 Sat]
+- Briefing notes: a simple (for now) text box where mission designers
+  can put notes to be displayed when the briefing file is opened.
+- Display version number in the title bar.
+- Improved loading progress display: organized hierarchically,
+  supports displaying warnings.
+- Allow mission creator to choose BMS version when multiple versions
+  are installed and pointing to the same directory.
+- Bugfix: warn, don't crash, when a theater is in the theater list but
+  no .tdf can be found.
+- Bugfix: fix excessive CPU utilization when loading multiple missions
 ** v047 [2017-08-25 Fri]
 - Use correct flags for teams.
 ** v046 [2017-08-24 Thu]
