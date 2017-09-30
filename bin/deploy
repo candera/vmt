@@ -97,7 +97,7 @@ EOF
     if [[ "${UPLOAD}" != "no" ]]
     then
         aws s3 cp ../"$ZIPFILE" s3://org.craigandera.vmt/${CHANNEL}/
-        aws s3 cp build.txt s3://org.craigandera.vmt/${CHANNEL}/${LATEST}
+        aws s3 cp ${BUILDINFO} s3://org.craigandera.vmt/${CHANNEL}/${LATEST}
     fi
     popd
 done
