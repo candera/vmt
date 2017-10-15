@@ -960,9 +960,9 @@
                                    (progress/step-warn
                                     (str
                                      "The version used to save this briefing file was "
-                                     (or briefing-version "(dev-build)")
+                                     (or briefing-version "(no version present)")
                                      ". The version of VMT you are running is "
-                                     (or this-version "(dev-build)")
+                                     (or this-version "(no version present)")
                                      ". While different versions of VMT generally work just fine together, if anything doesn't work right you might want to make sure you and the mission creator are using the same version."))))
                                (mission/briefing->mission installations briefing)))
               unedit       (fn [m] (assoc m :editing? false))]
