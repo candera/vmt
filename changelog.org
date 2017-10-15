@@ -1,4 +1,8 @@
 * Change Log
+** v049 [2017-10-15 Sun]
+- Fix bug where install ID was saved incorrectly in briefing files.
+- Save version of VMT used to create briefing files; warn on load if a
+  different version of VMT is being used.
 ** v048 [2017-09-30 Sat]
 - Briefing notes: a simple (for now) text box where mission designers
   can put notes to be displayed when the briefing file is opened.
