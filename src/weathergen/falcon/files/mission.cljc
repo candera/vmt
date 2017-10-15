@@ -866,6 +866,10 @@
   [installs briefing]
   (let [{:keys [theaterdef-name
                 install-id]} briefing
+        ;; This is to handle a bug that I fixed in 20bf6b0
+        install-id           (if (string? install-id)
+                               install-id
+                               (first install-id))
         install-dir          (progress/with-step (str "Looking for installation of BMS version '"
                                                       install-id
                                                       "'.")
