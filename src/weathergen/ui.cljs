@@ -4482,7 +4482,7 @@
    :toggle (cell= (= display-mode :edit))
    (let [only-install     (formula-of [mission]
                             (when (-> mission :candidate-installs count (= 1))
-                              (-> mission :candidate-installs first)))
+                              (-> mission :candidate-installs keys first)))
          selected-install (cell nil)
          install-to-save  (formula-of [only-install selected-install]
                             (or only-install selected-install))]
