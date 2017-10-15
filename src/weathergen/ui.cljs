@@ -954,8 +954,18 @@
                    :briefing? (some? briefing))
         (let [mission-data (progress/with-step (str "Loading briefing from " path)
                              (fn []
+                               (let [briefing-version (get-in briefing [:build-info "VERSION"])
+                                     this-version     (get @build-info "VERSION")]
+                                 (when-not (= briefing-version this-version)
+                                   (progress/step-warn
+                                    (str
+                                     "The version used to save this briefing file was "
+                                     (or briefing-version "(dev-build)")
+                                     ". The version of VMT you are running is "
+                                     (or this-version "(dev-build)")
+                                     ". While different versions of VMT generally work just fine together, if anything doesn't work right you might want to make sure you and the mission creator are using the same version."))))
                                (mission/briefing->mission installations briefing)))
-              unedit (fn [m] (assoc m :editing? false))]
+              unedit       (fn [m] (assoc m :editing? false))]
           (progress/with-step "Preparing views"
             (fn []
               (dosync
@@ -978,7 +988,7 @@
   [install-id visible-sides]
   (save-data
    {:data     (->> {:revision      revision
-                    :briefing      (mission/mission->briefing @mission install-id)
+                    :briefing      (mission/mission->briefing @mission install-id @build-info)
                     :weather       {:weather-params  @weather-params
                                     :cloud-params    @cloud-params
                                     :movement-params @movement-params

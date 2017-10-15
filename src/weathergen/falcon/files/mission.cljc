@@ -854,10 +854,11 @@
   "Converts a mission to a 'briefing', which is a serializable version
   of the mission, containing everything needed to rehydrate the
   mission later."
-  [mission install-id]
+  [mission install-id build-info]
   (merge {:theaterdef-name (theaterdef-name mission)
           :extension       (-> mission :path extension)
-          :install-id      install-id}
+          :install-id      install-id
+          :build-info      build-info}
          (select-keys mission (concat (vals file-types) [:mission-name]))))
 
 (defn briefing->mission
