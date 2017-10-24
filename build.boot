@@ -72,7 +72,7 @@
   "Build and serve WeatherGen for local development."
   [s source-maps bool "Enable source maps"]
   (comp
-   (repl-server)
+   ;; (repl-server)
    (watch)
    (notify :theme "ordinance"
            :audible true

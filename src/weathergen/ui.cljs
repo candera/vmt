@@ -347,6 +347,8 @@
 
 (defc mission nil)
 
+(defc clean-dir-before-save? false)
+
 (defc hide-empty-airbases? true)
 (defc hide-inoperable-airbases? false)
 
@@ -978,6 +980,10 @@
                (.postMessage worker (encode params))
                (async/>! output-ch (async/<! result-ch))
                (recur)))}))
+
+(defn clean-dir []
+  ;; I belive we should make a call to fs here
+  (.log js/console "Clean dir"))
 
 (defn save-weather-files
   [{:keys [weather-params cloud-params weather-direction mission-name
@@ -3774,6 +3780,13 @@
                :conform conform-positive-integer
                :fmt str
                :placeholder "60"))
+         (row "Clean:"
+               [:serialization-controls :delete-folder-files]
+               (input
+                :type "checkbox"
+                :value clean-dir-before-save?
+                :change #(swap! clean-dir-before-save? not))
+               "Clean dir before saving")
          (let [progress    (cell nil)
                cancelling? (cell false)
                save-file   (cell nil)]
@@ -3795,6 +3808,7 @@
                         (do
                           (reset! cancelling? false)
                           (reset! save-file nil)
+                          (when clean-dir-before-save? (.log js/console "Clean directory"))
                           (save-weather-files {:weather-params    @weather-params
                                                :cloud-params      @cloud-params
                                                :weather-direction (:direction @movement-params)

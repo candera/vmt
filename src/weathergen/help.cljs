@@ -40,7 +40,10 @@
    or target sites.")
 
    :serialization-controls
-   {:save-single-files
+   {:delete-folder-files
+    #(p "Before generating the FMAP files the content of the folder will be delted.")
+    
+    :save-single-files
     (fn []
       [(p "This section allows saving and loading of the various files
       that WeatherGen can use. Files should be saved with the same
