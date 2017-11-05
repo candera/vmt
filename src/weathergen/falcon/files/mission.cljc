@@ -1737,7 +1737,9 @@
                                                          1000
                                                          60
                                                          60)
-                      gnd-speed                       (/ distance delta-t)
+                      gnd-speed                       (if (zero? delta-t)
+                                                        0
+                                                        (/ distance delta-t))
                       altitude                        (if (-> curr :flags (has-flag? c/WPF_HOLDCURRENT))
                                                         (::altitude prev)
                                                         (::altitude curr))
