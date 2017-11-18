@@ -2900,7 +2900,17 @@
    :conform (fn [val]
               (formula-of
                [val]
-               (let [[all dd hh mm] (re-matches #"(\d+)/(\d\d):(\d\d)" val)
+                (let [[all dd hh mm] (if val
+                                       (re-matches #"(\d+)/(\d\d):(\d\d)" val)
+                                       ;; Not thrilled with this, but
+                                       ;; I suspect that what's
+                                       ;; happening is that Javelin is
+                                       ;; passing along a nil value
+                                       ;; while things propagate, as
+                                       ;; this bug (a nil time)
+                                       ;; doesn't show up later when I
+                                       ;; load the briefing.
+                                       ["invalid" "99" "59" "59"])
                      day            (->> dd js/Number. long)
                      hour           (->> hh js/Number. long)
                      min            (->> mm js/Number. long)
