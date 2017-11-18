@@ -1,4 +1,7 @@
 * Change Log
+** v050 [2017-11-18 Sat]
+- Fix bug handling consecutive steerpoints with the same time
+- Fix bug where briefing wouldn't load due to nil time somewhere.
 ** v049 [2017-10-15 Sun]
 - Fix bug where install ID was saved incorrectly in briefing files.
 - Save version of VMT used to create briefing files; warn on load if a
