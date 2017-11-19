@@ -2900,44 +2900,34 @@
    :conform (fn [val]
               (formula-of
                [val]
-                (let [[all dd hh mm] (if val
-                                       (re-matches #"(\d+)/(\d\d):(\d\d)" val)
-                                       ;; Not thrilled with this, but
-                                       ;; I suspect that what's
-                                       ;; happening is that Javelin is
-                                       ;; passing along a nil value
-                                       ;; while things propagate, as
-                                       ;; this bug (a nil time)
-                                       ;; doesn't show up later when I
-                                       ;; load the briefing.
-                                       ["invalid" "99" "59" "59"])
-                     day            (->> dd js/Number. long)
-                     hour           (->> hh js/Number. long)
-                     min            (->> mm js/Number. long)
-                     valid?         (and dd hh mm
-                                         (int? day)
-                                         (int? hour)
-                                         (int? min)
-                                         (<= 0 hour 23)
-                                         (<= 0 min 59))
-                     val            {:day    day
-                                     :hour   hour
-                                     :minute min}
-                     over-max?      (and valid?
-                                         (-> @weather-params :time :max)
-                                         (< (-> @weather-params
-                                                :time
-                                                :max
-                                                time/campaign-time->minutes)
-                                            (time/campaign-time->minutes val)))]
-                 {:valid? (and valid? (not over-max?))
-                  :message (cond
-                             (not valid?) "Time must be in the format 'dd/hh:mm'"
-                             over-max? (str "Time cannot be set later than "
-                                            (-> @weather-params :time :max format-time)))
-                  :value {:day    day
-                          :hour   hour
-                          :minute min}})))))
+                (let [[all dd hh mm] (re-matches #"(\d+)/(\d\d):(\d\d)" (or val ""))
+                      day             (->> dd js/Number. long)
+                      hour            (->> hh js/Number. long)
+                      min             (->> mm js/Number. long)
+                      valid?          (and dd hh mm
+                                           (int? day)
+                                           (int? hour)
+                                           (int? min)
+                                           (<= 0 hour 23)
+                                           (<= 0 min 59))
+                      val             {:day    day
+                                       :hour   hour
+                                       :minute min}
+                      over-max?       (and valid?
+                                           (-> @weather-params :time :max)
+                                           (< (-> @weather-params
+                                                  :time
+                                                  :max
+                                                  time/campaign-time->minutes)
+                                              (time/campaign-time->minutes val)))]
+                  {:valid?  (and valid? (not over-max?))
+                   :message (cond
+                              (not valid?) "Time must be in the format 'dd/hh:mm'"
+                              over-max?    (str "Time cannot be set later than "
+                                                (-> @weather-params :time :max format-time)))
+                   :value   {:day    day
+                             :hour   hour
+                             :minute min}})))))
 
 (defn edit-field
   ([c path] (edit-field c path {}))
