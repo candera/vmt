@@ -2904,3 +2904,81 @@ type: 0x64 -> image
                     :name "Child 1.1"
                     :parent :a}]]
   (pprint (tree-level load-status nil)))
+
+(def bugged-mission
+  (mission/read-mission
+   installs
+   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/Save-Day  1 05 00 11.cam"))
+
+(@#'mission/flights bugged-mission)
+
+(->> bugged-mission
+     mission/oob-air
+     first
+     ::mission/squadrons
+     first
+     keys)
+
+(doseq [airbase (mission/oob-air bugged-mission)]
+  (println (:camp-id airbase) (::mission/name airbase))
+  (doseq [squadron (::mission/squadrons airbase)]
+    (println "  - " (:camp-id squadron) (:name squadron))))
+
+(doseq [flight (mission/flights bugged-mission)]
+  (println (:camp-id flight)))
+
+(->> bugged-mission
+     mission/active-units
+     (filter #(= (:camp-id %) 5063))
+     first
+     :squadron
+     
+     ;; (mission/find-unit bugged-mission :id)
+     ;; (mission/find-unit bugged-mission :id)
+     )
+
+(def bugged-mission
+  (read-briefing
+   "/tmp/Briefing/FNPU2-40.vmtb"))
+
+(-> bugged-mission
+    keys
+    pprint)
+
+(->> @smpu
+     ::mission/squadrons
+     seq
+     rand-nth
+     second
+     rand-nth
+     ::mission/image
+     #_(map ::mission/image)
+     )
+
+(->> @smpu
+     ::mission/airbases
+     (filter (fn [airbase]
+               (->> airbase
+                    ::mission/image
+                    nil?
+                    #_(some (fn [squadron]
+                            (-> squadron
+                                ::mission/image
+                                nil?))))))
+     count)
+
+(->> @smpu
+     mission/order-of-battle
+     :air
+     #_class
+     count)
+
+(def bugged-mission
+  (mission/read-mission
+   installs
+   "/Users/candera/falcon/4.33.3/Data/Add-On Korea Strong DPRK/Campaign/WNPUNA20d.cam"))
+
+(->> bugged-mission
+     ::mission/carriers
+     (filter (fn [airbase] (= (:id airbase) {:name 4665 :creator 0})))
+     count)

@@ -116,6 +116,14 @@
   (condp = criteria
     :id (->> mission active-units (filter #(= (:id %) value)) first)))
 
+(defn unit-lookup-by-id
+  "Given a seq of units, return the one with the given id."
+  [units id]
+  (some (fn [unit]
+          (when (= id (:id unit))
+            unit))
+        units))
+
 ;; This doesn't do well with carrier airbase names. For that, we need
 ;; to somehow figure out how to chase our way into the vehicle info
 ;; and get the carrier vehicle name, which is where we get things
@@ -793,6 +801,736 @@
          vals
          vec)))
 
+(defn- flight-aircraft-quantity
+  "Returns the number of aircraft in `flight`."
+  [flight]
+  (->> flight
+       :plane-stats
+       (remove #{c/AIRCRAFT_NOT_ASSIGNED})
+       count))
+
+(defn- loadout-weapons
+  "Returns a seq of maps describing weapons in a loadout. Maps contain
+  `:quantity` and `:name` keys."
+  [mission loadout]
+  (let [{ids :id counts :count}     loadout]
+    (->> (map vector ids counts)
+         (reduce (fn [m [id count]]
+                   (if (or (zero? id) (zero? count))
+                     m
+                     (update m id (fnil + 0) count)))
+                 {})
+         (mapv (fn [[k v]]
+                 (let [weapon (weapon-class-entry mission k)]
+                   {:name (:name weapon)
+                    :quantity (* v (if (-> weapon :flags (has-flag? c/WEAP_ONETENTH))
+                                     10
+                                     1))}))))))
+
+(defn- flight-loadouts
+  "Given a flight, returns a seq of maps describing the loadouts."
+  [mission flight]
+  (let [loadouts (:loadouts flight)
+        num-ac (flight-aircraft-quantity flight)]
+    (for [i (range num-ac)]
+      (loadout-weapons mission (if (= (count loadouts) num-ac)
+                                 (nth loadouts i)
+                                 (first loadouts))))))
+
+;; Ref waypoint.cpp(2012)
+(defn- compute-speed
+  "Given a ground speed in kts and an altitude in feet, returns mach and IAS in kts."
+  [speed altitude]
+  (let [ttheta (if (<= altitude 36089)
+                 (- 1.0 (* 0.000006875 altitude))
+                 0.7519)
+        rsigma (if (<= altitude 36089)
+                 (Math/pow ttheta 4.256)
+                 (* 0.2971 (Math/pow 2.718 (* 0.00004806 (- 36089.0 altitude)))))
+        mach   (/ speed (* c/AASLK (Math/sqrt ttheta)))
+        pa     (* ttheta rsigma c/PASL)
+        qc     (if (<= mach 1.0)
+                 (* pa
+                    (- (Math/pow (+ 1.0 (* 0.2 mach mach))
+                                 3.5)
+                       1.0))
+                 (* pa
+                    (- (/ (* 166.9 mach mach)
+                          (Math/pow (- 7.0 (/ 1.0 (* mach mach)))
+                                    2.5))
+                       1.0)))
+        qpasl1 (+ 1.0 (/ qc c/PASL))
+        vcas   (* 1479.12 (Math/sqrt (- (Math/pow qpasl1 0.285714)
+                                        1.0)))
+        ias    (if (< 1889.65 qc)
+                 (let [oper (* qpasl1 (Math/pow (- 7.0 (/ (* c/AASLK c/AASLK) (* vcas vcas)))
+                                                2.5))]
+                   (* 51.1987 (Math/sqrt (if (neg? oper) 0.1 oper))))
+                 vcas)]
+    {:mach mach
+     :ias  ias
+     :cas  vcas
+     :qc   qc}))
+
+;; Ref: brief.cpp(826)
+(defn- waypoint-comments
+  "Return the comments section of the flight briefing for a waypoint"
+  [mission w]
+  (let [strings                             (get-in mission [:strings :fn])
+        {:keys [flags action route-action]} w]
+    (cond
+      (has-flag? flags c/WPF_ALTERNATE) (strings 237)
+      (has-flag? flags c/WPF_REPEAT)    (strings 247)
+      (= c/WP_NOTHING action)           (strings (+ 1650 route-action))
+      :else                             (strings (+ 1650 action)))))
+
+(defn- flight-waypoints
+  "Given a flight, returns a seq of maps describing the waypoints"
+  [mission flight]
+  (let [waypoints (->> flight
+                       :waypoints
+                       (map-indexed
+                        (fn [i w]
+                          (let [{:keys [action route-action arrive depart haves]} w
+                                action-name         (get-in mission [:strings
+                                                                     :waypoint-type-names
+                                                                     action])
+                                enroute-action-name (get-in mission [:strings
+                                                                     :waypoint-type-names
+                                                                     route-action])]
+                            (assoc
+                             w
+                             ::number (inc i)
+                             ::action-name action-name
+                             ::enroute-action-name action-name
+                             ::description (if (= action c/WP_NOTHING)
+                                             enroute-action-name
+                                             action-name)
+                             ::remain (when (haves :deptime)
+                                        (time/difference-hms arrive depart))
+                             ::altitude (-> w :grid-z (* c/GRIDZ_SCALE_FACTOR))
+                             ::comments (waypoint-comments mission w))))))]
+    (->> waypoints
+         (partition 2 1)
+         (map (fn [[prev curr]]
+                (let [{curr-x :grid-x curr-y :grid-y} curr
+                      {prev-x :grid-x prev-y :grid-y} prev
+                      dx                              (- curr-x prev-x)
+                      dy                              (- curr-y prev-y)
+                      dv                              [dx dy]
+                      distance                        (-> dv math/magnitude coords/fgrid->nm)
+                      delta-t                         (/ (- (-> curr :arrive time/campaign-time->ms)
+                                                            (-> prev :depart time/campaign-time->ms))
+                                                         1000
+                                                         60
+                                                         60)
+                      gnd-speed                       (if (zero? delta-t)
+                                                        0
+                                                        (/ distance delta-t))
+                      altitude                        (if (-> curr :flags (has-flag? c/WPF_HOLDCURRENT))
+                                                        (::altitude prev)
+                                                        (::altitude curr))
+                      {:keys [mach ias cas]}          (compute-speed gnd-speed altitude)]
+                  (assoc curr
+                         ::distance distance
+                         ::heading  (math/heading dv)
+                         ::speed-ias ias
+                         ::speed-cas cas
+                         ;; TODO: True airspeed would need to take
+                         ;; winds into account, which we aren't doing
+                         ;; here.
+                         ::speed-tas gnd-speed
+                         ::speed-gnd gnd-speed
+                         ::speed-mach mach
+                         ))))
+         (into (vec (take 1 waypoints)))
+         (map (fn [w]
+                (if-not (let [{:keys [action flags]} w]
+                          (or (has-flag? flags c/WPF_ALTERNATE)
+                              (= c/WP_REFUEL action)))
+                  w
+                  (dissoc w
+                          :arrive :depart ::distance ::heading ::speed-ias
+                          ::speed-cas ::speed-gnd ::speed-mach ::speed-tas)))))))
+
+(defn- flight-mission-name
+  "Given a flight, returns the name of a flight mission type, e.g. BARCAP."
+  [mission flight]
+  (get-in mission [:strings :mission-type-names (:mission flight)]))
+
+(defn- flight-mission-category
+  "Given a flight, return its mission category, e.g. ATO_DCA."
+  [mission flight]
+  (let [{:keys [mission]} flight]
+    (condp contains? mission
+      #{c/AMIS_OCASTRIKE
+        c/AMIS_SWEEP
+        c/AMIS_TARCAP
+        c/AMIS_ESCORT}
+      c/ATO_OCA
+
+      #{c/AMIS_STRIKE
+        c/AMIS_DEEPSTRIKE
+        c/AMIS_STSTRIKE
+        c/AMIS_STRATBOMB}
+      c/ATO_STRIKE
+
+      #{c/AMIS_INTSTRIKE
+        c/AMIS_INT
+        c/AMIS_SAD
+        c/AMIS_BAI}
+      c/ATO_INTERDICTION
+
+      #{c/AMIS_SEADSTRIKE
+        c/AMIS_SEADESCORT}
+      c/ATO_SEAD
+
+      #{c/AMIS_PRPLANCAS
+        c/AMIS_CAS
+        c/AMIS_ONCALLCAS
+        c/AMIS_FAC}
+      c/ATO_CAS
+
+      #{c/AMIS_BARCAP
+        c/AMIS_BARCAP2
+        c/AMIS_HAVCAP
+        c/AMIS_AMBUSHCAP
+        c/AMIS_INTERCEPT
+        c/AMIS_ALERT}
+      c/ATO_DCA
+
+      #{c/AMIS_AWACS
+        c/AMIS_JSTAR
+        c/AMIS_ECM
+        c/AMIS_RECON
+        c/AMIS_BDA
+        c/AMIS_RECONPATROL
+        c/AMIS_PATROL}
+      c/ATO_CCCI
+
+      #{c/AMIS_ASW
+        c/AMIS_ASHIP}
+      c/ATO_MARITIME
+
+      #{c/AMIS_TANKER
+        c/AMIS_AIRLIFT
+        c/AMIS_SAR
+        c/AMIS_RESCAP}
+      c/ATO_SUPPORT
+
+      c/ATO_OTHER)))
+
+(defn team-number
+  "Returns the team number given a team or team number."
+  [team-or-number]
+  (cond
+    (nil? team-or-number)
+    0
+
+    (number? team-or-number)
+    team-or-number
+
+    :else
+    (-> team-or-number :team :who)))
+
+(defn team-name
+  "Given a team, return its name, e.g. 'DPRK'."
+  [mission team]
+  (-> mission :teams (nth (team-number team)) :team :name))
+
+(defn team-flag
+  "Returns an image descriptor for the flag of `team`. `flag-type` can
+  be one of `:big-vert-dark`, `:big-vert`, `:big-horiz`, and
+  `:small-horiz`."
+  [mission team flag-type]
+  (let [team-info (get-in mission [:campaign-info :team-info (team-number team)])
+        icon-index (get-in c/FlagImageID [(:flag team-info) flag-type])
+        image-id (get-in mission [:image-ids :id->name icon-index])]
+    (im/make-descriptor mission
+                        "resource/main"
+                        image-id)))
+
+
+;; We've got a terminology problem here. A team is both a structure
+;; and a team number. Need terms that refer to them separately.
+;; Probably should also ditch "side" for "alliance"
+
+(defn side
+  "Returns the side number given a team. Team indicates the individual
+  combatant, side denots the alliance."
+  [mission team]
+  (-> mission :teams (nth (team-number team)) :team :c-team))
+
+(defn team-priority
+  "Returns a sort priority for `team` relative to `who` - allies
+  first, then enemies, then neutrals."
+  [mission who team]
+  (let [stance (-> mission :teams (nth who) :team :stance (nth (team-number team)))]
+    ({c/Allied   0
+      c/Friendly 1
+      c/War      2
+      c/Hostile  3
+      c/Neutral  4}
+     stance
+     5)))
+
+(defn teams
+  "Returns a seq of the teams."
+  [mission]
+  (let [teams-with-units      (->> mission
+                                   :units
+                                   (map :owner)
+                                   distinct
+                                   set)
+        teams-with-objectives (->> mission
+                                   :objectives
+                                   (map :owner)
+                                   distinct
+                                   set)
+        active-team-nums      (into teams-with-units teams-with-objectives)
+        active-teams          (->> mission
+                                   :teams
+                                   (filter #(-> % team-number active-team-nums)))
+        first-team-num        (->> active-teams first :team :who)]
+    (sort-by #(team-priority mission first-team-num (-> % :team :who)) active-teams)))
+
+(defn last-player-team
+  "Returns the team with the most-recently player-played mission."
+  [mission]
+  (->> mission
+       teams
+       (sort-by #(-> % :team :last-player-mission time/campaign-time->ms -))
+       first))
+
+(defn sides
+  "Returns a seq of team numbers representing the sides."
+  [mission]
+  (->> mission
+       teams
+       (map :team)
+       (map :c-team)
+       distinct))
+
+(defn teams-for-side
+  "Returns a set of the team numbers for a given side."
+  [mission side]
+  (->> mission
+       teams
+       (filter #(-> % :team :c-team (= side)))
+       (map team-number)
+       set))
+
+;; These are abstract, not particular RGB colors
+(defn team-color
+  "Returns the abstract color corresponding to `team-or-number`."
+  [team]
+  (nth [:white
+        :green
+        :blue
+        :brown
+        :orange
+        :yellow
+        :red
+        :grey]
+       (team-number team)))
+
+(defn package-name
+  "Given a package ID, return its string name, e.g. Package 12345."
+  [mission package-id]
+  (let [packages (->> mission
+                      :units
+                      (util/filter= :type :package))]
+    (->> package-id
+         (unit-lookup-by-id packages)
+         :name-id
+         str)))
+
+(defn squadron-aircraft
+  "Returns a map of `:airframe` and `:quantity` for a squadron."
+  [mission squadron]
+  {:airframe (-> squadron
+                 :type-id
+                 (- 100)
+                 (->> (nth (:class-table mission)))
+                 :data-pointer
+                 (->> (nth (:unit-class-data mission)))
+                 :vehicle-type
+                 first
+                 (->> (nth (:class-table mission)))
+                 :data-pointer
+                 (->> (nth (:vehicle-class-data mission)))
+                 :name)
+   :quantity (reduce +
+                     (for [i (range 16)]
+                       (-> squadron
+                           :roster
+                           (bit-shift-right (* i 2))
+                           (bit-and 0x03))))})
+
+;; Status algorithm at objectiv.cpp(2455)
+(defn airbase-status
+  "Return the status of an airbase as a number from 0 to 100."
+  [mission airbase]
+  ;; For each non-runway feature
+  ;; - Start with 100.
+  ;; - Subtract half the feature value [objective.cpp(2396)] if it's
+  ;;   damaged, and the full value if it's destroyed.
+  ;; - This number is the status
+  ;; For each runway feature
+  ;; - For each entry in the point data
+  ;;   - If it is a runway point, increment the runway count. If it's
+  ;;     also destroyed, increment the inactive account.
+  ;; Use the lower of the status and the percentage of active runways
+  (let [{:keys [class-table
+                objective-class-data
+                feature-class-data
+                feature-entry-data
+                point-header-data]} mission
+        airbase-class (->> airbase
+                           (class-table-entry mission)
+                           :data-pointer
+                           (nth objective-class-data))
+        {:keys [features first-feature]} airbase-class
+        feature-info (map #(nth feature-entry-data %)
+                          (range first-feature (+ first-feature features)))
+        feature-status (for [f (range features)]
+                         (let [i (-> f (/ 4) long)
+                               f* (- f (* i 4))]
+                           (if (or (neg? f*)
+                                   (< 255 f*)
+                                   ;; For some weird
+                                   ;; reason (objectiv.cpp[259], there
+                                   ;; can be more features than status
+                                   ;; slots in the objective, in which
+                                   ;; case they zero.
+                                   (<= (count (:f-status airbase)) i))
+                             0
+                             (-> airbase
+                                 :f-status
+                                 (nth i 0)
+                                 (bit-shift-right (* f* 2))
+                                 (bit-and 0x03)))))
+        feature-class-info (map (fn [feature]
+                                  (let [ci (-> feature
+                                               :index
+                                               (->> (nth class-table)))]
+                                    (assoc ci
+                                           :feature-class-info
+                                           (-> ci
+                                               :data-pointer
+                                               (->> (nth feature-class-data))))))
+                                feature-info)
+        feature-info (map (fn [fi fs fci]
+                            (assoc fi
+                                   :status fs
+                                   :class-info fci
+                                   ))
+                          feature-info
+                          feature-status
+                          feature-class-info)
+        runway? (fn [feature]
+                  (-> feature
+                      :class-info
+                      :vu-class-data
+                      :class-info
+                      :type
+                      (= c/TYPE_RUNWAY)))
+        nonrunway-statuses (->> feature-info
+                                (remove runway?)
+                                (reduce (fn [score feature]
+                                          (+ score
+                                             (condp = (:status feature)
+                                               c/VIS_DAMAGED (-> feature
+                                                                 :value
+                                                                 (/ 2)
+                                                                 long)
+                                               c/VIS_DESTROYED (:value feature)
+                                               0)))
+                                        0)
+                                (- 100)
+                                (max 0))
+        ;; The point header data contains information about a "logical
+        ;; runway". That is, what we would think of as a runway. These
+        ;; reference runway features. Status of a runway is the worst status
+        ;; of any of its features. Overall status is the worse of nonrunway
+        ;; and runway status.
+        runway-statuses (loop [index (:pt-data-index airbase-class)
+                               runway-stats {:total 0
+                                             :destroyed 0}]
+                          (let [point-header (nth point-header-data index)]
+                            (cond
+                              (zero? index)
+                              runway-stats
+
+                              :else
+                              (recur (:next-header point-header)
+                                     (if-not (= c/RunwayPt (:type point-header))
+                                       runway-stats
+                                       (-> runway-stats
+                                           (update :total inc)
+                                           (update :destroyed
+                                                   +
+                                                   (if (->> point-header
+                                                            :features
+                                                            (take-while #(< % 255))
+                                                            (map #(nth feature-info %))
+                                                            (map :status)
+                                                            (some #{c/VIS_DESTROYED}))
+                                                     1
+                                                     0))))))))
+        {:keys [total destroyed]} runway-statuses
+        runway-score (if (zero? total)
+                       100
+                       (->> (/ destroyed total)
+                            (* 100)
+                            long
+                            (- 100)))]
+    (min runway-score nonrunway-statuses)))
+
+(defn- objective-status
+  [mission objective]
+  ;; Will this work for non-airbases?
+  (airbase-status mission objective))
+
+
+(def air-icon-resource-prefix
+  {:white  "wh"
+   :green  "gn"
+   :blue   "bl"
+   :brown  "br"
+   :orange "or"
+   :yellow "yl"
+   :red    "rd"
+   :grey   "gy"})
+
+(defn- squadron-image
+  "Returns an image descriptor for a squadron."
+  [mission squadron]
+  (let [{:keys [owner]}      squadron
+        {:keys [icon-index]} (unit-class-entry mission squadron)
+        {:keys [image-ids]}  mission]
+    (im/make-descriptor mission
+                        (str "resource/"
+                             (-> owner team-color air-icon-resource-prefix)
+                             "air_nn")
+                        (get-in image-ids [:id->name icon-index]))))
+
+(def icon-resource-prefix
+  {:white  "wht"
+   :green  "grn"
+   :blue   "blu"
+   :brown  "brn"
+   :orange "orn"
+   :yellow "ylw"
+   :red    "red"
+   :grey   "gry"})
+
+(defn- objective-image
+  "Returns an image descriptor for an objective."
+  [mission objective]
+  (let [{:keys [owner]}      objective
+        {:keys [icon-index]} (objective-class-entry mission objective)
+        {:keys [image-ids]}  mission]
+    (im/make-descriptor mission
+                        (str "resource/"
+                             (-> owner team-color icon-resource-prefix)
+                             "dark")
+                        (get-in image-ids [:id->name icon-index]))))
+
+(defn- unit-image
+  "Returns an image descriptor for a unit."
+  [mission unit]
+  (let [{:keys [owner]}      unit
+        {:keys [icon-index]} (unit-class-entry mission unit)
+        {:keys [image-ids]}  mission]
+    (im/make-descriptor mission
+                        (str "resource/"
+                             (-> owner team-color icon-resource-prefix)
+                             "dark")
+                        (get-in image-ids [:id->name icon-index]))))
+
+(defn- squadron-type
+  "Returns a string describing the type of the squadron - Fighter,
+  Attack, etc."
+  [mission squadron]
+  (->> squadron (unit-class-entry mission) :name))
+
+(defn- carrier-name
+  "Returns the name of a carrier task force unit."
+  [mission carrier]
+  (-> (class-table-entry mission carrier)
+      :data-pointer
+      (->> (nth (:vehicle-class-data mission)))
+      :name))
+
+(defn- squadron-airbase
+  "Returns the airbase objective for the given squadron."
+  [mission squadron]
+  (if-let [airbase (find-objective mission :id (:airbase-id squadron))]
+    ;; It's a land-based airbase
+    (assoc airbase ::name (objective-name mission airbase))
+    ;; It's a carrier
+    (when-let [carrier (find-unit mission :id (:airbase-id squadron))]
+      (assoc carrier ::name (carrier-name mission carrier)))))
+
+(defn flights
+  "Return a seq of all the flights in a mission"
+  [mission]
+  (some->> mission
+           active-units
+           (filter #(= (:type %) :flight))
+           (map (fn [flight]
+                  (let [squadron (->> flight :squadron (find-unit mission :id))]
+                    (assoc flight
+                           ::mission {:name     (flight-mission-name mission flight)
+                                      :category (flight-mission-category mission flight)}
+                           ::squadron {:name (if-not squadron
+                                               "Unknown"
+                                               (unit-name mission squadron))}
+                           ::airbase {:name (if-not squadron
+                                              "Unknown"
+                                              (->> squadron
+                                                   (squadron-airbase mission)
+                                                   ::name))}
+                           ::package {:name (->> flight :package (package-name mission))}
+                           ::waypoints (flight-waypoints mission flight)
+                           ::loadouts (flight-loadouts mission flight)
+                           ::aircraft  {:airframe (if-not squadron
+                                                    ;; TODO: Somehow Mission Commander knows
+                                                    ;; the aircraft type even if there's no
+                                                    ;; squadron
+                                                    "Unknown"
+                                                    (->> squadron
+                                                         (squadron-aircraft mission)
+                                                         :airframe))
+                                        ;; TODO: This might need to change, because the
+                                        ;; aircraft in a flight can have different
+                                        ;; statuses, like. See e.g.
+                                        ;; AIRCRAFT_NOT_ASSIGNED
+                                        :quantity (flight-aircraft-quantity flight)}))))))
+
+(defn- squadrons
+  "Return a map of airbase IDs to squadrons in mission."
+  [mission]
+  (progress/with-step "Loading squadrons"
+    (fn []
+      (->> mission
+           active-units
+           (group-by :type)
+           :squadron
+           (map (fn [squadron]
+                  (assoc squadron
+                         ::aircraft (squadron-aircraft mission squadron)
+                         ::squadron-type (squadron-type mission squadron)
+                         ::image (squadron-image mission squadron))))
+           (group-by :airbase-id)))))
+
+;; Note that the below will also return carriers, which might be what
+;; we want, but might not be.
+;;
+;; Made this private because it's confusing that it doens't return
+;; squadrons etc. Should prefer the OOB functions, which do.
+(defn- airbases
+  "Returns all the airbase and airstrip objectives."
+  [mission]
+  (let [airbase-classes (->> mission
+                             :class-table
+                             (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                                           c/DOMAIN_LAND)
+                             (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                           c/CLASS_OBJECTIVE)
+                             (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
+                                       (get-in % [:vu-class-data :class-info :type])))
+                             ;;  Carrier airbases have subtype 7 and specific type 7.
+                             (remove (fn [cls]
+                                       (= [7 7]
+                                          [(get-in cls [:vu-class-data :class-info :stype])
+                                           (get-in cls [:vu-class-data :class-info :sptype])])))
+                             (map ::index)
+                             set)]
+    (->> mission
+         :objectives
+         (filterv (fn [objective]
+                    (airbase-classes (- (:entity-type objective) 100))))
+         (mapv #(assoc %
+                       ::location (select-keys % [:x :y])
+                       ::status (airbase-status mission %)
+                       ::squadrons (get (::squadrons mission) (:id %))
+                       ::image (objective-image mission %)
+                       ::name (objective-name mission %))))))
+
+(defn- carriers
+  "Returns all the carrier task force units in the mission."
+  [mission]
+  (let [carrier-classes (->> mission
+                             :class-table
+                             (util/filter= #(get-in % [:vu-class-data :class-info :domain]
+                                                    c/DOMAIN_SEA)
+                                           c/DOMAIN_SEA)
+                             (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                           c/CLASS_UNIT)
+                             (util/filter= #(get-in % [:vu-class-data :class-info :type])
+                                           c/TYPE_TASKFORCE)
+                             (util/filter= #(get-in % [:vu-class-data :class-info :stype])
+                                           c/STYPE_UNIT_CARRIER)
+                             (map ::index)
+                             set)]
+    (->> mission
+         active-units
+         (filterv (fn [unit]
+                    (carrier-classes (- (:entity-type unit) 100))))
+         (mapv #(assoc %
+                       ::location (select-keys % [:x :y])
+                       ::status 100
+                       ::squadrons (get squadrons (:id %))
+                       ::image (unit-image mission %)
+                       ::name (carrier-name mission %))))))
+
+(defn- army-bases
+  "Returns all the army base objectives."
+  [mission]
+  ;; TODO: There's a lot of commonality here with `airbases` - factor out
+  (let [armybase-classes (->> mission
+                              :class-table
+                              (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                                            c/DOMAIN_LAND)
+                              (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                            c/CLASS_OBJECTIVE)
+                              (util/filter= #(get-in % [:vu-class-data :class-info :type])
+                                            c/TYPE_ARMYBASE)
+                              (map ::index)
+                              set)]
+    (->> mission
+         :objectives
+         (filterv (fn [objective]
+                    (armybase-classes (- (:entity-type objective) 100))))
+         (mapv #(assoc %
+                       ::location (select-keys % [:x :y])
+                       ::status (objective-status mission %)
+                       ::squadrons (get squadrons (:id %))
+                       ::image (objective-image mission %)
+                       ::name (objective-name mission %))))))
+
+(defn- remove-squadrons-without-airbases
+  "Remove any squadrons that have no airbases, and any flights from those squadrons."
+  [mission]
+  (let [problems (->> mission
+                       active-units
+                       (filter (fn [unit]
+                                 (and (= :squadron (:type unit))
+                                      (nil? (squadron-airbase mission unit))))))]
+    (if (empty? problems)
+      mission
+      (let [flights (mapcat flights)]
+        (progress/step-warn "todo")))))
+
+(defn- fixup-mission
+  "Repair any problems with mission, issuing warnings along the way."
+  [mission]
+  (progress/with-step "Verifying mission integrity"
+    (-> mission
+        remove-squadrons-without-airbases)))
+
 ;; TODO: Consider renaming this read-database, and referring to the resulting object
 ;; as the database.
 (defn read-mission
@@ -809,13 +1547,13 @@
                         #(read-strings-file (campaign-dir installation theater)))
         database      (progress/with-step "Reading theater data"
                         #(assoc (load-initial-database installation theater)
-                               :strings strings))
+                                :strings strings))
         mission-files (progress/with-step (str "Reading mission files from " path)
                         #(read-embedded-files path database))
         {:keys [theater-name scenario]} (->> mission-files :campaign-info)
         names         (progress/with-step "Reading theater names"
                         #(read-strings (campaign-dir installation theater)
-                                      theater-name))
+                                       theater-name))
         scenario-file (str scenario (extension path))
         scenario-path (fs/path-combine (fs/parent path) scenario-file)
         scenario-files (progress/with-step (str "Reading scenario file: "
@@ -845,10 +1583,21 @@
                                                  (into {}))
                         :mission-name   (fs/basename path)
                         :theater        theater})]
-    (-> mission
-        (assoc :map-image (im/make-descriptor mission
-                                              "resource/campmap"
-                                              "BIG_MAP_ID")))))
+    (as-> mission ?mission
+      (assoc ?mission
+             :map-image (im/make-descriptor mission
+                                            "resource/campmap"
+                                            "BIG_MAP_ID"))
+      (assoc ?mission
+             ::squadrons (squadrons ?mission))
+      (assoc ?mission
+             ::airbases (airbases ?mission))
+      (assoc ?mission
+             ::flights (flights ?mission))
+      (assoc ?mission
+             ::carriers (carriers ?mission))
+      (assoc ?mission
+             ::army-bases (army-bases ?mission)))))
 
 (defn mission->briefing
   "Converts a mission to a 'briefing', which is a serializable version
@@ -1569,14 +2318,6 @@
     ;; TODO : implement write
     ))
 
-(defn unit-lookup-by-id
-  "Given a seq of units, return the one with the given id."
-  [units id]
-  (some (fn [unit]
-          (when (= id (:id unit))
-            unit))
-        units))
-
 (defmethod read-embedded-file* :units
   ;; Ref: UniFile.cs, units.cpp
   [_
@@ -1614,682 +2355,6 @@
   [_ entry buf _]
   :not-yet-implemented)
 
-(defn- flight-aircraft-quantity
-  "Returns the number of aircraft in `flight`."
-  [flight]
-  (->> flight
-       :plane-stats
-       (remove #{c/AIRCRAFT_NOT_ASSIGNED})
-       count))
-
-(defn- loadout-weapons
-  "Returns a seq of maps describing weapons in a loadout. Maps contain
-  `:quantity` and `:name` keys."
-  [mission loadout]
-  (let [{ids :id counts :count}     loadout]
-    (->> (map vector ids counts)
-         (reduce (fn [m [id count]]
-                   (if (or (zero? id) (zero? count))
-                     m
-                     (update m id (fnil + 0) count)))
-                 {})
-         (mapv (fn [[k v]]
-                 (let [weapon (weapon-class-entry mission k)]
-                   {:name (:name weapon)
-                    :quantity (* v (if (-> weapon :flags (has-flag? c/WEAP_ONETENTH))
-                                     10
-                                     1))}))))))
-
-(defn- flight-loadouts
-  "Given a flight, returns a seq of maps describing the loadouts."
-  [mission flight]
-  (let [loadouts (:loadouts flight)
-        num-ac (flight-aircraft-quantity flight)]
-    (for [i (range num-ac)]
-      (loadout-weapons mission (if (= (count loadouts) num-ac)
-                                 (nth loadouts i)
-                                 (first loadouts))))))
-
-;; Ref waypoint.cpp(2012)
-(defn- compute-speed
-  "Given a ground speed in kts and an altitude in feet, returns mach and IAS in kts."
-  [speed altitude]
-  (let [ttheta (if (<= altitude 36089)
-                 (- 1.0 (* 0.000006875 altitude))
-                 0.7519)
-        rsigma (if (<= altitude 36089)
-                 (Math/pow ttheta 4.256)
-                 (* 0.2971 (Math/pow 2.718 (* 0.00004806 (- 36089.0 altitude)))))
-        mach   (/ speed (* c/AASLK (Math/sqrt ttheta)))
-        pa     (* ttheta rsigma c/PASL)
-        qc     (if (<= mach 1.0)
-                 (* pa
-                    (- (Math/pow (+ 1.0 (* 0.2 mach mach))
-                                 3.5)
-                       1.0))
-                 (* pa
-                    (- (/ (* 166.9 mach mach)
-                          (Math/pow (- 7.0 (/ 1.0 (* mach mach)))
-                                    2.5))
-                       1.0)))
-        qpasl1 (+ 1.0 (/ qc c/PASL))
-        vcas   (* 1479.12 (Math/sqrt (- (Math/pow qpasl1 0.285714)
-                                        1.0)))
-        ias    (if (< 1889.65 qc)
-                 (let [oper (* qpasl1 (Math/pow (- 7.0 (/ (* c/AASLK c/AASLK) (* vcas vcas)))
-                                                2.5))]
-                   (* 51.1987 (Math/sqrt (if (neg? oper) 0.1 oper))))
-                 vcas)]
-    {:mach mach
-     :ias  ias
-     :cas  vcas
-     :qc   qc}))
-
-;; Ref: brief.cpp(826)
-(defn- waypoint-comments
-  "Return the comments section of the flight briefing for a waypoint"
-  [mission w]
-  (let [strings                             (get-in mission [:strings :fn])
-        {:keys [flags action route-action]} w]
-    (cond
-      (has-flag? flags c/WPF_ALTERNATE) (strings 237)
-      (has-flag? flags c/WPF_REPEAT)    (strings 247)
-      (= c/WP_NOTHING action)           (strings (+ 1650 route-action))
-      :else                             (strings (+ 1650 action)))))
-
-(defn- flight-waypoints
-  "Given a flight, returns a seq of maps describing the waypoints"
-  [mission flight]
-  (let [waypoints (->> flight
-                       :waypoints
-                       (map-indexed
-                        (fn [i w]
-                          (let [{:keys [action route-action arrive depart haves]} w
-                                action-name         (get-in mission [:strings
-                                                                     :waypoint-type-names
-                                                                     action])
-                                enroute-action-name (get-in mission [:strings
-                                                                     :waypoint-type-names
-                                                                     route-action])]
-                            (assoc
-                             w
-                             ::number (inc i)
-                             ::action-name action-name
-                             ::enroute-action-name action-name
-                             ::description (if (= action c/WP_NOTHING)
-                                             enroute-action-name
-                                             action-name)
-                             ::remain (when (haves :deptime)
-                                        (time/difference-hms arrive depart))
-                             ::altitude (-> w :grid-z (* c/GRIDZ_SCALE_FACTOR))
-                             ::comments (waypoint-comments mission w))))))]
-    (->> waypoints
-         (partition 2 1)
-         (map (fn [[prev curr]]
-                (let [{curr-x :grid-x curr-y :grid-y} curr
-                      {prev-x :grid-x prev-y :grid-y} prev
-                      dx                              (- curr-x prev-x)
-                      dy                              (- curr-y prev-y)
-                      dv                              [dx dy]
-                      distance                        (-> dv math/magnitude coords/fgrid->nm)
-                      delta-t                         (/ (- (-> curr :arrive time/campaign-time->ms)
-                                                            (-> prev :depart time/campaign-time->ms))
-                                                         1000
-                                                         60
-                                                         60)
-                      gnd-speed                       (if (zero? delta-t)
-                                                        0
-                                                        (/ distance delta-t))
-                      altitude                        (if (-> curr :flags (has-flag? c/WPF_HOLDCURRENT))
-                                                        (::altitude prev)
-                                                        (::altitude curr))
-                      {:keys [mach ias cas]}          (compute-speed gnd-speed altitude)]
-                  (assoc curr
-                         ::distance distance
-                         ::heading  (math/heading dv)
-                         ::speed-ias ias
-                         ::speed-cas cas
-                         ;; TODO: True airspeed would need to take
-                         ;; winds into account, which we aren't doing
-                         ;; here.
-                         ::speed-tas gnd-speed
-                         ::speed-gnd gnd-speed
-                         ::speed-mach mach
-                         ))))
-         (into (vec (take 1 waypoints)))
-         (map (fn [w]
-                (if-not (let [{:keys [action flags]} w]
-                          (or (has-flag? flags c/WPF_ALTERNATE)
-                              (= c/WP_REFUEL action)))
-                  w
-                  (dissoc w
-                          :arrive :depart ::distance ::heading ::speed-ias
-                          ::speed-cas ::speed-gnd ::speed-mach ::speed-tas)))))))
-
-(defn- flight-mission-name
-  "Given a flight, returns the name of a flight mission type, e.g. BARCAP."
-  [mission flight]
-  (get-in mission [:strings :mission-type-names (:mission flight)]))
-
-(defn- flight-mission-category
-  "Given a flight, return its mission category, e.g. ATO_DCA."
-  [mission flight]
-  (let [{:keys [mission]} flight]
-    (condp contains? mission
-      #{c/AMIS_OCASTRIKE
-        c/AMIS_SWEEP
-        c/AMIS_TARCAP
-        c/AMIS_ESCORT}
-      c/ATO_OCA
-
-      #{c/AMIS_STRIKE
-        c/AMIS_DEEPSTRIKE
-        c/AMIS_STSTRIKE
-        c/AMIS_STRATBOMB}
-      c/ATO_STRIKE
-
-      #{c/AMIS_INTSTRIKE
-        c/AMIS_INT
-        c/AMIS_SAD
-        c/AMIS_BAI}
-      c/ATO_INTERDICTION
-
-      #{c/AMIS_SEADSTRIKE
-        c/AMIS_SEADESCORT}
-      c/ATO_SEAD
-
-      #{c/AMIS_PRPLANCAS
-        c/AMIS_CAS
-        c/AMIS_ONCALLCAS
-        c/AMIS_FAC}
-      c/ATO_CAS
-
-      #{c/AMIS_BARCAP
-        c/AMIS_BARCAP2
-        c/AMIS_HAVCAP
-        c/AMIS_AMBUSHCAP
-        c/AMIS_INTERCEPT
-        c/AMIS_ALERT}
-      c/ATO_DCA
-
-      #{c/AMIS_AWACS
-        c/AMIS_JSTAR
-        c/AMIS_ECM
-        c/AMIS_RECON
-        c/AMIS_BDA
-        c/AMIS_RECONPATROL
-        c/AMIS_PATROL}
-      c/ATO_CCCI
-
-      #{c/AMIS_ASW
-        c/AMIS_ASHIP}
-      c/ATO_MARITIME
-
-      #{c/AMIS_TANKER
-        c/AMIS_AIRLIFT
-        c/AMIS_SAR
-        c/AMIS_RESCAP}
-      c/ATO_SUPPORT
-
-      c/ATO_OTHER)))
-
-(defn team-number
-  "Returns the team number given a team or team number."
-  [team-or-number]
-  (cond
-    (nil? team-or-number)
-    0
-
-    (number? team-or-number)
-    team-or-number
-
-    :else
-    (-> team-or-number :team :who)))
-
-(defn team-name
-  "Given a team, return its name, e.g. 'DPRK'."
-  [mission team]
-  (-> mission :teams (nth (team-number team)) :team :name))
-
-(defn team-flag
-  "Returns an image descriptor for the flag of `team`. `flag-type` can
-  be one of `:big-vert-dark`, `:big-vert`, `:big-horiz`, and
-  `:small-horiz`."
-  [mission team flag-type]
-  (let [team-info (get-in mission [:campaign-info :team-info (team-number team)])
-        icon-index (get-in c/FlagImageID [(:flag team-info) flag-type])
-        image-id (get-in mission [:image-ids :id->name icon-index])]
-    (im/make-descriptor mission
-                        "resource/main"
-                        image-id)))
-
-
-;; We've got a terminology problem here. A team is both a structure
-;; and a team number. Need terms that refer to them separately.
-;; Probably should also ditch "side" for "alliance"
-
-(defn side
-  "Returns the side number given a team. Team indicates the individual
-  combatant, side denots the alliance."
-  [mission team]
-  (-> mission :teams (nth (team-number team)) :team :c-team))
-
-(defn team-priority
-  "Returns a sort priority for `team` relative to `who` - allies
-  first, then enemies, then neutrals."
-  [mission who team]
-  (let [stance (-> mission :teams (nth who) :team :stance (nth (team-number team)))]
-    ({c/Allied   0
-      c/Friendly 1
-      c/War      2
-      c/Hostile  3
-      c/Neutral  4}
-     stance
-     5)))
-
-(defn teams
-  "Returns a seq of the teams."
-  [mission]
-  (let [teams-with-units      (->> mission
-                                   :units
-                                   (map :owner)
-                                   distinct
-                                   set)
-        teams-with-objectives (->> mission
-                                   :objectives
-                                   (map :owner)
-                                   distinct
-                                   set)
-        active-team-nums      (into teams-with-units teams-with-objectives)
-        active-teams          (->> mission
-                                   :teams
-                                   (filter #(-> % team-number active-team-nums)))
-        first-team-num        (->> active-teams first :team :who)]
-    (sort-by #(team-priority mission first-team-num (-> % :team :who)) active-teams)))
-
-(defn last-player-team
-  "Returns the team with the most-recently player-played mission."
-  [mission]
-  (->> mission
-       teams
-       (sort-by #(-> % :team :last-player-mission time/campaign-time->ms -))
-       first))
-
-(defn sides
-  "Returns a seq of team numbers representing the sides."
-  [mission]
-  (->> mission
-       teams
-       (map :team)
-       (map :c-team)
-       distinct))
-
-(defn teams-for-side
-  "Returns a set of the team numbers for a given side."
-  [mission side]
-  (->> mission
-       teams
-       (filter #(-> % :team :c-team (= side)))
-       (map team-number)
-       set))
-
-;; These are abstract, not particular RGB colors
-(defn team-color
-  "Returns the abstract color corresponding to `team-or-number`."
-  [team]
-  (nth [:white
-        :green
-        :blue
-        :brown
-        :orange
-        :yellow
-        :red
-        :grey]
-       (team-number team)))
-
-(defn package-name
-  "Given a package ID, return its string name, e.g. Package 12345."
-  [mission package-id]
-  (let [packages (->> mission
-                      :units
-                      (util/filter= :type :package))]
-    (->> package-id
-         (unit-lookup-by-id packages)
-         :name-id
-         str)))
-
-(defn squadron-aircraft
-  "Returns a map of `:airframe` and `:quantity` for a squadron."
-  [mission squadron]
-  {:airframe (-> squadron
-                 :type-id
-                 (- 100)
-                 (->> (nth (:class-table mission)))
-                 :data-pointer
-                 (->> (nth (:unit-class-data mission)))
-                 :vehicle-type
-                 first
-                 (->> (nth (:class-table mission)))
-                 :data-pointer
-                 (->> (nth (:vehicle-class-data mission)))
-                 :name)
-   :quantity (reduce +
-                     (for [i (range 16)]
-                       (-> squadron
-                           :roster
-                           (bit-shift-right (* i 2))
-                           (bit-and 0x03))))})
-
-;; Status algorithm at objectiv.cpp(2455)
-(defn airbase-status
-  "Return the status of an airbase as a number from 0 to 100."
-  [mission airbase]
-  ;; For each non-runway feature
-  ;; - Start with 100.
-  ;; - Subtract half the feature value [objective.cpp(2396)] if it's
-  ;;   damaged, and the full value if it's destroyed.
-  ;; - This number is the status
-  ;; For each runway feature
-  ;; - For each entry in the point data
-  ;;   - If it is a runway point, increment the runway count. If it's
-  ;;     also destroyed, increment the inactive account.
-  ;; Use the lower of the status and the percentage of active runways
-  (let [{:keys [class-table
-                objective-class-data
-                feature-class-data
-                feature-entry-data
-                point-header-data]} mission
-        airbase-class (->> airbase
-                           (class-table-entry mission)
-                           :data-pointer
-                           (nth objective-class-data))
-        {:keys [features first-feature]} airbase-class
-        feature-info (map #(nth feature-entry-data %)
-                          (range first-feature (+ first-feature features)))
-        feature-status (for [f (range features)]
-                         (let [i (-> f (/ 4) long)
-                               f* (- f (* i 4))]
-                           (if (or (neg? f*)
-                                   (< 255 f*)
-                                   ;; For some weird
-                                   ;; reason (objectiv.cpp[259], there
-                                   ;; can be more features than status
-                                   ;; slots in the objective, in which
-                                   ;; case they zero.
-                                   (<= (count (:f-status airbase)) i))
-                             0
-                             (-> airbase
-                                 :f-status
-                                 (nth i 0)
-                                 (bit-shift-right (* f* 2))
-                                 (bit-and 0x03)))))
-        feature-class-info (map (fn [feature]
-                                  (let [ci (-> feature
-                                               :index
-                                               (->> (nth class-table)))]
-                                    (assoc ci
-                                           :feature-class-info
-                                           (-> ci
-                                               :data-pointer
-                                               (->> (nth feature-class-data))))))
-                                feature-info)
-        feature-info (map (fn [fi fs fci]
-                            (assoc fi
-                                   :status fs
-                                   :class-info fci
-                                   ))
-                          feature-info
-                          feature-status
-                          feature-class-info)
-        runway? (fn [feature]
-                  (-> feature
-                      :class-info
-                      :vu-class-data
-                      :class-info
-                      :type
-                      (= c/TYPE_RUNWAY)))
-        nonrunway-statuses (->> feature-info
-                                (remove runway?)
-                                (reduce (fn [score feature]
-                                          (+ score
-                                             (condp = (:status feature)
-                                               c/VIS_DAMAGED (-> feature
-                                                                 :value
-                                                                 (/ 2)
-                                                                 long)
-                                               c/VIS_DESTROYED (:value feature)
-                                               0)))
-                                        0)
-                                (- 100)
-                                (max 0))
-        ;; The point header data contains information about a "logical
-        ;; runway". That is, what we would think of as a runway. These
-        ;; reference runway features. Status of a runway is the worst status
-        ;; of any of its features. Overall status is the worse of nonrunway
-        ;; and runway status.
-        runway-statuses (loop [index (:pt-data-index airbase-class)
-                               runway-stats {:total 0
-                                             :destroyed 0}]
-                          (let [point-header (nth point-header-data index)]
-                            (cond
-                              (zero? index)
-                              runway-stats
-
-                              :else
-                              (recur (:next-header point-header)
-                                     (if-not (= c/RunwayPt (:type point-header))
-                                       runway-stats
-                                       (-> runway-stats
-                                           (update :total inc)
-                                           (update :destroyed
-                                                   +
-                                                   (if (->> point-header
-                                                            :features
-                                                            (take-while #(< % 255))
-                                                            (map #(nth feature-info %))
-                                                            (map :status)
-                                                            (some #{c/VIS_DESTROYED}))
-                                                     1
-                                                     0))))))))
-        {:keys [total destroyed]} runway-statuses
-        runway-score (if (zero? total)
-                       100
-                       (->> (/ destroyed total)
-                            (* 100)
-                            long
-                            (- 100)))]
-    (min runway-score nonrunway-statuses)))
-
-(defn- objective-status
-  [mission objective]
-  ;; Will this work for non-airbases?
-  (airbase-status mission objective))
-
-;; Note that the below will also return carriers, which might be what
-;; we want, but might not be.
-;;
-;; Made this private because it's confusing that it doens't return
-;; squadrons etc. Should prefer the OOB functions, which do.
-(defn- airbases
-  "Returns all the airbase and airstrip objectives."
-  [mission]
-  (let [airbase-classes (->> mission
-                             :class-table
-                             (util/filter= #(get-in % [:vu-class-data :class-info :domain])
-                                           c/DOMAIN_LAND)
-                             (util/filter= #(get-in % [:vu-class-data :class-info :class])
-                                           c/CLASS_OBJECTIVE)
-                             (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
-                                       (get-in % [:vu-class-data :class-info :type])))
-                             ;;  Carrier airbases have subtype 7 and specific type 7.
-                             (remove (fn [cls]
-                                       (= [7 7]
-                                          [(get-in cls [:vu-class-data :class-info :stype])
-                                           (get-in cls [:vu-class-data :class-info :sptype])])))
-                             (map ::index)
-                             set)]
-    (->> mission
-         :objectives
-         (filterv (fn [objective]
-                    (airbase-classes (- (:entity-type objective) 100)))))))
-
-(defn- carriers
-  "Returns all the carrier task force units in the mission."
-  [mission]
-  (let [carrier-classes (->> mission
-                             :class-table
-                             (util/filter= #(get-in % [:vu-class-data :class-info :domain]
-                                                    c/DOMAIN_SEA)
-                                           c/DOMAIN_SEA)
-                             (util/filter= #(get-in % [:vu-class-data :class-info :class])
-                                           c/CLASS_UNIT)
-                             (util/filter= #(get-in % [:vu-class-data :class-info :type])
-                                           c/TYPE_TASKFORCE)
-                             (util/filter= #(get-in % [:vu-class-data :class-info :stype])
-                                           c/STYPE_UNIT_CARRIER)
-                             (map ::index)
-                             set)]
-    (->> mission
-         active-units
-         (filterv (fn [unit]
-                    (carrier-classes (- (:entity-type unit) 100)))))))
-
-(defn- army-bases
-  "Returns all the army base objectives."
-  [mission]
-  ;; TODO: There's a lot of commonality here with `airbases` - factor out
-  (let [armybase-classes (->> mission
-                              :class-table
-                              (util/filter= #(get-in % [:vu-class-data :class-info :domain])
-                                            c/DOMAIN_LAND)
-                              (util/filter= #(get-in % [:vu-class-data :class-info :class])
-                                            c/CLASS_OBJECTIVE)
-                              (util/filter= #(get-in % [:vu-class-data :class-info :type])
-                                            c/TYPE_ARMYBASE)
-                              (map ::index)
-                              set)]
-    (->> mission
-         :objectives
-         (filterv (fn [objective]
-                    (armybase-classes (- (:entity-type objective) 100)))))))
-
-(defn- carrier-name
-  "Returns the name of a carrier task force unit."
-  [mission carrier]
-  (-> (class-table-entry mission carrier)
-      :data-pointer
-      (->> (nth (:vehicle-class-data mission)))
-      :name))
-
-(def air-icon-resource-prefix
-  {:white  "wh"
-   :green  "gn"
-   :blue   "bl"
-   :brown  "br"
-   :orange "or"
-   :yellow "yl"
-   :red    "rd"
-   :grey   "gy"})
-
-(defn- squadron-image
-  "Returns an image descriptor for a squadron."
-  [mission squadron]
-  (let [{:keys [owner]}      squadron
-        {:keys [icon-index]} (unit-class-entry mission squadron)
-        {:keys [image-ids]}  mission]
-    (im/make-descriptor mission
-                        (str "resource/"
-                             (-> owner team-color air-icon-resource-prefix)
-                             "air_nn")
-                        (get-in image-ids [:id->name icon-index]))))
-
-(def icon-resource-prefix
-  {:white  "wht"
-   :green  "grn"
-   :blue   "blu"
-   :brown  "brn"
-   :orange "orn"
-   :yellow "ylw"
-   :red    "red"
-   :grey   "gry"})
-
-(defn- objective-image
-  "Returns an image descriptor for an objective."
-  [mission objective]
-  (let [{:keys [owner]}      objective
-        {:keys [icon-index]} (objective-class-entry mission objective)
-        {:keys [image-ids]}  mission]
-    (im/make-descriptor mission
-                        (str "resource/"
-                             (-> owner team-color icon-resource-prefix)
-                             "dark")
-                        (get-in image-ids [:id->name icon-index]))))
-
-(defn- unit-image
-  "Returns an image descriptor for a unit."
-  [mission unit]
-  (let [{:keys [owner]}      unit
-        {:keys [icon-index]} (unit-class-entry mission unit)
-        {:keys [image-ids]}  mission]
-    (im/make-descriptor mission
-                        (str "resource/"
-                             (-> owner team-color icon-resource-prefix)
-                             "dark")
-                        (get-in image-ids [:id->name icon-index]))))
-
-(defn- squadron-type
-  "Returns a string describing the type of the squadron - Fighter,
-  Attack, etc."
-  [mission squadron]
-  (->> squadron (unit-class-entry mission) :name))
-
-(defn- squadron-airbase
-  "Returns the airbase objective for the given squadron."
-  [mission squadron]
-  (if-let [airbase (find-objective mission :id (:airbase-id squadron))]
-    ;; It's a land-based airbase
-    (assoc airbase ::name (objective-name mission airbase))
-    ;; It's a carrier
-    (let [carrier (find-unit mission :id (:airbase-id squadron))]
-      (assoc carrier ::name (carrier-name mission carrier)))))
-
-(defn flights
-  "Return a seq of all the flights in a mission"
-  [mission]
-  (some->> mission
-           active-units
-           (filter #(= (:type %) :flight))
-           (map (fn [flight]
-                  (let [squadron (->> flight :squadron (find-unit mission :id))]
-                    (assoc flight
-                           ::mission {:name     (flight-mission-name mission flight)
-                                      :category (flight-mission-category mission flight)}
-                           ::squadron {:name (if-not squadron
-                                               "Unknown"
-                                               (unit-name mission squadron))}
-                           ::airbase {:name (if-not squadron
-                                              "Unknown"
-                                              (->> squadron
-                                                   (squadron-airbase mission)
-                                                   ::name))}
-                           ::package {:name (->> flight :package (package-name mission))}
-                           ::waypoints (flight-waypoints mission flight)
-                           ::loadouts (flight-loadouts mission flight)
-                           ::aircraft  {:airframe (if-not squadron
-                                                    ;; TODO: Somehow Mission Commander knows
-                                                    ;; the aircraft type even if there's no
-                                                    ;; squadron
-                                                    "Unknown"
-                                                    (->> squadron
-                                                         (squadron-aircraft mission)
-                                                         :airframe))
-                                        ;; TODO: This might need to change, because the
-                                        ;; aircraft in a flight can have different
-                                        ;; statuses, like. See e.g.
-                                        ;; AIRCRAFT_NOT_ASSIGNED
-                                        :quantity (flight-aircraft-quantity flight)}))))))
-
-
 (defn oob-air
   "Returns a seq of airbases."
   [mission]
@@ -2300,41 +2365,10 @@
   ;; - The :id of the an airbase objective.
   ;; - The :id of a task force unit.
   ;; - The :id of a non-airbase objective
-  (let [squadrons   (->> mission
-                         active-units
-                         (group-by :type)
-                         :squadron
-                         (map (fn [squadron]
-                                (assoc squadron
-                                       ::aircraft (squadron-aircraft mission squadron)
-                                       ::squadron-type (squadron-type mission squadron)
-                                       ::image (squadron-image mission squadron))))
-                         (group-by :airbase-id))
-        airbases    (airbases mission)
-        carriers    (carriers mission)
-        army-bases  (army-bases mission)
-        airbases*   (->> airbases
-                         (mapv #(assoc %
-                                       ::location (select-keys % [:x :y])
-                                       ::status (airbase-status mission %)
-                                       ::squadrons (get squadrons (:id %))
-                                       ::image (objective-image mission %)
-                                       ::name (objective-name mission %))))
-        carriers*   (->> carriers
-                         (mapv #(assoc %
-                                       ::location (select-keys % [:x :y])
-                                       ::status 100
-                                       ::squadrons (get squadrons (:id %))
-                                       ::image (unit-image mission %)
-                                       ::name (carrier-name mission %))))
-        army-bases* (->> army-bases
-                         (mapv #(assoc %
-                                       ::location (select-keys % [:x :y])
-                                       ::status (objective-status mission %)
-                                       ::squadrons (get squadrons (:id %))
-                                       ::image (objective-image mission %)
-                                       ::name (objective-name mission %))))]
-    (vec (concat airbases* carriers* army-bases*))))
+  (let [{:keys [::airbases
+                ::carriers
+                ::army-bases]} mission]
+    (vec (concat airbases carriers army-bases))))
 
 (defn order-of-battle
   "Returns the order of battle, a map from category (air,

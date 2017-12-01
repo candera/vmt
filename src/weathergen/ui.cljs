@@ -4238,11 +4238,7 @@
             (let [val (cell= (contains? included-squadron-types squadron-type))]
               (input :type "checkbox"
                      :value val
-                     :change #(do
-                                #_(log/debug "included-squadron-types changing"
-                                           :val @val
-                                           :type @squadron-type)
-                                (swap! included-squadron-types (if @val disj conj) @squadron-type))))
+                     :change #(swap! included-squadron-types (if @val disj conj) @squadron-type)))
             (label squadron-type)))))
        (airbase-display-controls "Display Options")
        (control-section
