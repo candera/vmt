@@ -2905,11 +2905,6 @@ type: 0x64 -> image
                     :parent :a}]]
   (pprint (tree-level load-status nil)))
 
-(def bugged-mission
-  (mission/read-mission
-   installs
-   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/Save-Day  1 05 00 11.cam"))
-
 (@#'mission/flights bugged-mission)
 
 (->> bugged-mission
@@ -2982,3 +2977,30 @@ type: 0x64 -> image
      ::mission/carriers
      (filter (fn [airbase] (= (:id airbase) {:name 4665 :creator 0})))
      count)
+
+(def bugged-mission
+  (mission/read-mission
+   installs
+   "/Users/candera/falcon/4.33.3/Data/Campaign/SAVE/Save-Day  1 05 00 11.cam"))
+
+(->>  bugged-mission
+     ::mission/squadrons
+     vals
+     (mapcat identity)
+     first
+     (filter (fn [squadron]
+               (nil? (@#'mission/squadron-airbase bugged-mission squadron))))
+     first
+     keys
+     )
+
+(for [[airbase squadrons] (::mission/squadrons bugged-mission)
+      squadron squadrons
+      :when (nil? (@#'mission/squadron-airbase bugged-mission squadron))
+      ]
+  [(mission/team-name bugged-mission (:owner squadron)) (:name squadron)])
+
+(format-list ["a"])
+(format-list ["a" "b"])
+(format-list ["a" "b" "c"])
+

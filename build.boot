@@ -1,22 +1,24 @@
 (def project 'vmt)
 
 (set-env!
- :dependencies '[[org.clojure/clojure       "1.9.0-alpha17"]
+ :dependencies '[[org.clojure/clojure       "1.9.0-alpha19"]
+                 ;; Can't update Clojure beyond 1.9.0-alpha19 due to
+                 ;; compliation problem with ClojureScript. Update
+                 ;; both later when it's fixed.
                  [org.clojure/clojurescript "1.9.562"]
                  [adzerk/boot-cljs          "2.0.0"]
                  [adzerk/boot-reload        "0.5.1"]
                  ;; [adzerk/boot-cljs-repl     "0.3.3"]
                  ;;[hoplon/javelin "3.9.0"]
-                 [hoplon/hoplon             "7.0.2"]
-                 [org.clojure/core.async    "0.3.443"
-                  :exclusions [org.clojure/tools.reader]]
+                 [hoplon "7.0.3"]
+
+                 [org.clojure/core.async "0.3.465" :exclusions [[org.clojure/tools.reader]]]
                  ;; [tailrecursion/boot-jetty  "0.1.3"]
                  [cljsjs/jquery-ui "1.11.4-0"]
                  [org.clojure/data.csv "0.1.4"]
 
                  [rum "0.10.8"]
-                 ;; TODO: Update to later version
-                 [com.cognitect/transit-cljs "0.8.239"]
+                 [com.cognitect/transit-cljs "0.8.243"]
                  [com.cognitect/transit-clj "0.8.300" :scope "test"]
                  [com.taoensso/timbre "4.10.0"]
                  ;;[secretary "1.2.3"]
@@ -32,8 +34,8 @@
                  ;;[cljsjs/jszip "2.5.0-0"]
                  [cljsjs/pako "0.2.7-0"]
                  [cljsjs/tinycolor "1.3.0-0"]
-                 [cljsjs/select2 "4.0.3-0"]
-                 [garden "1.3.2"]
+                 [cljsjs/select2 "4.0.3-1"]
+                 [garden "1.3.3"]
                  [funcool/octet "1.0.1"]
                  [org.clojure/core.match "0.3.0-alpha5"]
                  [org.clojure/tools.namespace "0.2.11" :scope "test"]
