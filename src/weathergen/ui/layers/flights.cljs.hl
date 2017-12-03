@@ -753,7 +753,7 @@
                                      :checked-flights      (cell #{})
                                      :highlighted-flight   (cell nil)
                                      :display              (cell {})
-                                     :all-flights          (cell= (some->> mission mission/flights))
+                                     :all-flights          (cell= (::mission/flights mission))
                                      :selected-teams       (cell #{})
                                      :map-flight-path-size  map-flight-path-size
                                      :map-flight-path-scale map-flight-path-scale})

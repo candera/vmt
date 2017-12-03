@@ -1373,41 +1373,43 @@
     (when-let [carrier (find-unit mission :id (:airbase-id squadron))]
       (assoc carrier ::name (carrier-name mission carrier)))))
 
-(defn flights
+(defn- flights
   "Return a seq of all the flights in a mission"
   [mission]
-  (some->> mission
-           active-units
-           (filter #(= (:type %) :flight))
-           (map (fn [flight]
-                  (let [squadron (->> flight :squadron (find-unit mission :id))]
-                    (assoc flight
-                           ::mission {:name     (flight-mission-name mission flight)
-                                      :category (flight-mission-category mission flight)}
-                           ::squadron {:name (if-not squadron
-                                               "Unknown"
-                                               (unit-name mission squadron))}
-                           ::airbase {:name (if-not squadron
-                                              "Unknown"
-                                              (->> squadron
-                                                   (squadron-airbase mission)
-                                                   ::name))}
-                           ::package {:name (->> flight :package (package-name mission))}
-                           ::waypoints (flight-waypoints mission flight)
-                           ::loadouts (flight-loadouts mission flight)
-                           ::aircraft  {:airframe (if-not squadron
-                                                    ;; TODO: Somehow Mission Commander knows
-                                                    ;; the aircraft type even if there's no
-                                                    ;; squadron
-                                                    "Unknown"
-                                                    (->> squadron
-                                                         (squadron-aircraft mission)
-                                                         :airframe))
-                                        ;; TODO: This might need to change, because the
-                                        ;; aircraft in a flight can have different
-                                        ;; statuses, like. See e.g.
-                                        ;; AIRCRAFT_NOT_ASSIGNED
-                                        :quantity (flight-aircraft-quantity flight)}))))))
+  (progress/with-step "Loading flights"
+    (fn []
+      (some->> mission
+               active-units
+               (filter #(= (:type %) :flight))
+               (map (fn [flight]
+                      (let [squadron (->> flight :squadron (find-unit mission :id))]
+                        (assoc flight
+                               ::mission {:name     (flight-mission-name mission flight)
+                                          :category (flight-mission-category mission flight)}
+                               ::squadron {:name (if-not squadron
+                                                   "Unknown"
+                                                   (unit-name mission squadron))}
+                               ::airbase {:name (if-not squadron
+                                                  "Unknown"
+                                                  (->> squadron
+                                                       (squadron-airbase mission)
+                                                       ::name))}
+                               ::package {:name (->> flight :package (package-name mission))}
+                               ::waypoints (flight-waypoints mission flight)
+                               ::loadouts (flight-loadouts mission flight)
+                               ::aircraft  {:airframe (if-not squadron
+                                                        ;; TODO: Somehow Mission Commander knows
+                                                        ;; the aircraft type even if there's no
+                                                        ;; squadron
+                                                        "Unknown"
+                                                        (->> squadron
+                                                             (squadron-aircraft mission)
+                                                             :airframe))
+                                            ;; TODO: This might need to change, because the
+                                            ;; aircraft in a flight can have different
+                                            ;; statuses, like. See e.g.
+                                            ;; AIRCRAFT_NOT_ASSIGNED
+                                            :quantity (flight-aircraft-quantity flight)}))))))))
 
 (defn- squadrons
   "Return a map of airbase IDs to squadrons in mission."
@@ -1433,103 +1435,128 @@
 (defn- airbases
   "Returns all the airbase and airstrip objectives."
   [mission]
-  (let [airbase-classes (->> mission
-                             :class-table
-                             (util/filter= #(get-in % [:vu-class-data :class-info :domain])
-                                           c/DOMAIN_LAND)
-                             (util/filter= #(get-in % [:vu-class-data :class-info :class])
-                                           c/CLASS_OBJECTIVE)
-                             (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
-                                       (get-in % [:vu-class-data :class-info :type])))
-                             ;;  Carrier airbases have subtype 7 and specific type 7.
-                             (remove (fn [cls]
-                                       (= [7 7]
-                                          [(get-in cls [:vu-class-data :class-info :stype])
-                                           (get-in cls [:vu-class-data :class-info :sptype])])))
-                             (map ::index)
-                             set)]
-    (->> mission
-         :objectives
-         (filterv (fn [objective]
-                    (airbase-classes (- (:entity-type objective) 100))))
-         (mapv #(assoc %
-                       ::location (select-keys % [:x :y])
-                       ::status (airbase-status mission %)
-                       ::squadrons (get (::squadrons mission) (:id %))
-                       ::image (objective-image mission %)
-                       ::name (objective-name mission %))))))
+  (progress/with-step "Loading airbases"
+    (fn []
+     (let [airbase-classes (->> mission
+                                :class-table
+                                (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                                              c/DOMAIN_LAND)
+                                (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                              c/CLASS_OBJECTIVE)
+                                (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
+                                          (get-in % [:vu-class-data :class-info :type])))
+                                ;;  Carrier airbases have subtype 7 and specific type 7.
+                                (remove (fn [cls]
+                                          (= [7 7]
+                                             [(get-in cls [:vu-class-data :class-info :stype])
+                                              (get-in cls [:vu-class-data :class-info :sptype])])))
+                                (map ::index)
+                                set)]
+       (->> mission
+            :objectives
+            (filterv (fn [objective]
+                       (airbase-classes (- (:entity-type objective) 100))))
+            (mapv #(assoc %
+                          ::location (select-keys % [:x :y])
+                          ::status (airbase-status mission %)
+                          ::squadrons (get (::squadrons mission) (:id %))
+                          ::image (objective-image mission %)
+                          ::name (objective-name mission %))))))))
 
 (defn- carriers
   "Returns all the carrier task force units in the mission."
   [mission]
-  (let [carrier-classes (->> mission
-                             :class-table
-                             (util/filter= #(get-in % [:vu-class-data :class-info :domain]
-                                                    c/DOMAIN_SEA)
-                                           c/DOMAIN_SEA)
-                             (util/filter= #(get-in % [:vu-class-data :class-info :class])
-                                           c/CLASS_UNIT)
-                             (util/filter= #(get-in % [:vu-class-data :class-info :type])
-                                           c/TYPE_TASKFORCE)
-                             (util/filter= #(get-in % [:vu-class-data :class-info :stype])
-                                           c/STYPE_UNIT_CARRIER)
-                             (map ::index)
-                             set)]
-    (->> mission
-         active-units
-         (filterv (fn [unit]
-                    (carrier-classes (- (:entity-type unit) 100))))
-         (mapv #(assoc %
-                       ::location (select-keys % [:x :y])
-                       ::status 100
-                       ::squadrons (get squadrons (:id %))
-                       ::image (unit-image mission %)
-                       ::name (carrier-name mission %))))))
+  (progress/with-step "Loading carriers"
+    (fn []
+      (let [carrier-classes (->> mission
+                                 :class-table
+                                 (util/filter= #(get-in % [:vu-class-data :class-info :domain]
+                                                        c/DOMAIN_SEA)
+                                               c/DOMAIN_SEA)
+                                 (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                               c/CLASS_UNIT)
+                                 (util/filter= #(get-in % [:vu-class-data :class-info :type])
+                                               c/TYPE_TASKFORCE)
+                                 (util/filter= #(get-in % [:vu-class-data :class-info :stype])
+                                               c/STYPE_UNIT_CARRIER)
+                                 (map ::index)
+                                 set)]
+        (->> mission
+             active-units
+             (filterv (fn [unit]
+                        (carrier-classes (- (:entity-type unit) 100))))
+             (mapv #(assoc %
+                           ::location (select-keys % [:x :y])
+                           ::status 100
+                           ::squadrons (get squadrons (:id %))
+                           ::image (unit-image mission %)
+                           ::name (carrier-name mission %))))))))
 
 (defn- army-bases
   "Returns all the army base objectives."
   [mission]
   ;; TODO: There's a lot of commonality here with `airbases` - factor out
-  (let [armybase-classes (->> mission
-                              :class-table
-                              (util/filter= #(get-in % [:vu-class-data :class-info :domain])
-                                            c/DOMAIN_LAND)
-                              (util/filter= #(get-in % [:vu-class-data :class-info :class])
-                                            c/CLASS_OBJECTIVE)
-                              (util/filter= #(get-in % [:vu-class-data :class-info :type])
-                                            c/TYPE_ARMYBASE)
-                              (map ::index)
-                              set)]
-    (->> mission
-         :objectives
-         (filterv (fn [objective]
-                    (armybase-classes (- (:entity-type objective) 100))))
-         (mapv #(assoc %
-                       ::location (select-keys % [:x :y])
-                       ::status (objective-status mission %)
-                       ::squadrons (get squadrons (:id %))
-                       ::image (objective-image mission %)
-                       ::name (objective-name mission %))))))
+  (progress/with-step "Loading army bases"
+    (fn []
+      (let [armybase-classes (->> mission
+                                  :class-table
+                                  (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                                                c/DOMAIN_LAND)
+                                  (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                                c/CLASS_OBJECTIVE)
+                                  (util/filter= #(get-in % [:vu-class-data :class-info :type])
+                                                c/TYPE_ARMYBASE)
+                                  (map ::index)
+                                  set)]
+        (->> mission
+             :objectives
+             (filterv (fn [objective]
+                        (armybase-classes (- (:entity-type objective) 100))))
+             (mapv #(assoc %
+                           ::location (select-keys % [:x :y])
+                           ::status (objective-status mission %)
+                           ::squadrons (get squadrons (:id %))
+                           ::image (objective-image mission %)
+                           ::name (objective-name mission %))))))))
 
-(defn- remove-squadrons-without-airbases
-  "Remove any squadrons that have no airbases, and any flights from those squadrons."
+(defn- format-list
+  "Given a collection of strings, concatenate them together inserting
+  commas and the word \"and\" as appropirate."
+  [items]
+  (let [n (count items)]
+    (if (< (count items) 2)
+      (first items)
+      (str (->> items
+                butlast
+                (str/join ", "))
+           (when (< 2 (count items))
+             ",")
+           " and "
+           (last items)))))
+
+(defn- report-squadrons-without-airbases
+  "Issue warnings for any squadrons that have no airbases."
   [mission]
-  (let [problems (->> mission
-                       active-units
-                       (filter (fn [unit]
-                                 (and (= :squadron (:type unit))
-                                      (nil? (squadron-airbase mission unit))))))]
-    (if (empty? problems)
-      mission
-      (let [flights (mapcat flights)]
-        (progress/step-warn "todo")))))
+  (let [problems (for [[airbase squadrons] (::squadrons mission)
+                       squadron squadrons
+                       :when (nil? (squadron-airbase mission squadron))]
+                   squadron)]
+    (when-not (empty? problems)
+      (progress/step-warn
+       (str "The following squadrons have no associated airbase: "
+            (->> problems
+                 (map (fn [{:keys [owner name]}]
+                        (str name " (" (team-name mission owner) ")")))
+                 format-list)
+            ". Squadrons without an associated airbase are known to cause instability (crashes) in multiplayer flight. The recommended fix is to use Mission Commander to delete and recreate the corrupt squadrons and all associated flights. Please also help the dev team find the source of this bug by reporting it on the BMS website.")))))
 
 (defn- fixup-mission
   "Repair any problems with mission, issuing warnings along the way."
   [mission]
   (progress/with-step "Verifying mission integrity"
-    (-> mission
-        remove-squadrons-without-airbases)))
+    (fn []
+      (report-squadrons-without-airbases mission)
+      mission)))
 
 ;; TODO: Consider renaming this read-database, and referring to the resulting object
 ;; as the database.
@@ -1583,6 +1610,11 @@
                                                  (into {}))
                         :mission-name   (fs/basename path)
                         :theater        theater})]
+    ;; All of this is a bit goofy: I have to thread these through
+    ;; because there are places where one type of entity contains
+    ;; another. I probably should fix up the representation so that
+    ;; everything is by reference instead, probably by ID. Or switch
+    ;; to using a real database.
     (as-> mission ?mission
       (assoc ?mission
              :map-image (im/make-descriptor mission
@@ -1597,7 +1629,8 @@
       (assoc ?mission
              ::carriers (carriers ?mission))
       (assoc ?mission
-             ::army-bases (army-bases ?mission)))))
+             ::army-bases (army-bases ?mission))
+      (fixup-mission ?mission))))
 
 (defn mission->briefing
   "Converts a mission to a 'briefing', which is a serializable version
