@@ -59,6 +59,7 @@ echo "Building version ${GIT_VERSION} for channel ${CHANNEL}"
 TARGETDIR=target
 PACKAGEDIR=package
 UPDATE_BASE=https://s3.amazonaws.com/org.craigandera.vmt
+S3_BUCKET_URL=s3://org.craigandera.vmt
 
 build $TARGETDIR
 
@@ -72,6 +73,19 @@ mkdir -p $PACKAGEPATH
 cd $(dirname $0)/../
 
 LINKS=$(mktemp)
+
+REDIRECTS=$(mktemp)
+
+cat > $REDIRECTS <<EOF
+<html>
+<head>
+<link type="text/css" rel="stylesheet" href="../style.css" />
+<title>Latest VMT Versions</title>
+</head>
+<body>
+<h1>Links to VMT ${GIT_VERSION} (the latest on the ${CHANNEL} channel)</h1>
+<ul>
+EOF
 
 for TYPE in "darwin,x64" "win32,ia32" "win32,x64"; do
     BUILDINFO=$(mktemp)
@@ -96,10 +110,26 @@ EOF
     zip -r ../"$ZIPFILE" . -i \*
     if [[ "${UPLOAD}" != "no" ]]
     then
-        aws s3 cp ../"$ZIPFILE" s3://org.craigandera.vmt/${CHANNEL}/
-        aws s3 cp ${BUILDINFO} s3://org.craigandera.vmt/${CHANNEL}/${LATEST}
+        aws s3 cp ../"$ZIPFILE" ${S3_BUCKET_URL}/${CHANNEL}/
+        aws s3 cp ${BUILDINFO} ${S3_BUCKET_URL}/${CHANNEL}/${LATEST}
     fi
     popd
+
+    cat >> ${REDIRECTS} <<EOF
+<li><a href="${DOWNLOAD_URL}">${PLATFORM} (${ARCH})</a></li>
+EOF
 done
 
-cat $LINKS
+cat >> $REDIRECTS <<EOF
+</ul>
+</body>
+</html>
+EOF
+
+if [[ "${UPLOAD}" != "no" ]]
+then
+    aws s3 cp ${REDIRECTS} ${S3_BUCKET_URL}/${CHANNEL}/index.html
+    echo ${UPDATE_BASE}/${CHANNEL}/
+
+    cat $LINKS
+fi
