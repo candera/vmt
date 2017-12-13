@@ -3916,25 +3916,25 @@
    (tabs/tabs
     :selected (cell :one)
     :tabs [{:title "Version"
-            :id :one
-            :ui (div (cell= (get build-info "VERSION")))}
+            :id    :one
+            :ui    "test"}
            {:title "App Path"
-            :id :two
-            :ui (div (-> electron
-                         .-remote
-                         .-app
-                         .getAppPath))}
+            :id    :two
+            :ui    (div (-> electron
+                            .-remote
+                            .-app
+                            .getAppPath))}
            {:title "Three"
-            :id :three
-            :ui (let [choice (cell :a)]
-                  (div
-                   (comm/radio-group
-                    :value choice
-                    :choices (cell [{:value :a
-                                     :label "a"}
-                                    {:value :b
-                                     :label "b"}]))
-                   (div (cell= (str "value: " (pr-str choice))))))}])
+            :id    :three
+            :ui    (let [choice (cell :a)]
+                     (div
+                      (comm/radio-group
+                       :value choice
+                       :choices (cell [{:value :a
+                                        :label "a"}
+                                       {:value :b
+                                        :label "b"}]))
+                      (div (cell= (str "value: " (pr-str choice))))))}])
    ;; (pre-cell "visible-sides" visible-sides)
    ;; (pre-cell "effective-visible-sides" effective-visible-sides)
    ;; (pre-cell "visible-teams" visible-teams)
@@ -3957,9 +3957,9 @@
         [ ;; Sides
          {:formatter (fn [expanded? item]
                        (pre-cell "side" (cell= {:expanded? expanded? :item item})))
-          :children (fn [item]
-                      (formula-of [item]
-                        (:children item)))}
+          :children  (fn [item]
+                       (formula-of [item]
+                         (:children item)))}
          ;; Airbases
          {:formatter (fn [expanded? item]
                        (pre-cell "airbase" (cell= {:expanded? expanded? :item item})))}
@@ -3967,18 +3967,18 @@
         (cell [{:name "side one" :children [:ab1 :ab2]}
                {:name "side two" :children [:ab3 :ab4]}])
         ))
-   #_(let [data (cell [{:a 1 :b 2 :c 3
-                        :children [{:a 4 :b 5 :c 6}
-                                   {"a" "a" "b" "b" "c" "c"}]}])
-           columns (cell [{:id :a
-                           :name "A"
-                           :field :a}
-                          {:id :b
-                           :name "B"
-                           :field :b}
-                          {:id :c
-                           :name "C"
-                           :field :c}])
+   #_(let [data     (cell [{:a        1 :b 2 :c 3
+                            :children [{:a 4 :b 5 :c 6}
+                                       {"a" "a" "b" "b" "c" "c"}]}])
+           columns  (cell [{:id    :a
+                            :name  "A"
+                            :field :a}
+                           {:id    :b
+                            :name  "B"
+                            :field :b}
+                           {:id    :c
+                            :name  "C"
+                            :field :c}])
            clicked? (cell false)]
        [(button :click (fn [_]
                          (log/debug "Button clicked")
@@ -4003,7 +4003,7 @@
           (span c1))
         (button :click #(swap! c2 not) "toggle")
         (button :click #(swap! c1 str "x") "x")])
-   #_(let [path (cell {:color "FFFFFF"})
+   #_(let [path          (cell {:color "FFFFFF"})
            current-color (cell= (:color path))]
        (triple-border
         :inner current-color

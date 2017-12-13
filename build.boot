@@ -1,6 +1,6 @@
 (def project 'vmt)
 
-(set-env!
+(merge-env!
  :dependencies '[[org.clojure/clojure       "1.9.0-alpha19"]
                  ;; Can't update Clojure beyond 1.9.0-alpha19 due to
                  ;; compliation problem with ClojureScript. Update
@@ -21,6 +21,7 @@
                  [com.cognitect/transit-cljs "0.8.243"]
                  [com.cognitect/transit-clj "0.8.300" :scope "test"]
                  [com.taoensso/timbre "4.10.0"]
+                 [hiccups "0.3.0"]
                  ;;[secretary "1.2.3"]
                  ;;[funcool/cuerdas "2.0.0"]
                  ;;[com.cemerick/url "0.1.1"]
