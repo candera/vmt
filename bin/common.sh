@@ -1,6 +1,6 @@
 function build() {
     TARGETDIR=$1
-    boot electron
+    boot electron -s
     cd $TARGETDIR
     # Annoyingly, it seems that if I don't do an `npm install`, the
     # node_modules directory in the target does not get populated, and

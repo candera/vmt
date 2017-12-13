@@ -1376,7 +1376,7 @@
 (defn- flights
   "Return a seq of all the flights in a mission"
   [mission]
-  (progress/with-step "Loading flights"
+  (progress/with-step "Processing flights"
     (fn []
       (some->> mission
                active-units
@@ -1414,7 +1414,7 @@
 (defn- squadrons
   "Return a map of airbase IDs to squadrons in mission."
   [mission]
-  (progress/with-step "Loading squadrons"
+  (progress/with-step "Processing squadrons"
     (fn []
       (->> mission
            active-units
@@ -1435,7 +1435,7 @@
 (defn- airbases
   "Returns all the airbase and airstrip objectives."
   [mission]
-  (progress/with-step "Loading airbases"
+  (progress/with-step "Processing airbases"
     (fn []
      (let [airbase-classes (->> mission
                                 :class-table
@@ -1466,7 +1466,7 @@
 (defn- carriers
   "Returns all the carrier task force units in the mission."
   [mission]
-  (progress/with-step "Loading carriers"
+  (progress/with-step "Processing carriers"
     (fn []
       (let [carrier-classes (->> mission
                                  :class-table
@@ -1496,7 +1496,7 @@
   "Returns all the army base objectives."
   [mission]
   ;; TODO: There's a lot of commonality here with `airbases` - factor out
-  (progress/with-step "Loading army bases"
+  (progress/with-step "Processing army bases"
     (fn []
       (let [armybase-classes (->> mission
                                   :class-table
@@ -1558,6 +1558,27 @@
       (report-squadrons-without-airbases mission)
       mission)))
 
+(defn- postprocess-mission
+  "Add in some computed information to the mission from a raw, just-loaded version"
+  [mission]
+  (let [calc (fn [mission k f]
+               (assoc mission k (f mission)))]
+    ;; All of this is a bit goofy: I have to thread these through
+    ;; because there are places where one type of entity contains
+    ;; another. I probably should fix up the representation so that
+    ;; everything is by reference instead, probably by ID. Or switch
+    ;; to using a real database.
+    (-> mission
+        (assoc :map-image (im/make-descriptor mission
+                                              "resource/campmap"
+                                              "BIG_MAP_ID"))
+        (calc ::squadrons squadrons)
+        (calc ::airbases airbases)
+        (calc ::flights flights)
+        (calc ::carriers carriers)
+        (calc ::army-bases army-bases)
+        fixup-mission)))
+
 ;; TODO: Consider renaming this read-database, and referring to the resulting object
 ;; as the database.
 (defn read-mission
@@ -1610,27 +1631,7 @@
                                                  (into {}))
                         :mission-name   (fs/basename path)
                         :theater        theater})]
-    ;; All of this is a bit goofy: I have to thread these through
-    ;; because there are places where one type of entity contains
-    ;; another. I probably should fix up the representation so that
-    ;; everything is by reference instead, probably by ID. Or switch
-    ;; to using a real database.
-    (as-> mission ?mission
-      (assoc ?mission
-             :map-image (im/make-descriptor mission
-                                            "resource/campmap"
-                                            "BIG_MAP_ID"))
-      (assoc ?mission
-             ::squadrons (squadrons ?mission))
-      (assoc ?mission
-             ::airbases (airbases ?mission))
-      (assoc ?mission
-             ::flights (flights ?mission))
-      (assoc ?mission
-             ::carriers (carriers ?mission))
-      (assoc ?mission
-             ::army-bases (army-bases ?mission))
-      (fixup-mission ?mission))))
+    (postprocess-mission mission)))
 
 (defn mission->briefing
   "Converts a mission to a 'briefing', which is a serializable version
@@ -1698,10 +1699,7 @@
                                      :names          names
                                      :installation   installation
                                      :theater        theater})]
-    (-> mission
-        (assoc :map-image (im/make-descriptor mission
-                                              "resource/campmap"
-                                              "BIG_MAP_ID")))))
+    (postprocess-mission mission)))
 
 
 ;; Campaign details file

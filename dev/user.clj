@@ -121,8 +121,6 @@
      (log/debug "Done reading.")
      mission)))
 
-
-
 (def save2
   (delay
    (log/debug "Reading save2...")
