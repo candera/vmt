@@ -3,13 +3,14 @@
   (:require [garden.core :refer [css]]
             [garden.selectors :as css-sel]
             [hoplon.svg :as svg]
+            [rum.core :as rum]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
             [weathergen.help :as help]
             [weathergen.ui.buttons :as buttons]
-            [weathergen.ui.common :as comm :refer [inl px register-styles! triangle]])
+            [weathergen.ui.common :as comm :refer [inl px register-styles! rinl triangle]])
   (:require-macros
    [weathergen.cljs.macros :refer [with-time formula-of with-attr-bindings]]))
 
@@ -136,6 +137,30 @@
                                   "black"
                                   "none"))))))
 
+(defn- rsorters
+  "Rum version of `sorters`."
+  [sort-criteria column-id]
+  (rinl
+   {:class "sorters"}
+   [:svg {:width   (px 20)
+          :viewBox "-100 -100 200 200"}
+    (comm/rtriangle
+     {:transform "rotate(180) translate(0 -50)"
+      :r 50
+      :stroke "black"
+      :stroke-width "2"
+      :fill (if (= sort-criteria [column-id :ascending])
+              "black"
+              "none")})
+    (comm/rtriangle
+     {:transform "translate(0 -50)"
+      :r 50
+      :stroke "black"
+      :stroke-width "2"
+      :fill (if (= sort-criteria [column-id :descending])
+              "black"
+              "none")})]))
+
 (defn- nudge
   "Moves item `item` in `coll` by one position earlier or later,
   depending on the sign of `n`.
@@ -153,26 +178,8 @@
        (sort-by first)
        (mapv second)))
 
-;; TODO: Don't bonk when row-attrs is nil
-(defelem table-grid
-  "Returns a table grid control. Attributes
-
-:data - A cell containing a seq of maps
-:row-attrs - A function from a cell containing a row to an Hoplon
-             attrs map
-:when-empty - UI to show when there are no rows in the data
-:columns - A map from column IDs to column descriptions
-:fixed-columns - A seq of IDs of unmovable columns
-:movable-columns - [cell] A seq of IDs of movable columns
-:hidden-columns - [cell] A set of IDs of hidden columns
-
-Column description:
-:title - Shows up in the header row
-:sort-key - Function from a row value (not cell) to a sort value
-:formatter - Function from a row cell and row number cell to UI
-:css - Function from cell of row item and cell of row number to
-         map of css values."
-  [attrs _]
+(defn register-table-grid-styles!
+  []
   (register-styles!
    ::table-grid
    [[:table.table-grid {:border-collapse "collapse"}
@@ -196,7 +203,29 @@ Column description:
         ;;:border-bottom "none"
         ;;:border-top "none"
         }]]]
-    [:td.table-grid-cell.hidden-column {:display "none"}]])
+    [:td.table-grid-cell.hidden-column {:display "none"}]]))
+
+;; TODO: Don't bonk when row-attrs is nil
+(defelem table-grid
+  "Returns a table grid control. Attributes
+
+:data - A cell containing a seq of maps. Must contain an `:id` entry.
+:row-attrs - A function from a cell containing a row to an Hoplon
+             attrs map
+:when-empty - UI to show when there are no rows in the data
+:columns - A map from column IDs to column descriptions
+:fixed-columns - A seq of IDs of unmovable columns
+:movable-columns - [cell] A seq of IDs of movable columns
+:hidden-columns - [cell] A set of IDs of hidden columns
+
+Column description:
+:title - Shows up in the header row
+:sort-key - Function from a row value (not cell) to a sort value
+:formatter - Function from a row cell and row number cell to UI
+:css - Function from cell of row item and cell of row number to
+         map of css values."
+  [attrs _]
+  (register-table-grid-styles!)
   (with-attr-bindings attrs [data columns row-attrs when-empty fixed-columns movable-columns hidden-columns]
     (let [sort-criteria    (cell nil)
           sorted-items     (formula-of [data sort-criteria]
@@ -361,3 +390,254 @@ Column description:
                                  (get csses column-id))
                           (formula-of [column-id formatteds]
                             (get formatteds column-id))))))))))))))))
+
+;; Unfortunately, none of the below seems to work. I think there's
+;; something in Hoplon that messes up Rum or React somehow, because I
+;; can't get a a table to sort correctly. Don't use.
+
+
+;; ;; It's weird that this is a separate component, but I found that it
+;; ;; was the only way to get around a problem with :key attributes.
+;; (rum/defc RTableGridBodyRow <
+;;   rum/reactive
+;;   [{:keys [item rownum editing-columns? row-attrs columns column-order hidden-columns*]}]
+;;   (let [num-columns (count column-order)]
+;;     [:tr.table-grid-row
+;;      (row-attrs item)
+;;      (for [n (range num-columns)]
+;;        (let [column-id               (nth column-order n)
+;;              {:keys [css formatter]} (get columns column-id)
+;;              hidden?                 (hidden-columns* column-id)]
+;;          [:td.table-grid-cell
+;;           {;; :key   column-id
+;;            :class (comm/classes
+;;                    {:hidden-column (and (not (rum/react editing-columns?))
+;;                                         hidden?)})
+;;            :style (when css
+;;                     (css item rownum))}
+;;           (formatter item)]))]))
+
+;; (rum/defcs RTableGrid <
+;;   (rum/local false ::editing-columns?)
+;;   (rum/local nil ::sort-criteria)
+;;   rum/reactive
+;;   [state {:keys [data
+;;                  row-attrs
+;;                  when-empty
+;;                  columns
+;;                  fixed-columns
+;;                  movable-columns
+;;                  hidden-columns
+;;                  key-fn]}]
+;;   (assert key-fn "RTableGrid: key-fn is required")
+;;   (let [movable-columns* (rum/react movable-columns)
+;;         hidden-columns*  (rum/react hidden-columns)
+;;         data*            (rum/react data)
+;;         editing-columns? (::editing-columns? state)
+;;         sort-criteria    (::sort-criteria state)
+;;         column-order     (->> (vec movable-columns*)
+;;                               (into (vec fixed-columns))
+;;                               (remove (if @editing-columns?
+;;                                         (constantly false)
+;;                                         hidden-columns*)))
+;;         num-columns      (count column-order)
+;;         sorted-items     (if-not @sort-criteria
+;;                            data*
+;;                            (let [[sort-column sort-direction] @sort-criteria
+;;                                  {:keys [sort-key]}           (get columns sort-column)]
+;;                              (sort-by sort-key
+;;                                       (if (= sort-direction :ascending)
+;;                                         compare
+;;                                         (fn [a b]
+;;                                           (- (compare a b))))
+;;                                       data*)))]
+;;     ;; (.log js/console "Columns" (pr-str column-order))
+;;     ;; (.log js/console "Hidden" (pr-str hidden-columns*))
+;;     ;; (.log js/console "Column order" (pr-str column-order))
+;;     ;; (.log js/console "Sort" (pr-str @sort-criteria))
+;;     [:div
+;;      [:pre
+;;       {:style {:font-family "monospace"
+;;                :white-space "pre-wrap"
+;;                :background  "black"
+;;                :color       "green"}}
+;;       (pr-str sorted-items)]
+;;      [:table.table-grid
+;;       [:thead.table-grid-header
+;;        [:tr.table-grid-row
+;;         [:td.table-grid-cell
+;;          {:col-span num-columns}
+;;          (buttons/RImageButton
+;;           {:src      "images/settings.svg"
+;;            :width    (px 16)
+;;            :title    "Settings"
+;;            :latched? @editing-columns?
+;;            :on-click (fn [e] (swap! editing-columns? not))})
+;;          (help/RHelpIcon [:table-grid :settings])]]
+;;        [:tr.table-grid-row
+;;         (for [n (range num-columns)]
+;;           (let [column-id    (nth column-order n)
+;;                 hidden?      (hidden-columns* column-id)
+;;                 disable-sort (-> columns (get column-id) :disable-sort)]
+;;             [:td.table-grid-cell
+;;              {;; :key      column-id
+;;               :class    (comm/classes
+;;                          {"hidden-column" (and (not @editing-columns?)
+;;                                                hidden?)})
+;;               :on-click (fn [_]
+;;                           (when-not disable-sort
+;;                             (swap! sort-criteria
+;;                                    (fn [[old-index direction]]
+;;                                      [column-id
+;;                                       (cond
+;;                                         (not= old-index column-id)
+;;                                         :ascending
+
+;;                                         (= direction :ascending)
+;;                                         :descending
+
+;;                                         :else
+;;                                         :ascending)]))))}
+;;              ;; Header row
+;;              (when (and (< (count fixed-columns) n)
+;;                         @editing-columns?)
+;;                (buttons/RAButton
+;;                 {:title    "Move column left"
+;;                  :style    {:background "linear-gradient(white, white 50%, rgb(195, 194, 194) 100%)"}
+;;                  :on-click (fn [e]
+;;                              (.preventDefault e)
+;;                              (.stopPropagation e)
+;;                              (-> e .-nativeEvent .preventDefault)
+;;                              (-> e .-nativeEvent .stopPropagation)
+;;                              (-> e .-nativeEvent .stopImmediatePropagation)
+;;                              (swap! movable-columns nudge column-id -1))}
+;;                 "<"))
+;;              (when @editing-columns?
+;;                (rinl
+;;                 {:style    {:border-width  (px 2)
+;;                             :border-style  "inset"
+;;                             :border-radius (px 3)
+;;                             :color         (if hidden? "red" "green")
+;;                             :background    "white"
+;;                             :line-height   "90%"
+;;                             :padding       (px 1)
+;;                             :cursor        "pointer"
+;;                             :width         (px 10)}
+;;                  :on-click (fn [e]
+;;                              (.preventDefault e)
+;;                              (.stopPropagation e)
+;;                              (-> e .-nativeEvent .preventDefault)
+;;                              (-> e .-nativeEvent .stopPropagation)
+;;                              (-> e .-nativeEvent .stopImmediatePropagation)
+;;                              (swap! hidden-columns (if hidden? disj conj) column-id))}
+;;                 (if hidden? "✗" "✓")))
+;;              (-> columns (get column-id) :title)
+;;              (when-not disable-sort
+;;                (rsorters @sort-criteria column-id))
+;;              (when (and (<= (count fixed-columns) n)
+;;                         (< n (dec num-columns))
+;;                         @editing-columns?)
+;;                (buttons/RAButton
+;;                 {:title    "Move column right"
+;;                  :style    {:background "linear-gradient(white, white 50%, rgb(195, 194, 194) 100%)"}
+;;                  :on-click (fn [e]
+;;                              (.preventDefault e)
+;;                              (.stopPropagation e)
+;;                              (-> e .-nativeEvent .preventDefault)
+;;                              (-> e .-nativeEvent .stopPropagation)
+;;                              (-> e .-nativeEvent .stopImmediatePropagation)
+;;                              (swap! movable-columns nudge column-id 1))}
+;;                 ">"))]))]]
+;;       [:tbody.table-grid-body
+;;        (if (-> sorted-items count zero? (and when-empty))
+;;          [:tr.table-grid-row
+;;           [:td {:col-span num-columns}
+;;            when-empty]]
+;;          (for [[rownum item] (map-indexed vector sorted-items)]
+;;            (RTableGridBodyRow {:item             item
+;;                                :editing-columns? editing-columns?
+;;                                :rownum           rownum
+;;                                :key-fn           key-fn
+;;                                :row-attrs        row-attrs
+;;                                :columns          columns
+;;                                :column-order     column-order
+;;                                :hidden-columns*  hidden-columns*})))]]]))
+
+;; (defn rtable-grid
+;;   "Retruns a Rum table grid control. Opts:
+
+;;   :data - A cell containing a seq of maps
+;;   :row-attrs - A function from a row to an attrs map
+;;   :when-empty - UI to show when there are no rows in the data
+;;   :columns - A map from column IDs to column descriptions
+;;   :fixed-columns - A seq of IDs of unmovable columns
+;;   :movable-columns - [cell] A seq of IDs of movable columns
+;;   :hidden-columns - [cell] A set of IDs of hidden columns
+;;   :key-fn - Function returning identity given a row from the data.
+
+;; Column description:
+;; :title - Shows up in the header row
+;; :sort-key - Function from a row value (not cell) to a sort value
+;; :formatter - Function from a row item to UI
+;; :css - Function from row item  row number to map of css values."
+;;   [{:keys [data row-attrs when-empty columns fixed-columns movable-columns hidden-columns]
+;;     :as opts}]
+;;   (register-table-grid-styles!)
+;;   (with-let [parent (div)]
+;;     (let [opts-cell (formula-of [data movable-columns hidden-columns]
+;;                       (assoc opts
+;;                              :data data
+;;                              :movable-columns movable-columns
+;;                              :hidden-columns hidden-columns))]
+;;       (rum/mount (RTableGrid opts) parent))))
+
+;; (rum/defc RTableGridRow
+;;   [row columns]
+;;   [:tr.table-grid-row
+;;    {:key (:id row)}
+;;    (for [col columns]
+;;      [:td.table-grid-cell
+;;       {:key (name col)}
+;;       (get row col)])])
+
+;; (rum/defcs RSimpleGrid < (rum/local nil ::sort-criteria)
+;;   [{:keys [::sort-criteria]} data columns]
+;;   (let [sorted-items (if-not @sort-criteria
+;;                        data
+;;                        (let [[sort-column sort-direction] @sort-criteria]
+;;                          (sort-by sort-column
+;;                                   (if (= sort-direction :ascending)
+;;                                     compare
+;;                                     (fn [a b]
+;;                                       (- (compare a b))))
+;;                                   data)))]
+;;     [:table.table-grid
+;;      [:thead.table-grid-header
+;;       [:tr.table-grid-row
+;;        (for [col columns]
+;;          [:td.table-grid-cell
+;;           {:key col
+;;            :on-click (fn [_]
+;;                        (.log js/console "Sorting" (str col))
+;;                        (swap! sort-criteria
+;;                               (fn [[_ sort-direction]]
+;;                                 [col (if (= sort-direction :ascending)
+;;                                        :descending
+;;                                        :ascending)])))}
+;;           (str col)
+;;           " "
+;;           [:a {:style    {:cursor        "pointer"
+;;                           :border-radius (px 3)
+;;                           :border-style  "sold"
+;;                           :border-color  "grey"
+;;                           :border-width  (px 1)}}
+;;            "sort"]])]]
+;;      [:tbody.table-grid-body
+;;       (for [row sorted-items]
+;;         #_(RTableGridRow row columns)
+;;         [:tr.table-grid-row
+;;          {:key (:id row)}
+;;          (for [col columns]
+;;            [:td.table-grid-cell
+;;             {:key (name col)}
+;;             (get row col)])])]]))

@@ -1,9 +1,7 @@
 (ns weathergen.ui.trees
   "A library for rendering collapsable trees of elements."
   (:require [cljs.pprint :refer [pprint]]
-            [weathergen.ui.common :as comm :refer [inl px pct styled]]
-            ;; [quiescent.core :as q]
-            ;; [quiescent.dom :as d]
+            [weathergen.ui.common :as comm :refer [inl px pct rinl styled]]
             [rum.core :as rum]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
@@ -92,12 +90,6 @@
   [expand-state levels items]
   (tree* expand-state levels items 0))
 
-(defn inline
-  [props & args]
-  [:div
-   (assoc-in props [:style :display] "inline-block")
-   args])
-
 (rum/defc RTree
   [expander items]
   [:ol
@@ -108,18 +100,18 @@
       [:div
        {:style {:display     "inline-flex"
                 :white-space "nowrap"}}
-       (inline
+       (rinl
         {:style {:width          (px 15)
                  :font-size      (pct 120)
                  :vertical-align "top"}}
         (if (empty? children)
           ""
-          (inline {:style    {:cursor     "pointer"
+          (rinl {:style    {:cursor     "pointer"
                               :position   "relative"
                               :background "transparent"}
                    :on-click (fn [e]
                                (expander id))}
-                  (inline
+                  (rinl
                    {:style {:width          0
                             :height         0
                             :border-left    "5px solid transparent"

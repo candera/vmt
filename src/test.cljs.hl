@@ -7,6 +7,7 @@
             [weathergen.database :as db]
             [weathergen.falcon.install :as install]
             [weathergen.falcon.files.mission :as mission]
+            [weathergen.help :as help]
             [weathergen.math :as math]
             [weathergen.model :as model]
             [weathergen.ui :as ui]
@@ -76,8 +77,114 @@
         :click #(with-time "load-mission"
                   (load-mission mission))
         "Load")
+       (let [latched? (cell false)]
+         (buttons/rimage-button {:title    "test title"
+                                 :latched? latched?
+                                 :on-click (fn [e] (swap! latched? not))}))
+       #_(with-let [parent (div)]
+           (rum.core/mount (help/RHelp2 [:div "Testing"])
+                           parent))
+       #_(help/with-rhelp [:wind-stability-areas]
+           [:div "hi2"])
        (let [ctor (:controls-fn flight-layer)]
-         (ctor b))))
+         (ctor b))
+       (hr)
+       (let [filter? (cell false)
+             data    (formula-of [filter?]
+                       (->> (for [n (range 100)]
+                              {:id n
+                               :a  n
+                               :b  (- 100 n)
+                               :c  (str (rand-int 1000))})
+                            (filter (fn [{:keys [a]}]
+                                      (if filter?
+                                        (even? a)
+                                        true)))
+                            (into [])))]
+         (div
+          (buttons/a-button
+           :latched? filter?
+           :click #(swap! filter? not)
+           "Filtered?")
+          (grids/table-grid
+           {:data            data
+            :row-attrs       (fn [id] {})
+            :when-empty      "I am empty"
+            :columns         {:a {:title     "A"
+                                  :sort-key  :a
+                                  :formatter #(-> % :a str cell= div)}
+                              :b {:title     "B"
+                                  :sort-key  :b
+                                  :formatter #(-> % :b str cell= div)}
+                              :c {:title     "C"
+                                  :sort-key  :c
+                                  :formatter #(-> % :c str cell= div)}}
+            :fixed-columns   [:b]
+            :movable-columns (cell [:a :c])
+            :hidden-columns  (cell #{:c})})))
+       #_(grids/rtable-grid
+          {:data            (cell (into []
+                                        (for [n (range 100)]
+                                          {:id n
+                                           :a  n
+                                           :b  (- 100 n)
+                                           :c  (str (rand-int 1000))}
+                                          )) #_[{:id 1 :a 1 :b 2 :c "three"}
+                                                {:id 2 :a 3 :b 1 :c "four"}
+                                                {:id 3 :a 2 :b 4}])
+           :key-fn          :id
+           :row-attrs       (fn [id] {})
+           :when-empty      "I am empty"
+           :columns         {:a {:title     "A"
+                                 :sort-key  :a
+                                 :formatter #(-> % :a str)}
+                             :b {:title     "B"
+                                 :sort-key  :b
+                                 :formatter #(-> % :b str)}
+                             :c {:title     "C"
+                                 :sort-key  :c
+                                 :formatter #(-> % :c str)}}
+           :fixed-columns   [:b]
+           :movable-columns (cell [:a :c])
+           :hidden-columns  (cell #{:c})})
+       #_(hr)
+       #_(grids/table-grid
+          {:data            (cell (into []
+                                        (for [n (range 100)]
+                                          {:id n
+                                           :a  n
+                                           :b  (- 100 n)
+                                           :c  (str (rand-int 1000))}
+                                          )) #_[{:id 1 :a 1 :b 2 :c "three"}
+                                                {:id 2 :a 3 :b 1 :c "four"}
+                                                {:id 3 :a 2 :b 4}])
+           :row-attrs       (fn [id] {})
+           :when-empty      "I am empty"
+           :columns         {:a {:title     "A"
+                                 :sort-key  :a
+                                 :formatter #(-> % :a str cell= div)}
+                             :b {:title     "B"
+                                 :sort-key  :b
+                                 :formatter #(-> % :b str cell= div)}
+                             :c {:title     "C"
+                                 :sort-key  :c
+                                 :formatter #(-> % :c str cell= div)}}
+           :fixed-columns   [:b]
+           :movable-columns (cell [:a :c])
+           :hidden-columns  (cell #{:c})})))
+    #_(hr)
+    #_(with-let [parent (.createElement js/document "div")]
+        (rum.core/mount
+         (grids/RSimpleGrid
+          (into []
+                (for [n (range 100)]
+                  {:id n
+                   :a  n
+                   :b  (- 100 n)
+                   :c  (str (rand-int 1000))}
+                  ))
+          [:id :a :b :c])
+         parent))
     #_(let [latched? (cell false)
             element  (div
                       :class "element"

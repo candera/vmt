@@ -95,6 +95,14 @@
   [kw]
   (->> kw class-for (str ".") css-sel/selector))
 
+(defn classes
+  "Given a Hoplon-style map of classes to booleans, return a sequence of
+  the class names whose values are true."
+  [m]
+  (for [[class bool] m
+        :when bool]
+    class))
+
 (def registered-styles (atom #{}))
 
 (defn register-styles!
@@ -219,6 +227,22 @@
                           x y
                           (- x) y))
      attrs)))
+
+(defn rtriangle
+  "Rum version of `triangle`."
+  [attrs]
+  (let [{:keys [r]} attrs
+        attrs       (dissoc attrs :r)
+        alpha       0.8660254037844387  ; sin 60deg
+        beta        0.5                 ; sin 30deg
+        x           (* r alpha)
+        y           (* r alpha)]
+    [:path
+     (assoc attrs
+            :d (gstring/format "M%f,%f L%f,%f L%f,%f Z"
+                               0 (- y)
+                               x y
+                               (- x) y))]))
 
 (defn pre-cell
   "Pretty-prints the value of cell c and displays it in a pre tag."

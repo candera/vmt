@@ -1,6 +1,7 @@
 (ns weathergen.ui.buttons
   "A library of button controls."
-  (:require [weathergen.ui.common :as comm]
+  (:require [rum.core :as rum]
+            [weathergen.ui.common :as comm]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
@@ -46,6 +47,35 @@
        :dragstart (constantly false)
        attrs))))
 
+(rum/defcs RImageButton < (rum/local false ::down?)
+  [state attrs]
+  (with-attr-bindings attrs [latched? style]
+    (let [down? (::down? state)]
+      [:img
+       (merge
+        {:style         (merge (image-button-style (or latched? @down?))
+                               style)
+         :on-mouse-down (fn [e]
+                          (let [up (fn up-fn [e]
+                                     (.removeEventListener js/document "mouseup" up-fn)
+                                     (reset! down? false))]
+                            (.addEventListener js/document "mouseup" up))
+                          (reset! down? true))
+         ;; Overriding dragstart stops the browser from trying
+         ;; to drag and drop SVG as images, which would
+         ;; interfere with our functionality.
+         :on-drag-start (constantly false)}
+        attrs)])))
+
+(defn rimage-button
+  "Like image-button, but React-based."
+  [attrs]
+  (let [{:keys [latched?]} attrs]
+    (with-let [parent (div)]
+      (do-watch latched?
+                (fn [_ latched?]
+                  (rum/mount (RImageButton (assoc attrs :latched? latched?)) parent))))))
+
 (comm/register-class!
  ::div-button
  [{:border-width    "0.5px"
@@ -89,3 +119,27 @@
                            (comm/class-for ::latched-div-button) (or latched? down)
                            (comm/class-for ::disabled-button) disabled?})})
          content))))
+
+(rum/defcs RAButton < (rum/local false ::down?)
+  [state attrs content]
+  (with-attr-bindings attrs [latched? disabled?]
+    (let [down? (::down? state)]
+      [:a (merge attrs
+                 {:class (comm/classes
+                          {(comm/class-for ::div-button) true
+                           (comm/class-for ::latched-div-button) (or latched? down?)
+                           (comm/class-for ::disabled-button) disabled?})})
+       content])))
+
+(defn ra-button
+  "Like a-button, but React-based."
+  [attrs content]
+  (let [{:keys [latched? disabled?]} attrs]
+    (with-let [parent (div)]
+      (do-watch (formula-of [latched? disabled?])
+                (fn [_ [latched? disabled?]]
+                  (rum/mount (RAButton (assoc attrs
+                                              :latched? latched?
+                                              :disabled? disabled?)
+                                       content)
+                             parent))))))
