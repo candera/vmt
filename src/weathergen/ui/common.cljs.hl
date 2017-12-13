@@ -192,6 +192,17 @@
                  (assoc css-orig :display "inline-block"))))
      content)))
 
+(defn rinl
+  "Makes an inline-block div."
+  [& [props & content :as args]]
+  (if (map? props)
+    [:div
+     (assoc-in props [:style :display] "inline-block")
+     content]
+    [:div
+     {:style {:display "inline-block"}}
+     args]))
+
 (defelem triangle
   [attrs _]
   (let [{:keys [r]} attrs

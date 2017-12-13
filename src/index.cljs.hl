@@ -5,7 +5,7 @@
             [weathergen.ipc :as ipc]
             [weathergen.ui :as ui]
             [weathergen.ui.buttons :as buttons]
-            [weathergen.ui.common :as comm :refer [inl pct px]]
+            [weathergen.ui.common :as comm :refer [inl pct px rinl]]
             [weathergen.ui.trees :as trees]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
@@ -132,26 +132,20 @@
                            :name  "Loading briefing"}]))
     (ipc/send-to-main "open-briefing" path)))
 
-(defn inline
-  [props & args]
-  [:div
-   (assoc-in props [:style :display] "inline-block")
-   args])
-
 (defn- tree-item
   "Returns UI for an item in the tree."
   [{:keys [id messages state name] :as item}]
-  (inline
+  (rinl
    {}
-   (inline
+   (rinl
     {:style {:verticalAlign "top"}}
     (condp = state
-      :succeeded (inline {:style {:font-weight    "bold"
+      :succeeded (rinl {:style {:font-weight    "bold"
                                   :color          "green"
                                   :width          (px 24)
                                   :vertical-align "top"}}
                          "✓")
-      :failed    (inline {:style {:font-weight    "bold"
+      :failed    (rinl {:style {:font-weight    "bold"
                                   :color          "red"
                                   :width          (px 24)
                                   :vertical-align "top"}}
@@ -165,7 +159,7 @@
                                 :margin-top     (px 5)
                                 :margin-right   (px 3)}
                         :src   "images/warning.svg"}])
-    (inline
+    (rinl
      {:style {:white-space "normal"}}
      name))
    [:table
@@ -181,7 +175,7 @@
                                      :vertical-align "middle"
                                      :margin-top     (px -5)}
                              :src   "images/warning.svg"}]
-             :error   (inline {:style {:font-weight "bold"
+             :error   (rinl {:style {:font-weight "bold"
                                        :color       "red"
                                        :width       (px 24)}}
                               "✗"))]
