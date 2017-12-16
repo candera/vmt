@@ -1,4 +1,13 @@
+#+OPTIONS: toc:nil
+#+OPTIONS: num:nil
+#+OPTIONS: html-postamble:nil
+#+TITLE:
+
 * Change Log
+** v051 [2017-12-16 Sat]
+- Handle [[https://www.bmsforum.org/forum/showthread.php?31611-Release-Tyrant-s-Virtual-Mission-Tools-(VMT)&p=449550&viewfull=1#post449550][weird Balkans bad index bug]].
+- Report warning when squadrons have no airbase
+- Handle problem with improper handling of time in briefing files.
 ** v050 [2017-11-18 Sat]
 - Fix bug handling consecutive steerpoints with the same time
 - Fix bug where briefing wouldn't load due to nil time somewhere.

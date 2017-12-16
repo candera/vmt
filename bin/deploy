@@ -72,6 +72,9 @@ mkdir -p $PACKAGEPATH
 
 cd $(dirname $0)/../
 
+echo "Building changelog HTML"
+emacs changelog.org --batch -f org-html-export-to-html --kill
+
 LINKS=$(mktemp)
 
 REDIRECTS=$(mktemp)
@@ -120,8 +123,11 @@ EOF
 EOF
 done
 
+# This is a bit of a hack, as it winds up embedding the entire HTML
+# doc inside another one, but it seems to work, so what the hell.
 cat >> $REDIRECTS <<EOF
 </ul>
+$(cat changelog.html)
 </body>
 </html>
 EOF
