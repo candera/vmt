@@ -134,8 +134,8 @@ EOF
 
 if [[ "${UPLOAD}" != "no" ]]
 then
-    aws s3 cp ${REDIRECTS} ${S3_BUCKET_URL}/${CHANNEL}/index.html
-    echo ${UPDATE_BASE}/${CHANNEL}/
+    aws s3 cp ${REDIRECTS} ${S3_BUCKET_URL}/${CHANNEL}/index.html --content-type text/html
+    echo http://org.craigandera.vmt.s3-website-us-east-1.amazonaws.com/${CHANNEL}/
 
     cat $LINKS
 fi
