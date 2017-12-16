@@ -3004,3 +3004,22 @@ type: 0x64 -> image
 (format-list ["a" "b"])
 (format-list ["a" "b" "c"])
 
+(class @smpu)
+
+(def bugged-mission
+  (mission/read-mission
+   installs
+   "/Users/candera/falcon/4.33.3/Data/Add-On Balkans/Campaign/balkans-bad-index-in-te-new.tac"))
+
+298666
+
+(class @smpu)
+
+(class bugged-mission)
+
+(-> bugged-mission :objectives last :radar-data)
+
+
+
+
+

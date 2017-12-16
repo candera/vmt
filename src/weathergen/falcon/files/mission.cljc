@@ -1437,31 +1437,31 @@
   [mission]
   (progress/with-step "Processing airbases"
     (fn []
-     (let [airbase-classes (->> mission
-                                :class-table
-                                (util/filter= #(get-in % [:vu-class-data :class-info :domain])
-                                              c/DOMAIN_LAND)
-                                (util/filter= #(get-in % [:vu-class-data :class-info :class])
-                                              c/CLASS_OBJECTIVE)
-                                (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
-                                          (get-in % [:vu-class-data :class-info :type])))
-                                ;;  Carrier airbases have subtype 7 and specific type 7.
-                                (remove (fn [cls]
-                                          (= [7 7]
-                                             [(get-in cls [:vu-class-data :class-info :stype])
-                                              (get-in cls [:vu-class-data :class-info :sptype])])))
-                                (map ::index)
-                                set)]
-       (->> mission
-            :objectives
-            (filterv (fn [objective]
-                       (airbase-classes (- (:entity-type objective) 100))))
-            (mapv #(assoc %
-                          ::location (select-keys % [:x :y])
-                          ::status (airbase-status mission %)
-                          ::squadrons (get (::squadrons mission) (:id %))
-                          ::image (objective-image mission %)
-                          ::name (objective-name mission %))))))))
+      (let [airbase-classes (->> mission
+                                 :class-table
+                                 (util/filter= #(get-in % [:vu-class-data :class-info :domain])
+                                               c/DOMAIN_LAND)
+                                 (util/filter= #(get-in % [:vu-class-data :class-info :class])
+                                               c/CLASS_OBJECTIVE)
+                                 (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
+                                           (get-in % [:vu-class-data :class-info :type])))
+                                 ;;  Carrier airbases have subtype 7 and specific type 7.
+                                 (remove (fn [cls]
+                                           (= [7 7]
+                                              [(get-in cls [:vu-class-data :class-info :stype])
+                                               (get-in cls [:vu-class-data :class-info :sptype])])))
+                                 (map ::index)
+                                 set)]
+        (->> mission
+             :objectives
+             (filterv (fn [objective]
+                        (airbase-classes (- (:entity-type objective) 100))))
+             (mapv #(assoc %
+                           ::location (select-keys % [:x :y])
+                           ::status (airbase-status mission %)
+                           ::squadrons (get (::squadrons mission) (:id %))
+                           ::image (objective-image mission %)
+                           ::name (objective-name mission %))))))))
 
 (defn- carriers
   "Returns all the carrier task force units in the mission."
@@ -1826,19 +1826,37 @@
                  :parent       vu-id
                  :first-owner  buf/ubyte
                  :links        (larray buf/ubyte objective-link)
-                 :radar-data   (spec-if :has-radar-data
-                                        buf/byte
-                                        ;; It was crashing in Balkans when a 17
-                                        ;; would appear here, even though the
-                                        ;; FreeFalcon source indicates a non-zero
-                                        ;; number for the present of detection
-                                        ;; ratios. It might be that BMS overloads
-                                        ;; that number to mean something else, or
-                                        ;; just a weirdness in the Balkans databae.
-                                        #(= 1 %) #_pos?
-                                        :detect-ratio
-                                        (buf/repeat c/NUM_RADAR_ARCS buf/float)
-                                        (constant nil))]))
+                 :radar-data   (reify octet.spec/ISpec
+                                 (read [_ buf pos]
+                                   ;; It was crashing in Balkans when a 17 would appear as the
+                                   ;; flag, even though the FreeFalcon source indicates a non-zero
+                                   ;; number for the present of detection ratios. It might be that
+                                   ;; BMS overloads that number to mean something else, or just a
+                                   ;; weirdness in the Balkans databae.
+                                   (let [[flag-size flag-val]
+                                         (buf/read* buf buf/byte {:offset pos})]
+                                     (cond
+                                       (and (= 1 flag-val)
+                                            (<= (octet.buffer/get-capacity buf) (+ flag-size pos)))
+                                       (do
+                                         ;; In one of the Balkans versions, the flag would be 1,
+                                         ;; but at the end of the buffer where there was no room
+                                         ;; for the radar data to appear.
+                                         (progress/step-warn "Radar data flag indicates presence of radar detection ratios, but reading them would cause a buffer overflow. This appears to be a data integrity issue in the mission files. Proceeding under the assumption that radar detection ratios are not present.")
+                                         [flag-size
+                                          {:has-radar-data 0}])
+
+                                       (= 1 flag-val)
+                                       (let [[ratio-size ratio-val]
+                                             (buf/read* buf
+                                                        (buf/repeat c/NUM_RADAR_ARCS buf/float)
+                                                        {:offset (+ pos flag-size)})]
+                                         [(+ flag-size ratio-size)
+                                          {:has-radar-data flag-val
+                                           :detect-ratio ratio-val}])
+
+                                       :else
+                                       [flag-size {:has-radar-data flag-val}]))))]))
 
 (defmethod read-embedded-file* :objectives
   [_ {:keys [offset length] :as entry} buf _]
@@ -1855,13 +1873,15 @@
                             (+ offset (buf/size header-spec))
                             compressed-size
                             uncompressed-size)]
-      #_(log/debug "read objectives"
+      (log/debug "read objectives"
                  :num-objectives num-objectives
                  :compressed-size compressed-size
                  :uncompressed-size uncompressed-size)
-      (buf/read data
-                (buf/repeat num-objectives
-                            (apply buf/spec objective-fields))))))
+      (let [r (buf/read data
+                        (buf/repeat num-objectives
+                                    (apply buf/spec objective-fields)))]
+        (log/debug "Done reading objectives")
+        r))))
 
 ;; Objectives delta file
 (def objective-delta
