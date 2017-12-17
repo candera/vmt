@@ -3325,7 +3325,7 @@
           :src "images/move.svg"
           :width "16px"
           :height "16px"
-          :latched (cell= (:editing? override)))))))
+          :latched? (cell= (:editing? override)))))))
    (buttons/a-button
     :click #(swap! weather-params
                    (fn [wp]
