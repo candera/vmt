@@ -1802,12 +1802,13 @@
                      cell=)
         [nx ny] (:cell-count @weather-params)]
     (formula-of
-      [indexed]
+      [indexed map-display]
       (svg/g
        :id "wind-stability-overlay"
        (for [[index area] indexed]
          (let [{:keys [bounds editing?]} area
                {:keys [x y width height]} bounds
+               {:keys [hide-wind-stability?]} map-display
                mousedown (fn [e]
                            (reset! prevent-recomputation? true)
                            (register-drag-handler
@@ -1833,7 +1834,9 @@
                                                           dy)))))
                                    (when final?
                                      (reset! prevent-recomputation? false))))))))]
-           (vector
+           (svg/g
+            :css {:display (when (and (not editing?) hide-wind-stability?)
+                             "none")}
             (svg/rect
              :fill (if editing? (colors :edit) "none")
              :mousedown mousedown
@@ -3210,7 +3213,8 @@
                            {:bounds {:x 0 :y 0 :width 10 :height 10}
                             :wind {:heading 45
                                    :speed 5}
-                            :index (count areas)})))
+                            :index (count areas)
+                            :editing? true})))
     "Add New")))
 
 (defn weather-override-parameters
@@ -4638,7 +4642,14 @@
                :value (-> map-display :show-bullseye? cell=)
                :change #(swap! map-display update :show-bullseye? not))
         (with-help [:map-controls :show-bullseye?]
-          (label "Show bullseye"))))))
+          (label "Show bullseye")))
+       (div
+        (input :type "checkbox"
+               ;; Inverted so we can be backward-compatible
+               :value (-> map-display :hide-wind-stability? not cell=)
+               :change #(swap! map-display update :hide-wind-stability? not))
+        (with-help [:map-controls :show-wind-stability?]
+          (label "Show wind stability regions?"))))))
    (airbase-display-controls "Airbase Display Options")
    (let [flight-path-display-controls (:map-display-controls-fn flight-paths-layer)]
      (flight-path-display-controls "Flight Path Display Options"))))

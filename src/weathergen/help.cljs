@@ -922,6 +922,12 @@ forward and backward in time. "])
       the map, with range rings every 30nm up to 180nm and bearing
       lines every 30 degrees."]])
 
+    :show-wind-stability?
+    (content
+     [:div
+      [:p "When checked, the outline of any wind stability regions
+      will be shown as a white and black dashed line."]])
+
     :reset-brightness
     (content
      [:div
