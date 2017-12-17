@@ -970,6 +970,7 @@
             (fn []
               (dosync
                (reset! display-mode :briefing)
+               (swap! map-display assoc :hide-wind-stability? true)
                (reset! mission mission-data)
                (reset! visible-sides (:visible-sides vmtb))
                (reset! weather-params (-> vmtb
