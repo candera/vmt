@@ -3344,6 +3344,7 @@
                                       :pressure (-> wp :pressure :min)
                                       :strength 1
                                       :show-outline? true
+                                      :editing? true
                                       :exclude-from-forecast? false})))))
     "Add New")))
 
