@@ -753,12 +753,13 @@
                buf  (fs/file-buf path)]
            [k
             (binding [octet.buffer/*byte-order* :little-endian]
-              (map-indexed (fn [i v]
-                             (assoc v ::index i))
-                           (buf/read (->> file
-                                          (fs/path-combine (object-dir installation theater))
-                                          fs/file-buf)
-                                     (larray buf/uint16 spec))))]))
+              (vec
+               (map-indexed (fn [i v]
+                              (assoc v ::index i))
+                            (buf/read (->> file
+                                           (fs/path-combine (object-dir installation theater))
+                                           fs/file-buf)
+                                      (larray buf/uint16 spec)))))]))
        (into {})
        (merge { ;; These next couple might need to be generalized, like to a map
                ;; from the type to the ids in it.
@@ -1191,8 +1192,9 @@
                            :data-pointer
                            (nth objective-class-data))
         {:keys [features first-feature]} airbase-class
-        feature-info (map #(nth feature-entry-data %)
-                          (range first-feature (+ first-feature features)))
+        feature-info (subvec feature-entry-data
+                             first-feature
+                             (+ first-feature features))
         feature-status (for [f (range features)]
                          (let [i (-> f (/ 4) long)
                                f* (- f (* i 4))]
@@ -1210,7 +1212,7 @@
                                  (nth i 0)
                                  (bit-shift-right (* f* 2))
                                  (bit-and 0x03)))))
-        feature-class-info (map (fn [feature]
+        feature-class-info (mapv (fn [feature]
                                   (let [ci (-> feature
                                                :index
                                                (->> (nth class-table)))]
@@ -1220,14 +1222,14 @@
                                                :data-pointer
                                                (->> (nth feature-class-data))))))
                                 feature-info)
-        feature-info (map (fn [fi fs fci]
-                            (assoc fi
-                                   :status fs
-                                   :class-info fci
-                                   ))
-                          feature-info
-                          feature-status
-                          feature-class-info)
+        feature-info (mapv (fn [fi fs fci]
+                             (assoc fi
+                                    :status fs
+                                    :class-info fci
+                                    ))
+                           feature-info
+                           feature-status
+                           feature-class-info)
         runway? (fn [feature]
                   (-> feature
                       :class-info
