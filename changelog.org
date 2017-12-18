@@ -4,6 +4,17 @@
 #+TITLE:
 
 * Change Log
+** v052 [2017-12-18 Mon]
+- Major speedup in mission and briefing loading.
+- Add checkbox in map controls section allowing show/hide of borders
+  of wind stability areas.
+- Wind stability areas and weather override regions are automatically
+  placed in edit mode when created.
+- Fix bug introduced in v051 where squadrons weren't showing up for
+  carriers and army bases.
+- Fix bug where weather override edit button wasn't displaying
+  correctly when editing.
+
 ** v051 [2017-12-16 Sat]
 - Handle [[https://www.bmsforum.org/forum/showthread.php?31611-Release-Tyrant-s-Virtual-Mission-Tools-(VMT)&p=449550&viewfull=1#post449550][weird Balkans bad index bug]].
 - Report warning when squadrons have no airbase
