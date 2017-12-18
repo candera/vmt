@@ -1490,7 +1490,7 @@
              (mapv #(assoc %
                            ::location (select-keys % [:x :y])
                            ::status 100
-                           ::squadrons (get squadrons (:id %))
+                           ::squadrons (get (::squadrons mission) (:id %))
                            ::image (unit-image mission %)
                            ::name (carrier-name mission %))))))))
 
@@ -1517,7 +1517,7 @@
              (mapv #(assoc %
                            ::location (select-keys % [:x :y])
                            ::status (objective-status mission %)
-                           ::squadrons (get squadrons (:id %))
+                           ::squadrons (get (::squadrons mission) (:id %))
                            ::image (objective-image mission %)
                            ::name (objective-name mission %))))))))
 
