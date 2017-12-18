@@ -130,6 +130,7 @@ EOF
         ARCH_NAME="64 bit"
     else
       ARCH_NAME="32 bit"
+    fi
 
     cat >> ${REDIRECTS} <<EOF
 <li><a href="${DOWNLOAD_URL}">${PLATFORM_NAME} (${ARCH_NAME})</a></li>
