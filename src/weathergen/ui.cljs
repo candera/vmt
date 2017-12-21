@@ -434,7 +434,7 @@
        (into {})))
 
 ;; Data from the build.txt file
-(defc build-info
+(def build-info
   (let [path (-> electron
                  .-remote
                  .-app
@@ -955,7 +955,7 @@
         (let [mission-data (progress/with-step (str "Loading briefing from " path)
                              (fn []
                                (let [briefing-version (get-in briefing [:build-info "VERSION"])
-                                     this-version     (get @build-info "VERSION")]
+                                     this-version     (get build-info "VERSION")]
                                  (when-not (= briefing-version this-version)
                                    (progress/step-warn
                                     (str
@@ -989,7 +989,7 @@
   [install-id visible-sides]
   (save-data
    {:data     (->> {:revision      revision
-                    :briefing      (mission/mission->briefing @mission install-id @build-info)
+                    :briefing      (mission/mission->briefing @mission install-id build-info)
                     :weather       {:weather-params  @weather-params
                                     :cloud-params    @cloud-params
                                     :movement-params @movement-params
@@ -4765,14 +4765,13 @@
      (span
       :debug "version"
       :css {:padding-left (px 10)}
-      (formula-of [build-info]
-        (let [{:strs [VERSION CHANNEL]} build-info]
-          (str "("
-               (or VERSION "dev-build")
-               (when (and CHANNEL
-                          (not= CHANNEL "stable"))
-                 (str "@" CHANNEL))
-               ")"))))
+      (let [{:strs [VERSION CHANNEL]} build-info]
+        (str "("
+             (or VERSION "dev-build")
+             (when (and CHANNEL
+                        (not= CHANNEL "stable"))
+               (str "@" CHANNEL))
+             ")")))
      (span
       :debug "byline"
       :css {:padding-left (px 5)}

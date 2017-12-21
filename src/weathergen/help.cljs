@@ -1210,7 +1210,11 @@ forward and backward in time. "])
          [:p "Note that some columns may not permit hiding, moving, or
       sorting."]
          [:p "When you are happy with the column configuration, click the
-      settings button again."]]))}})
+      settings button again."]]))}
+
+   :settings
+   {:updates
+    (content [:div [:p "Set up whether VMT will automatically check for updates, or check for updates manually."]])}})
 
 (let [open-instance (cell nil)]
   (with-timeout 0

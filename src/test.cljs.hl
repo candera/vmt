@@ -77,6 +77,21 @@
         :click #(with-time "load-mission"
                   (load-mission mission))
         "Load")
+       (let [x (cell "hi")]
+         (div (formula-of [x] (str x " there"))))
+       (let [val (cell nil)
+             choices (cell [{:value :yes
+                             :label "Yes"}
+                            {:value :no
+                             :label "No"}])]
+         (div
+          (div (cell= (pr-str val)))
+          (buttons/a-button :click #(reset! val :no) "No")
+          (buttons/a-button :click #(reset! val :yes) "Yes")
+          (comm/radio-group :value val
+                            :choices choices)
+          (comm/radio-group :value val
+                            :choices choices)))
        (let [latched? (cell false)]
          (buttons/rimage-button {:title    "test title"
                                  :latched? latched?
@@ -130,8 +145,8 @@
                                            :b  (- 100 n)
                                            :c  (str (rand-int 1000))}
                                           )) #_[{:id 1 :a 1 :b 2 :c "three"}
-                                                {:id 2 :a 3 :b 1 :c "four"}
-                                                {:id 3 :a 2 :b 4}])
+                                        {:id 2 :a 3 :b 1 :c "four"}
+                                        {:id 3 :a 2 :b 4}])
            :key-fn          :id
            :row-attrs       (fn [id] {})
            :when-empty      "I am empty"
@@ -156,8 +171,8 @@
                                            :b  (- 100 n)
                                            :c  (str (rand-int 1000))}
                                           )) #_[{:id 1 :a 1 :b 2 :c "three"}
-                                                {:id 2 :a 3 :b 1 :c "four"}
-                                                {:id 3 :a 2 :b 4}])
+                                        {:id 2 :a 3 :b 1 :c "four"}
+                                        {:id 3 :a 2 :b 4}])
            :row-attrs       (fn [id] {})
            :when-empty      "I am empty"
            :columns         {:a {:title     "A"

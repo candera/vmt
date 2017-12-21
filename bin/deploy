@@ -60,6 +60,7 @@ TARGETDIR=target
 PACKAGEDIR=package
 UPDATE_BASE=https://s3.amazonaws.com/org.craigandera.vmt
 S3_BUCKET_URL=s3://org.craigandera.vmt
+WEBSITE_BASE=http://org.craigandera.vmt.s3-website-us-east-1.amazonaws.com
 
 build $TARGETDIR
 
@@ -105,8 +106,9 @@ VERSION=${GIT_VERSION}
 PLATFORM=${PLATFORM}
 ARCH=${ARCH}
 CHANNEL=${CHANNEL}
-UPDATE=${UPDATE_BASE}/${CHANNEL}/${LATEST}
+UPDATE=${UPDATE_BASE}/${CHANNEL}/${LATEST}?x-update-check-from-version=${GIT_VERSION}
 DOWNLOAD_URL=$DOWNLOAD_URL
+CHANGELOG_URL=${WEBSITE_BASE}/${CHANNEL}
 EOF
     package $TARGETDIR $PACKAGEDIR $PLATFORM $ARCH $BUILDINFO
     pushd $PACKAGEDIR/$BUILD
@@ -149,7 +151,7 @@ EOF
 if [[ "${UPLOAD}" != "no" ]]
 then
     aws s3 cp ${REDIRECTS} ${S3_BUCKET_URL}/${CHANNEL}/index.html --content-type text/html
-    echo http://org.craigandera.vmt.s3-website-us-east-1.amazonaws.com/${CHANNEL}/
+    echo $CHANGELOG_URL
 
     cat $LINKS
 fi
