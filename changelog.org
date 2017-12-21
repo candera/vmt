@@ -4,6 +4,11 @@
 #+TITLE:
 
 * Change Log
+** v053 [2017-12-21 Thu]
+- Add ability to have VMT automatically check for updated versions of
+  itself.
+- Fix problem where web links were opening in the app instead of in a
+  browser.
 ** v052 [2017-12-18 Mon]
 - Major speedup in mission and briefing loading.
 - Add checkbox in map controls section allowing show/hide of borders
