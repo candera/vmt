@@ -115,6 +115,19 @@
   #_(when (= "nodejs" cljs.core/*target*)
       (js/require "electron")))
 
+;; Open all links in external browser
+(.addEventListener js/document
+                   "click"
+                   (fn [event]
+                     (when (and
+                            (-> event .-target .-tagName (= "A"))
+                            (-> event .-target .-href (.startsWith "http")))
+                       (log/debug "Clicked a link" (-> event .-target .-href))
+                       (.preventDefault event)
+                       (-> electron
+                           .-shell
+                           (.openExternal (-> event .-target .-href))))))
+
 (def ^js/EventEmitter ipcRenderer (.-ipcRenderer electron))
 
 (def ^js/zlib zlib (js/require "zlib"))
@@ -4798,7 +4811,7 @@
                [:a:hover {:color "lightblue"} ]]
       (span
        "Help? Bug? Feature request? Click"
-       (a :href "help.html"
+       (a :href "https://www.bmsforum.org/forum/showthread.php?31611-Release-Tyrant-s-Virtual-Mission-Tools-(VMT)&p=441129#post441129"
           :target "_blank"
           "here")
        "."))
