@@ -557,27 +557,37 @@
     (let [choices* (if (cell? choices)
                      choices
                      (cell choices))
-          indexed (formula-of [choices*]
-                    (map-indexed (fn [i c] [(str i) (assoc c ::index (str i))])
-                                 choices*))
+          indexed  (formula-of [choices*]
+                     (map-indexed (fn [i c] [(str i) (assoc c ::index (str i))])
+                                  choices*))
           by-index (formula-of [indexed]
                      (into {} indexed))
-          name (str gensym)]
+          name     (str (gensym))]
       (div
+       attrs
        (for-tpl [item indexed]
          (cell-let [[index choice] item]
            (let [id (str (gensym))]
              (div
-              (input
-               :type "radio"
-               :id id
-               :name name
-               :value index
-               :checked (formula-of [value choice]
-                          (= value (:value choice)))
-               :change (fn [e]
-                         (.log js/console "Radio is changing" e)
-                         (reset! value (->> e .-currentTarget .-value (get @by-index) :value))))
+              (let [checked? (formula-of [value choice]
+                               (with-let [checked? (= value (:value choice))]
+                                 (.log js/console "checked"
+                                       ":id" id
+                                       "checked?" checked?
+                                       ":value" (pr-str value)
+                                       ":choice" (pr-str choice))))]
+                (with-let [elem (input
+                                 :type "radio"
+                                 :id id
+                                 :name name
+                                 :value index
+                                 :checked checked?
+                                 :change (fn [e]
+                                           (.log js/console "Radio is changing" e)
+                                           (reset! value (->> e .-currentTarget .-value (get @by-index) :value))))]
+                  (do-watch checked?
+                            (fn [_ new-val]
+                              (-> elem .-checked (set! new-val))))))
               (label
                :for id
                (cell= (:label choice)))))))))))
