@@ -4740,17 +4740,18 @@
                :background "#945594"
                :color "white"
                :position "relative"
-               :margin-bottom "3px"}
+               :margin-bottom (px 3)
+               :padding (px 0 3)}
          (div
           :css {:display "inline-block"
-                :padding-right "5px"}
+                :padding-right (px 5)}
           message)
          (div
           :css {:position "absolute"
-                :font-size "150%"
+                :font-size (pct 150)
                 :font-weight "bold"
-                :top "-8px"
-                :right "5px"
+                :top (px -8)
+                :right (px 5)
                 :cursor "pointer"}
           :click #(reset! visible? false)
           "×"))))))
