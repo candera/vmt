@@ -4,6 +4,8 @@
 #+TITLE:
 
 * Change Log
+** v054 [2017-12-22 Fri]
+- Fix minor bug where "VMT Settings" text was showing when it shouldn't.
 ** v053 [2017-12-21 Thu]
 - Add ability to have VMT automatically check for updated versions of
   itself.
