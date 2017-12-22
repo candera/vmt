@@ -389,23 +389,24 @@
     :css {:padding (px 8 8 0)}
     (ui/titlebar)
     (ui/message-display))
-   (let [button-style {:display "inline-block"
-                       :margin  (px 5 10)}]
+   (let [button-style (formula-of [display-mode]
+                        {:display (if (= display-mode :normal) "inline-block" "none")
+                         :margin  (px 5 10)})]
      (div
       :css {:font-size (pct 150)}
-      (inl
-       :toggle (cell= (= display-mode :settings))
-       :css {:font-weight "bold"
-             :margin-left (px 13)}
+      (div
+       :css (formula-of [display-mode]
+              {:font-weight "bold"
+               :margin-left (px 13)
+               :display     (display-mode {:settings "inline-block"
+                                           :normal   "none"})})
        "VMT Settings")
       (buttons/a-button
-       :toggle (cell= (= display-mode :normal))
        :disabled? loading?
        :css button-style
        :click load-mission
        "Load mission (.cam/.tac)")
       (buttons/a-button
-       :toggle (cell= (= display-mode :normal))
        :disabled? loading?
        :css button-style
        :click load-briefing
