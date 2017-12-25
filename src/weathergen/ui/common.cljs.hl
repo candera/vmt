@@ -420,32 +420,45 @@
 (defelem color-picker2
   "Like `color-picker`, but uses spectrum."
   [attrs _]
-  (with-attr-bindings attrs [value alpha?]
+  (register-styles!
+   ::color-picker2
+   [:.vmt-color-picker
+    [:&.sp-replacer {:padding (px 2)}]
+    [:.sp-preview {:width        (px 18)
+                   :height       (px 18)
+                   :margin-right (px 2)}]])
+  (with-attr-bindings attrs [value change alpha?]
     (with-let [elem (input :type "hidden")]
-      (let [f (fn f []
-                (with-timeout 0
-                  (if-let [s (some-> elem
-                                     js/jQuery
-                                     .-spectrum)]
-                    (do
-                      (add-watch value
-                                 (keyword (str (gensym)))
-                                 (fn [_ _ _ n]
-                                   (-> elem
-                                       js/jQuery
-                                       (.spectrum "set" n))))
-                      (-> elem
-                          js/jQuery
-                          (.spectrum
-                           #js {:color     @value
-                                :showAlpha alpha?
-                                :change    (fn [color]
-                                             (reset! value (.toHex8String color)))
-                                :move      (fn [color]
-                                             (reset! value (.toHex8String color)))
-                                :hide      (fn [color]
-                                             (reset! value (.toHex8String color)))})))
-                    (f))))]
+      (let [change* (fn [color]
+                      (let [hex (if alpha?
+                                  (.toHex8String color)
+                                  (.toHexString color))]
+                        (if change
+                          (change hex)
+                          (reset! value hex))))
+            f       (fn f []
+                      (with-timeout 0
+                        (if-let [s (some-> elem
+                                           js/jQuery
+                                           .-spectrum)]
+                          (do
+                            (add-watch value
+                                       (keyword (str (gensym)))
+                                       (fn [_ _ _ n]
+                                         (-> elem
+                                             js/jQuery
+                                             (.spectrum "set" n))))
+                            (-> elem
+                                js/jQuery
+                                (.spectrum
+                                 #js {:color              @value
+                                      :showAlpha          (boolean alpha?)
+                                      :replacerClassName  "vmt-color-picker"
+                                      :containerClassName "vmt-color-picker"
+                                      :change             change*
+                                      :move               change*
+                                      :hide               change*})))
+                          (f))))]
         (f)))))
 
 (defelem side-label

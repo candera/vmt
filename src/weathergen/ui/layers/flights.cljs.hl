@@ -409,7 +409,7 @@
 (defn controls
   [{:keys [all-flights checked-flights display highlighted-flight
            mission selected-teams visible-teams scroll-container]
-    :as state}]
+    :as   state}]
   (cond-tpl
     (-> mission not cell=)
     "No mission loaded"
@@ -422,21 +422,24 @@
      (control-section
       :title (with-help [:flights :mission-key]
                "Mission Key")
-      :css {:margin-bottom "3px"}
+      :css {:margin-bottom (px 3)}
       (div
        :css {:display   "flex"
              :flex-wrap "wrap"
-             :max-width "400px"}
+             :max-width (px 400)}
        (for [[id name] mission-category-names]
          (div
           :css {:white-space "nowrap"}
           (inl
-           :css {:margin-right "3px"}
+           :css {:margin-right (px 3)}
            :click (constantly false)
-           (comm/color-picker
+           (comm/color-picker2
             :value (formula-of [mission-category-colors] (mission-category-colors id))
-            :change #(swap! mission-category-colors assoc id @%)))
-          (inl :css {:width "70px"} name))))
+            :change #(swap! mission-category-colors assoc id %)))
+          (inl
+           :css {:width          (px 70)
+                 :vertical-align "middle"}
+           name))))
       (buttons/a-button
        :click #(reset! mission-category-colors default-mission-category-colors)
        "Reset to defaults")
@@ -492,21 +495,23 @@
                                               (cell-let [{:keys [camp-id]} flight]
                                                 (let [visible? (formula-of [checked-flights flight]
                                                                  (checked-flights flight))]
-                                                  [(input :camp-id camp-id
+                                                  (div
+                                                   :css {:white-space "nowrap"}
+                                                   (input :camp-id camp-id
                                                           :type "checkbox"
                                                           :value visible?)
                                                    (inl
                                                     :css {:margin-right   "2px"
                                                           :vertical-align "middle"}
                                                     :click (constantly false)
-                                                    (comm/color-picker
+                                                    (comm/color-picker2
                                                      :value (formula-of [mission flight camp-id display mission-category-colors]
                                                               (if-let [c (get-in display [camp-id :color])]
                                                                 c
                                                                 (flight-mission-color mission
                                                                                       flight
                                                                                       mission-category-colors)))
-                                                     :change #(swap! display assoc-in [@camp-id :color] @%)))])))}
+                                                     :change #(swap! display assoc-in [@camp-id :color] %)))))))}
                      :info      {:title        (with-help [:flights :columns :info]
                                                  "Info")
                                  :disable-sort true

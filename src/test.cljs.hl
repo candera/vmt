@@ -108,13 +108,14 @@
        (let [c  (cell "#abcdef")
              c2 (cell "#123456")]
          (div
+          (div c)
           (buttons/a-button
            :click #(reset! c "#000000")
            "Reset")
           (with-let [elem (div)]
             (when-dom elem
               #(elem #_(cell= (pr-str c2))
-                     (comm/color-picker
+                     (comm/color-picker2
                       :value c
                       :alpha? true))))))
        (hr)

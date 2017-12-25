@@ -4692,6 +4692,8 @@
    ;; I'll figure out how to fix this.
    (link :href "lib/jquery-minicolors/jquery.minicolors.css" :rel "stylesheet" :title "main" :type "text/css")
    (script :src "lib/jquery-minicolors/jquery.minicolors.min.js" :type "text/javascript")
+   (link :href "lib/bgrins-spectrum-98454b5/spectrum.css" :rel "stylesheet" :type "text/css")
+   (script :src "lib/bgrins-spectrum-98454b5/spectrum.js" :type "text/javascript")
    (link :href "select2.css" :rel "stylesheet" :type "text/css")
    (link :href "style.css" :rel "stylesheet" :title "main" :type "text/css")
    (link :href "fonts/open-sans-condensed/open-sans-condensed.css"
