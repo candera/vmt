@@ -171,6 +171,19 @@
   [color]
   (-> color tinycolor (hint-> js/tinycolor) .toHexString))
 
+(defn to-hex8-str
+  "Converts a color to a hex string including alpha."
+  ([color] (-> color tinycolor (hint-> js/tinycolor) .toHex8String))
+  ([color alpha]
+   (.toHex8String (doto (-> color tinycolor (hint-> js/tinycolor))
+                    (.setAlpha alpha)))))
+
+(defn to-rgba
+  "Converts a color to an rgba string."
+  [color]
+  (let [tc (-> color tinycolor .toRgb)]
+    (str "rgba(" (.-r tc) ", " (.-g tc) ", " (.-b tc) ", " (.-a tc) ")")))
+
 (defelem styled
   "Creates an element which is a scope for a set of CSS rules,
   provided via a `:garden` attribute, by adding an element with a
@@ -321,40 +334,118 @@
   (some-> mach (.toFixed 2)))
 
 (defelem color-picker
+  "Renders a color selection element. Attributes can include:
+
+- `value` - a cell holding a hex color string.
+
+- `alpha?` - a boolean indicating whether opacity selection is permitted.
+
+- `change` - a function passed the new color, called when the selected
+  color changes.
+
+- `show` - a function of no arguments that will be called when the
+  selection UI is shown.
+
+- `hide` - a function of no arguments that will be called when the
+  selection UI is hidden."
   [attrs _]
   ;; Because sometimes we want to set the value and not have the
   ;; corresponding change event fire, we override it, and only pass it
   ;; along when the change occurs while the picker is open. If we need
   ;; to, we can add an option or another event for changes that happen
   ;; due to the value cell being updated.
-  (let [{:keys [change hide show]} attrs
-        attrs* (dissoc attrs :change :hide :show)
-        open? (atom false)]
-    (with-let [i (input attrs*
-                        :class "minicolors"
-                        :type "hidden"
-                        :change (fn [e]
-                                  (when (and change @open?)
-                                    (change e))))]
-      (add-watch (:value attrs)
-                 (-> (gensym) str keyword)
-                 (fn [_ _ _ n]
-                   (when n
-                     (-> i
-                         js/jQuery
-                         (hint-> js/HTMLInputElement)
-                         (.minicolors "value" (to-hex-str n))))))
-      (when-dom i
-        #(-> i
-             js/jQuery
-             (hint-> js/HTMLInputElement)
-             (.minicolors #js {"theme" "weathergen"
-                               "show" (fn []
-                                        (reset! open? true)
-                                        (when show (show)))
-                               "hide" (fn []
-                                        (reset! open? false)
-                                        (when hide (hide)))}))))))
+  (with-attr-bindings attrs [change hide show alpha? value]
+    (let [open? (atom false)]
+      (with-let [i (input #_attrs
+                          :id (str (gensym))
+                          :value @value
+                          :class "minicolors"
+                          :type "hidden"
+                          #_:change #_(fn [e]
+                                        (.log js/console
+                                              "Change event on input"
+                                              @e)
+                                        (reset! value @e)
+                                        nil))]
+        #_(when-dom i
+            #(-> i
+                 js/jQuery
+                 (hint-> js/HTMLInputElement)
+                 (.minicolors "value" (to-hex-str @value))))
+        (add-watch value
+                   (-> (gensym) str keyword)
+                   (fn [_ _ _ n]
+                     (.log js/console "value changing" n (to-hex-str n) i)
+                     (when n
+                       (-> i
+                           js/jQuery
+                           ;; (hint-> js/HTMLInputElement)
+                           (.minicolors "value" (to-hex-str n) #_(to-hex8-str n))))))
+        (when-dom i
+          #(-> i
+               js/jQuery
+               (hint-> js/HTMLInputElement)
+               (.minicolors #js {"theme"   "weathergen"
+                                 "show"    (fn []
+                                             (reset! open? true)
+                                             (when show (show)))
+                                 "hide"    (fn []
+                                             (reset! open? false)
+                                             (when hide (hide)))
+                                 ;; "format"  "hex"
+                                 "opacity" (boolean alpha?)
+                                 #_"change"  #_(fn [val opacity]
+                                                 (.log js/console
+                                                       "change event"
+                                                       val
+                                                       opacity)
+                                                 #_(with-timeout 0
+                                                     (reset! value "changed"))
+                                                 #_(cond
+                                                     (not change)
+                                                     (do
+                                                       (.log js/console "color changing"
+                                                             (pr-str val)
+                                                             (pr-str opacity)
+                                                             (to-hex-str val)
+                                                             #_(to-hex8-str val opacity))
+                                                       (reset! (:value attrs)
+                                                               (to-hex-str val)
+                                                               #_(to-hex8-str val opacity)))
+
+                                                     @open?
+                                                     (change (to-hex8-str val opacity))))})))))))
+
+(defelem color-picker2
+  "Like `color-picker`, but uses spectrum."
+  [attrs _]
+  (with-attr-bindings attrs [value alpha?]
+    (with-let [elem (input :type "hidden")]
+      (let [f (fn f []
+                (with-timeout 0
+                  (if-let [s (some-> elem
+                                     js/jQuery
+                                     .-spectrum)]
+                    (do
+                      (add-watch value
+                                 (keyword (str (gensym)))
+                                 (fn [_ _ _ n]
+                                   (-> elem
+                                       js/jQuery
+                                       (.spectrum "set" n))))
+                      (-> elem
+                          js/jQuery
+                          (.spectrum
+                           #js {:color     @value
+                                :showAlpha alpha?
+                                :change    (fn [color]
+                                             (reset! value (.toHex8String color)))
+                                :move      (fn [color]
+                                             (reset! value (.toHex8String color)))
+                                :hide      (fn [color]
+                                             (reset! value (.toHex8String color)))})))
+                    (f))))]
+        (f)))))
 
 (defelem side-label
   "Returns UI for the display name of a side."
