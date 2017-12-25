@@ -77,32 +77,55 @@
         :click #(with-time "load-mission"
                   (load-mission mission))
         "Load")
-       (let [x (cell "hi")]
-         (div (formula-of [x] (str x " there"))))
-       (let [val (cell nil)
-             choices (cell [{:value :yes
-                             :label "Yes"}
-                            {:value :no
-                             :label "No"}])]
+       (hr)
+       (let [v (cell "Arial")]
          (div
-          (div (cell= (pr-str val)))
-          (buttons/a-button :click #(reset! val :no) "No")
-          (buttons/a-button :click #(reset! val :yes) "Yes")
-          (comm/radio-group :value val
-                            :choices choices)
-          (comm/radio-group :value val
-                            :choices choices)))
-       (let [latched? (cell false)]
-         (buttons/rimage-button {:title    "test title"
-                                 :latched? latched?
-                                 :on-click (fn [e] (swap! latched? not))}))
-       #_(with-let [parent (div)]
-           (rum.core/mount (help/RHelp2 [:div "Testing"])
-                           parent))
-       #_(help/with-rhelp [:wind-stability-areas]
-           [:div "hi2"])
-       (let [ctor (:controls-fn flight-layer)]
-         (ctor b))
+          (div v
+               (buttons/a-button
+                :click #(reset! v "Arial")
+                "Reset"))
+          (comm/select2
+           :css {:width (px 170)}
+           :value v
+           :data (for [font ["Arial"
+                             "Bookman"
+                             "Comic Sans MS"
+                             "Courier"
+                             "Courier New"
+                             "Garamond"
+                             "Georgia"
+                             "Helvetica"
+                             "Palatino"
+                             "Times"
+                             "Times New Roman"
+                             "Verdana"]]
+                   {:value font
+                    :label font})
+           :formatter (fn [{:keys [label]}]
+                        (span :css {:font-family label}
+                              label)))))
+       (hr)
+       (let [c  (cell "#abcdef")
+             c2 (cell "#123456")]
+         (div
+          (buttons/a-button
+           :click #(reset! c "#000000")
+           "Reset")
+          (with-let [elem (div)]
+            (when-dom elem
+              #(elem #_(cell= (pr-str c2))
+                     (comm/color-picker
+                      :value c
+                      :alpha? true))))))
+       (hr)
+       (let [c  (cell "#abcdef")
+             id (str (gensym))]
+         (div
+          (cell= (pr-str c))
+          (buttons/a-button
+           :click #(reset! c "red")
+           "Reset")
+          (comm/color-picker2 :value c :alpha? true)))
        (hr)
        (let [filter? (cell false)
              data    (formula-of [filter?]

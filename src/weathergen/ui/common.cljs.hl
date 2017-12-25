@@ -1,6 +1,7 @@
 (ns weathergen.ui.common
   "Things used across various UI libraries."
-  (:require [cljsjs.tinycolor]
+  (:require [cljsjs.select2]
+            [cljsjs.tinycolor]
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [garden.core :refer [css]]
@@ -470,6 +471,46 @@
           :css (cell= {:color color})
           (cell= name)))))))
 
+(defelem select2
+  [attrs kids]
+  (with-attr-bindings attrs [data formatter value]
+    (let [index      (->> data
+                          (zipmap (map #(gstring/format "%05d" %) (range)))
+                          (into (sorted-map)))
+          formatter* (fn [state]
+                       (formatter (get index (.-id state))))]
+      (with-let [elem (select attrs kids)]
+        (do-watch value
+                  (fn [_ n]
+                    (let [e (js/$ elem)]
+                      (if-let [found (some->> index
+                                              (filter (fn [[id item]]
+                                                        (= (:value item) n)))
+                                              first
+                                              key)]
+                        (do
+                          (.log js/console "item" (pr-str n) "was found")
+                          (doto e
+                            (.val found)
+                            (.trigger "change")))
+                        (.log js/console "item" (pr-str n) "not found")))))
+        (when-dom elem
+          #(-> elem
+               js/jQuery
+               (hint-> js/jQuery)
+               (.select2 #js {:data              (clj->js (for [[id item] index]
+                                                            {:text (:label item)
+                                                             :id   id}))
+                              :templateResult    formatter*
+                              :templateSelection formatter*})
+               (.on "change" (fn [e]
+                               (let [v (->> e
+                                            .-currentTarget
+                                            .-value
+                                            (get index)
+                                            :value)]
+                                 (.log js/console "changed" v)
+                                 (reset! value v))))))))))
 
 (defn image-cache-path
   "Returns a path to where we should cache an image."
@@ -683,6 +724,39 @@
                :for id
                (cell= (:label choice)))))))))))
 
+(defelem slider
+  "Renders an HTML range input. Synchronizes value with cell `:value`,
+  which is limited to be between `:min`, and `:max`, inclusive.
+  `:ticks` is the number of tickmarks shown on the slider."
+  [attrs _]
+  (with-attr-bindings attrs [min max ticks value]
+    (let [id (str (gensym))
+          v (lens
+             (formula-of [value]
+               (-> value
+                   (- min)
+                   double
+                   (/ (- max min))
+                   (* 100)
+                   long))
+             (fn [v]
+               (reset! value
+                       (-> v
+                           (/ 100.0)
+                           (* (- max min))
+                           (+ min)))))]
+      [(when ticks
+         (datalist
+          :id id
+          (for [val (range 0 101 (/ 100 ticks))]
+            (option :value val))))
+       (input {:type  "range"
+               :list  (when ticks id)
+               :min   0
+               :max   100
+               :value v
+               :input #(reset! v @%)})])))
+
 ;; Note that if we ever go back to a default we've used before, we'll
 ;; pick up whatever the old saved value is. That's a little weird but
 ;; I'm not sure how else to deal with this.
@@ -778,4 +852,15 @@
     (get-in c p))
    (fn [v]
      (swap! c assoc-in p v))))
+
+(defn map-lens
+  "Returns a lens over item at key `k` in map `m`, where both `m` and
+  `k` are cells."
+  [m k]
+  (lens
+   (formula-of
+     [m k]
+     (get m k))
+   (fn [v]
+     (swap! m assoc @k v))))
 
