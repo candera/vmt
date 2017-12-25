@@ -272,7 +272,8 @@
         " to see a list of changes and download new versions. Or, "
         (buttons/a-button
          :click #(swap! ignored-versions conj @latest-version)
-         "Ignore This Version"))))))
+         "Ignore This Version")
+        ".")))))
 
 (defn- check-for-updates
   "Checks for a new version of VMT. Calls `cb` if the latest version is
