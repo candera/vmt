@@ -128,7 +128,7 @@
                                (reset! ~y* (.-y bb#))
                                (reset! ~w* (.-width bb#))
                                (reset! ~h* (.-height bb#)))))]
-       (hoplon.core/when-dom ~elem-name  update-bbox#)
+       (hoplon.core/with-timeout 0 (update-bbox#))
        (when-let [w# ~(:watch bounds-map)]
          (add-watch w#
                     (keyword (gensym))
