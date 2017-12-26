@@ -82,7 +82,7 @@
         "Load")
        (hr)
        (let [items (cell (for [n (range 20)]
-                           {:key n
+                           {:key  n
                             :text (gstring/format "%02d" n)}))]
          (div
           (div
@@ -110,10 +110,10 @@
                              (let [n (rand-int (count items))]
                                (.log js/console "Inserting" n)
                                (concat (take n items)
-                                       [{:key (->> items
-                                                   (map :key)
-                                                   (reduce max 0)
-                                                   inc)
+                                       [{:key  (->> items
+                                                    (map :key)
+                                                    (reduce max 0)
+                                                    inc)
                                          :text "inserted"}]
                                        (drop n items)))))
             "Insert one"))
@@ -123,10 +123,10 @@
               (tr (td (cell= (:key item)))
                   (td (cell= (:text item)))))
             #_(keyed-for-tpl :key
-              [item items]
-              (.log js/console "item" (pr-str item))
-              (tr (td (cell= (:key item)))
-                  (td (cell= (:text item)))))))))
+                [item items]
+                (.log js/console "item" (pr-str item))
+                (tr (td (cell= (:key item)))
+                    (td (cell= (:text item)))))))))
        (hr)
        (let [v (cell "Arial")]
          (div
@@ -179,24 +179,57 @@
           (comm/color-picker2 :value c :alpha? true)))
        (hr)
        (let [filter? (cell false)
-             data    (formula-of [filter?]
-                       (->> (for [n (range 100)]
-                              {:id n
-                               :a  n
-                               :b  (- 100 n)
-                               :c  (str (rand-int 1000))})
-                            (filter (fn [{:keys [a]}]
-                                      (if filter?
-                                        (even? a)
-                                        true)))
-                            (into [])))]
+             data    (cell (->> (for [n (range 10)]
+                                  {:id n
+                                   :a  n
+                                   :b  (- 100 n)
+                                   :c  (str (rand-int 1000))})
+                                (into [])))
+             data*    (formula-of [data filter?]
+                        (->> data
+                             (filter (fn [{:keys [a]}]
+                                       (if filter?
+                                         (even? a)
+                                         true)))
+                             (into [])))]
          (div
           (buttons/a-button
            :latched? filter?
            :click #(swap! filter? not)
            "Filtered?")
+          (buttons/a-button
+           :click #(swap! data shuffle)
+           "Shuffle")
+          (buttons/a-button
+           :click #(swap! data (fn [items]
+                                 (sort-by :id items)))
+           "Sort")
+          (buttons/a-button
+           :click #(swap! data
+                          (fn [items]
+                            (let [n (rand-int (count items))]
+                              (with-let [i* (concat (take n items)
+                                                 [{:id  (->> items
+                                                             (map :id)
+                                                             (reduce max 0)
+                                                             inc)
+                                                   :a (rand-int 1000)
+                                                   :b (rand-int 1000)
+                                                   :c (str (rand-int 1000))}]
+                                                 (drop n items))]
+                                (.log js/console "Inserting" n (pr-str i*))))))
+           "Insert one")
+          (buttons/a-button
+           :click #(swap! data
+                          (fn [items]
+                            (if (empty? items)
+                              items
+                              (let [n (rand-int (count items))]
+                                (concat (take n items) (drop (inc n) items))))))
+           "Remove one")
           (grids/table-grid
-           {:data            data
+           {:data            data*
+            :key-fn          :id
             :row-attrs       (fn [id] {})
             :when-empty      "I am empty"
             :columns         {:a {:title     "A"
@@ -367,4 +400,3 @@
                                      (formula-of [item]
                                        (:quux item)))
                         :sort-key  :quux}}))))
-
