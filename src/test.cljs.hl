@@ -1,7 +1,10 @@
 (page "test.html"
-  (:require [clojure.string :as str]
+  (:require [clojure.pprint :refer [pprint]]
+            [clojure.string :as str]
             ;; [cljsjs.pako]
             [goog.crypt.base64 :as base64]
+            [goog.string :as gstring]
+            [goog.string.format]
             [hoplon.storage-atom :refer [local-storage]]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
@@ -17,7 +20,7 @@
             [weathergen.ui.layers.flights :as flights])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-time formula-of keyed-for-tpl]]))
 
 ;; (reset! ui/max-time {:day 2 :hour 2 :minute 2})
 
@@ -77,6 +80,53 @@
         :click #(with-time "load-mission"
                   (load-mission mission))
         "Load")
+       (hr)
+       (let [items (cell (for [n (range 20)]
+                           {:key n
+                            :text (gstring/format "%02d" n)}))]
+         (div
+          (div
+           (pre :css {:white-space "pre-wrap"}
+                (cell= (with-out-str (pprint items))))
+           (buttons/a-button
+            :click #(swap! items shuffle)
+            "Shuffle")
+           (buttons/a-button
+            :click #(swap! items (fn [items]
+                                   (sort-by :key items)))
+            "Sort")
+           (buttons/a-button
+            :click #(swap! items
+                           (fn [items]
+                             (if (empty? items)
+                               items
+                               (let [n (rand-int (count items))]
+                                 (.log js/console "Removing" n)
+                                 (concat (take n items) (drop (inc n) items))))))
+            "Remove one")
+           (buttons/a-button
+            :click #(swap! items
+                           (fn [items]
+                             (let [n (rand-int (count items))]
+                               (.log js/console "Inserting" n)
+                               (concat (take n items)
+                                       [{:key (->> items
+                                                   (map :key)
+                                                   (reduce max 0)
+                                                   inc)
+                                         :text "inserted"}]
+                                       (drop n items)))))
+            "Insert one"))
+          (table
+           (tbody
+            (for-tpl [item items]
+              (tr (td (cell= (:key item)))
+                  (td (cell= (:text item)))))
+            #_(keyed-for-tpl :key
+              [item items]
+              (.log js/console "item" (pr-str item))
+              (tr (td (cell= (:key item)))
+                  (td (cell= (:text item)))))))))
        (hr)
        (let [v (cell "Arial")]
          (div

@@ -165,3 +165,13 @@
   "Adds type hint for Object to expr."
   [expr]
   `(hint-> ~expr js/Object))
+
+(defmacro keyed-for-tpl
+  "A wrapper like `for-tpl` around `keyed-loop-tpl*`."
+  [key-fn [bindings items] & tpl-body]
+  `(weathergen.ui.common/keyed-loop-tpl*
+    ~items
+    ~key-fn
+    (fn [item#]
+      (javelin.core/cell-let [~bindings item#]
+        ~@tpl-body))))
