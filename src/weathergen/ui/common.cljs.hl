@@ -115,8 +115,8 @@
     (let [^js/Element head (aget (.getElementsByTagName js/document "head") 0)
           styles (cell= (css garden))]
       (swap! registered-styles conj key)
-      (when-dom head
-        #(do
+      (with-timeout 0
+        (do
            (log/debug "Registering style" (str key))
            (.appendChild head (style :type "text/css" :debug (str key) styles)))))))
 
@@ -384,7 +384,8 @@
                            js/jQuery
                            ;; (hint-> js/HTMLInputElement)
                            (.minicolors "value" (to-hex-str n) #_(to-hex8-str n))))))
-        (when-dom i
+        (with-timeout 0
+          ;; when-dom i
           #(-> i
                js/jQuery
                (hint-> js/HTMLInputElement)
@@ -508,7 +509,8 @@
                           (.trigger "change"))
                         ;; TODO: How do we handle this?
                         (.log js/console "item" (pr-str n) "not found")))))
-        (when-dom elem
+        (with-timeout 0
+          ;; when-dom elem
           #(-> elem
                js/jQuery
                (hint-> js/jQuery)

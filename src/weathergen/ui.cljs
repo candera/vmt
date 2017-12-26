@@ -22,7 +22,7 @@
                      p progress
                      script select span style
                      table tbody td text textarea thead title tr timeout
-                     when-dom when-tpl with-dom with-init! with-timeout]]
+                     when-tpl with-dom with-init! with-timeout]]
             [hoplon.svg :as svg]
             [garden.selectors :as css-sel]
             [goog.dom :as gdom]
@@ -4154,12 +4154,6 @@
                                        (remove-nth paths index)))))))))))))))
    (buttons/a-button :click load-dtc "Load DTC")))
 
-
-(defelem select2
-  [attrs kids]
-  (with-let [elem (select attrs kids)]
-    (when-dom elem
-      #(-> elem js/jQuery (hint-> js/jQuery) .select2))))
 
 (defn airbase-squadrons
   "Given mission and airbase cells, return a formula cell with the
