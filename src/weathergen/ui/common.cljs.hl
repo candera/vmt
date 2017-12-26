@@ -503,11 +503,10 @@
                                                         (= (:value item) n)))
                                               first
                                               key)]
-                        (do
-                          (.log js/console "item" (pr-str n) "was found")
-                          (doto e
-                            (.val found)
-                            (.trigger "change")))
+                        (doto e
+                          (.val found)
+                          (.trigger "change"))
+                        ;; TODO: How do we handle this?
                         (.log js/console "item" (pr-str n) "not found")))))
         (when-dom elem
           #(-> elem
@@ -524,7 +523,7 @@
                                             .-value
                                             (get index)
                                             :value)]
-                                 (.log js/console "changed" v)
+                                 #_(.log js/console "changed" v)
                                  (reset! value v))))))))))
 
 (defn image-cache-path
@@ -718,7 +717,7 @@
              (div
               (let [checked? (formula-of [value choice]
                                (with-let [checked? (= value (:value choice))]
-                                 (.log js/console "checked"
+                                 #_(.log js/console "checked"
                                        ":id" id
                                        "checked?" checked?
                                        ":value" (pr-str value)
@@ -730,7 +729,7 @@
                                  :value index
                                  :checked checked?
                                  :change (fn [e]
-                                           (.log js/console "Radio is changing" e)
+                                           #_(.log js/console "Radio is changing" e)
                                            (reset! value (->> e .-currentTarget .-value (get @by-index) :value))))]
                   (do-watch checked?
                             (fn [_ new-val]
@@ -897,7 +896,7 @@
       (do-watch
        pos-map
        (fn [_ _]
-         (.log js/console
+         #_(.log js/console
                "pos-map" (pr-str @pos-map))
          (reset! current
                  (with-let [frag (.createDocumentFragment js/document)]
@@ -909,7 +908,7 @@
                                 k
                                 {:item item
                                  :ui   (do
-                                         (.log js/console
+                                         #_(.log js/console
                                                "Creating template item"
                                                "k" k)
                                          (tpl
