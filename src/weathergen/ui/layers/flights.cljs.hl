@@ -173,6 +173,7 @@
       "Steerpoints")
      (grids/table-grid
       :data (-> flight ::mission/waypoints cell=)
+      :key-fn ::mission/number
       :row-attrs (constantly {})
       :when-empty "Flight has no waypoints"
       :fixed-columns [:number]
@@ -460,6 +461,7 @@
          :data (formula-of [mission all-flights selected-teams]
                  (->> all-flights
                       (filter #(contains? selected-teams (:owner %)))))
+         :key-fn :id
          :when-empty (text "No flights to show")
          :row-attrs (fn [flight rownum]
                       (when (and flight rownum)
