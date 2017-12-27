@@ -685,7 +685,7 @@
                                             :stroke color
                                             :stroke-width (cell= (* 0.6 width magnification)))
                              circle? (formula-of [waypoint]
-                                       (-> waypoint :flags (has-flag? c/WPF_TARGET)))]
+                                       (-> waypoint :flags (has-flag? c/WPF_TARGET) not))]
                          (if-tpl circle?
                            (svg/circle
                             style*
