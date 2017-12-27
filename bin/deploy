@@ -156,3 +156,6 @@ then
 
     cat $LINKS
 fi
+
+mkdir -p ~/Applications/VMT
+cp -r $PACKAGEDIR/VMT-darwin-x64/VMT.app ~/Applications/VMT/VMT-${GIT_VERSION}-${CHANNEL}.app
