@@ -4738,9 +4738,10 @@
                :position "relative"
                :margin-bottom (px 3)
                :padding (px 0 3)}
-         (div
+         (styled
+          :garden [:a {:color "#ebff00"}]
           :css {:display "inline-block"
-                :padding-right (px 5)}
+                :padding-right (px 10)}
           message)
          (div
           :css {:position "absolute"

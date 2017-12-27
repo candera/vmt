@@ -260,17 +260,19 @@
         last-update-check
         ") is "
         latest-version
-        ". Visit "
-        (a
-         :css {:color "lightblue"}
-         :href (cell= (get latest-build-info "CHANGELOG_URL"
-                           (str "http://org.craigandera.vmt.s3-website-us-east-1.amazonaws.com/"
-                                (get ui/build-info "CHANNEL")
-                                "/")))
-         :target "_blank"
-         "the VMT download page")
+        ". Download it "
+        (a :href (cell= (get latest-build-info "DOWNLOAD_URL"))
+           "here")
+        ", or visit "
+        (a :href (cell= (get latest-build-info "CHANGELOG_URL"
+                             (str "http://org.craigandera.vmt.s3-website-us-east-1.amazonaws.com/"
+                                  (get ui/build-info "CHANNEL")
+                                  "/")))
+           :target "_blank"
+           "the VMT download page")
         " to see a list of changes and download new versions. Or, "
         (buttons/a-button
+         :css {:color "initial"}
          :click #(swap! ignored-versions conj @latest-version)
          "Ignore This Version")
         ".")))))
