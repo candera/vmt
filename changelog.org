@@ -4,6 +4,9 @@
 #+TITLE:
 
 * Change Log
+** v055-5 (dev-only)
+- Reverse use of triangles/circles in waypoints to match BMS
+- Include download link in update notifications.
 ** v055 [2017-12-26 Tue]
 - Fix bug where sorting was broken on flights page.
 - Fix bug where flight color selection was not working.
