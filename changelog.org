@@ -4,8 +4,9 @@
 #+TITLE:
 
 * Change Log
-** v055-7 (dev-only)
-- Annotations (text only)
+** v055-8 (dev-only)
+- Text annotations
+** v055-5 (dev-only)
 - Reverse use of triangles/circles in waypoints to match BMS
 - Include download link in update notifications.
 ** v055 [2017-12-26 Tue]
