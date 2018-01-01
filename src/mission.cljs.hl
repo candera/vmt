@@ -83,7 +83,8 @@
   {:title "Map"
    :id :map-controls
    :sections [:map-controls-section {}
-              :weather-display-controls {:title "Weather Display Options"}]}
+              :weather-display-controls {:title "Weather Display Options"}
+              :annotation-controls {}]}
   {:title    "Air Forces"
    :id       :air-forces
    :sections [:air-forces-section {}]}

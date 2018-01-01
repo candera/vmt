@@ -1,7 +1,7 @@
 (ns weathergen.ui
   (:require ;;[cljsjs.filesaverjs]
-            [cljsjs.select2]
             [clojure.data]
+            [clojure.pprint :refer [pprint]]
             [clojure.set :as set]
             [clojure.string :as str]
             [garden.core :as css :refer [css]]
@@ -12,14 +12,14 @@
              :as h
              :refer [a
                      br
-                     code cond-tpl
+                     case-tpl code cond-tpl
                      datalist defelem div do! do-watch
                      fieldset for-tpl
                      hr html
                      if-tpl img input
                      label legend li link loop-tpl
                      ol optgroup option
-                     p progress
+                     p pre progress
                      script select span style
                      table tbody td text textarea thead title tr timeout
                      when-tpl with-dom with-init! with-timeout]]
@@ -54,12 +54,17 @@
             [weathergen.twx :as twx]
             [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [colors control-section
+                                                   dropdown
                                                    ems
                                                    get-image
                                                    format-time inl
+                                                   map-lens
                                                    path-lens pct pre-cell px
-                                                   styled team-color triangle]]
+                                                   styled team-color triangle
+                                                   validating-edit
+                                                   time-edit]]
             [weathergen.ui.grids :as grids]
+            [weathergen.ui.layers.annotations]
             [weathergen.ui.layers.flights]
             [weathergen.ui.trees :as trees]
             [weathergen.ui.tabs :as tabs]
@@ -79,7 +84,7 @@
                                 spy get-env log-env)])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of hint-> hint->>]])
+   [weathergen.cljs.macros :refer [with-key-lenses with-attr-bindings with-bbox with-time formula-of hint-> hint->>]])
   (:refer-clojure :exclude [load-file]))
 
 ;; (set! *warn-on-infer* true)
@@ -341,6 +346,8 @@
 ;; Records raw mouse position in pixelspace
 (defc mouse-raw-offset [0 0])
 
+(defc suppress-bullseye-info-box? false)
+
 (defc prevent-recomputation? false)
 
 ;; TODO: This can go away if we introduce a single-input way to input
@@ -467,6 +474,13 @@
     :map-text-scale            map-text-scale
     :map-show-text-background? map-show-text-background?
     :visible-teams             visible-teams}))
+
+(def annotations-layer
+  (weathergen.ui.layers.annotations/create
+   mission
+   {:map-viewbox                 map-viewbox
+    :map-zoom                    map-zoom
+    :suppress-bullseye-info-box? suppress-bullseye-info-box?}))
 
 ;;; Formulas
 
@@ -995,20 +1009,24 @@
                (reset! cloud-params (-> vmtb :weather :cloud-params))
                (reset! movement-params (-> vmtb :weather :movement-params))
                (reset! display-params (-> vmtb :weather :display-params))
-               (reset! briefing-notes (-> vmtb :briefing-notes (or "")))))))))))
+               (reset! briefing-notes (-> vmtb :briefing-notes (or "")))
+               (weathergen.ui.layers.annotations/load-briefing-data
+                annotations-layer
+                (-> vmtb :annotations))))))))))
 
 (defn save-briefing
   "Prompts the user for a path and saves a briefing file to it."
   [install-id visible-sides]
   (save-data
-   {:data     (->> {:revision      revision
-                    :briefing      (mission/mission->briefing @mission install-id build-info)
-                    :weather       {:weather-params  @weather-params
-                                    :cloud-params    @cloud-params
-                                    :movement-params @movement-params
-                                    :display-params  @display-params}
-                    :visible-sides visible-sides
-                    :briefing-notes @briefing-notes}
+   {:data     (->> {:revision       revision
+                    :briefing       (mission/mission->briefing @mission install-id build-info)
+                    :weather        {:weather-params  @weather-params
+                                     :cloud-params    @cloud-params
+                                     :movement-params @movement-params
+                                     :display-params  @display-params}
+                    :visible-sides  visible-sides
+                    :briefing-notes @briefing-notes
+                    :annotations    (weathergen.ui.layers.annotations/briefing-data annotations-layer)}
                    encode
                    compress)
     :title    "Save a briefing file"
@@ -1670,7 +1688,8 @@
                                                     ))))]
       (svg/g
        :debug "bullseye-info-box"
-       :toggle (-> mouse-location some? cell=)
+       :toggle (cell= (and (some? mouse-location)
+                           (not suppress-bullseye-info-box?)))
        :svg/transform (formula-of [mouse-location map-zoom map-size]
                         (let [{:keys [x y]}  mouse-location
                               [width height] map-size]
@@ -2403,6 +2422,11 @@
      (reset! map-zoom z')
      (reset! map-pan (limit-pan [nx ny] z' {:x px :y py})))))
 
+(defn- layer-overlay
+  "Return an overlay for a layer."
+  [overlay & args]
+  (apply (:overlay-fn overlay) args))
+
 (defelem grid
   [{:keys [display-params
            selected-cell
@@ -2539,6 +2563,7 @@
                      :mousemove (fn [e]
                                   (dosync
                                    (reset! mouse-raw-offset [(aget e "offsetX") (aget e "offsetY")])
+                                   (reset! suppress-bullseye-info-box? false)
                                    (reset! mouse-location
                                            (let [[x y] (mouse-weather-coords e)]
                                              (when (and (<= 0 x nx)
@@ -2548,7 +2573,7 @@
                                    (dosync
                                     (reset! hover-cell nil)))
                      :mousedown (fn [e]
-                                  (.log js/console e)
+                                  ;; (.log js/console e)
                                   (reset! drag-start [(aget e "offsetX") (aget e "offsetY")])
                                   (when-not @drag-handler
                                     (let [{px0 :x py0 :y} @map-pan]
@@ -2592,7 +2617,8 @@
                      (weather-overrides-overlay weather-params register-drag-handler)
                      ;;(flight-paths-overlay [nx ny] display-params)
                      selected-cell-overlay
-                     (:overlay flight-paths-layer)
+                     (layer-overlay annotations-layer register-drag-handler)
+                     (layer-overlay flight-paths-layer)
                      airbases-info-overlay
                      (bullseye-info-box))]
       (gevents/listen (gevents/MouseWheelHandler. elem)
@@ -2685,266 +2711,12 @@
 
 ;;; User Interface
 
-(def ESCAPE_KEY 27)
-(def ENTER_KEY 13)
-
 (defn two-column
   [left right]
   (div :class "two-column"
        (div :class "left-column" left)
        (div :class "right-column" right)))
 
-(defn parse-int
-  "Parses an int from a string, returning the int, or nil if it cannot
-  be parsed as an int."
-  [s]
-  (let [n (-> s js/Number. .valueOf)
-        l (long n)]
-    (when (int? n)
-      l)))
-
-;; Conformers are functions that take a cell containing a string value
-;; to conform, and return a cell (presumably a formula of the input
-;; cell) that yields a map containing keys:
-;;
-;; :valid? - True if the value is acceptable
-;; :message - Text describing the problem if any
-;; :value - The parsed
-;;
-;; Note that even if :valid? is false, value may still contain a
-;; value, for those cases wher ethe value could be parsed, but is not
-;; actually valid, like an altitude that's out of bounds. This is
-;; useful in cases where the invalid value is affected by other
-;; values, and may become valid due to changes elsewhere.
-
-(defn conform-nonnegative-integer
-  [s]
-  (formula-of
-   [s]
-   (let [parsed (parse-int s)
-         valid? (and parsed
-                     (not (neg? parsed)))]
-     {:valid? valid?
-      :message (when-not valid?
-                 "Must be whole number, greather than or equal to zero.")
-      :value parsed})))
-
-(defn conform-positive-integer
-  [s]
-  (formula-of
-   [s]
-   (let [parsed (parse-int s)
-         valid? (and parsed (pos? parsed))]
-     {:valid? valid?
-      :message (when-not valid?
-                 "Must be an integer greater than zero.")
-      :value parsed})))
-
-(defn int-conformer
-  "Returns a conformer that will ensure a value parses to an int
-  between `from` and `to`, inclusive."
-  [from to]
-  (let [message (gstring/format "Must be an integer between %d and %d."
-                                from to)]
-    (fn [s]
-      (formula-of
-       [s]
-        (let [parsed (parse-int s)
-              valid? (and parsed (<= from parsed to))]
-          {:valid?  valid?
-           :message (when-not valid?
-                      message)
-           :value   parsed})))))
-
-(defn float-conformer
-  "Returns a conformer that will ensure a value parses to a floating
-  point number between `from` and `to`, inclusive."
-  [from to]
-  (let [message (gstring/format "Must be a number between %f and %f."
-                                from to)]
-    (fn [s]
-      (formula-of
-       [s]
-       (let [n (-> s js/Number. .valueOf)
-             valid? (<= from n to)]
-         {:valid? valid?
-          :message (when-not valid?
-                     message)
-          :value (when-not (js/isNaN n)
-                   n)})))))
-
-(defn compose-conformers
-  "Given two conformers, returns a conformer that will validate only
-  if both of them do. Checks c1 first."
-  [c1 c2]
-  (fn [s]
-    (let [p1 (c1 s)
-          p2 (c2 s)]
-     (formula-of
-      [p1 p2]
-      (if (:valid? p1)
-        p2
-        p1)))))
-
-(defelem validating-edit
-  "Renders a control that will provide feedback as to whether the
-  contents are valid.
-
-  :conform : A function of one argument, a cell containing the current
-  value of the control. Returns a call whose value is a map with keys
-  `:valid?`, `:value`, and `:message`, expressing whether the value is
-  valid, and if not, why not.
-  :fmt : A function that turns the validated value into a displayable
-  string
-  :source: A cell containing the source data for the input control.
-  :update: A function that will be called with the new, valid value.
-  Defaults to setting the source cell.
-  :width: Width in pixels of the input area.
-  :placeholder: Placeholder when input is empty.
-  :css: Styling applied to container div.
-  :align: Specifies text alignment of the input box"
-  [attrs _]
-  (with-attr-bindings attrs [conform fmt source update width placeholder css align]
-    (let [interim  (cell nil)
-          fmt      (or fmt str)
-          value    (formula-of
-                     [interim source]
-                     (if interim
-                       interim
-                       (fmt source)))
-          parsed   (conform value)
-          update   (or update
-                       #(swap! source
-                               (constantly %)))
-          state    (cell :set)
-          focused? (cell false)
-          align    (cell= align)
-          valid?   (formula-of
-                     [parsed]
-                     (empty? (:message parsed)))]
-      (div
-       attrs
-       :css (merge {:position     "relative"
-                    :overflow     "show"
-                    :white-space  "nowrap"
-                    :width        (px (or width 125))
-                    :margin-right (px 3)}
-                   css)
-       (let [i (input :type "text"
-                      :placeholder placeholder
-                      :input #(do
-                                (reset! interim @%)
-                                (reset! state :editing)
-                                #_(if (and (:valid? @parsed)
-                                           (= (:value @parsed) @source))
-                                    (dosync
-                                     (reset! state :set)
-                                     (reset! interim nil))
-                                    (reset! state :editing)))
-                      :change #(let [p @parsed]
-                                 (when-let [v (:value p)]
-                                   (dosync
-                                    (update v)
-                                    (reset! interim nil)
-                                    (reset! state :set))))
-                      :keyup (fn [^KeyboardEvent e]
-                               (when (= ESCAPE_KEY (.-keyCode e))
-                                 (dosync
-                                  (reset! interim nil)
-                                  (reset! state :set))))
-                      :focus #(reset! focused? true)
-                      :blur #(let [p @parsed]
-                               (dosync
-                                (reset! focused? false)
-                                (when-let [v (:value p)]
-                                  (update v)
-                                  (reset! interim nil)
-                                  (reset! state :set))))
-                      :css (formula-of
-                             [state valid? align]
-                             {:font-style    (if (= state :editing)
-                                               "italic"
-                                               "")
-                              :color         (if valid?
-                                               ""
-                                               (colors :invalid))
-                              :background    (if valid?
-                                               ""
-                                               (colors :invalid-background))
-                              :width         (px (- (or width 125)
-                                                    (if valid? 0 20)))
-                              :padding-right (when-not valid? (px 20))
-                              :margin-right  (when-not valid? (px -20))
-                              :text-align    (when align align)})
-                      :value value)]
-         [^js/HTMLImageElement i
-          (img :src "images/error.png"
-               :title (cell= (:message parsed))
-               :click #(-> i (hint-> js/HTMLImageElement) .focus)
-               :css (formula-of
-                      [valid?]
-                      {:position       "relative"
-                       :right          0
-                       :width          (px 14)
-                       :margin-left    (px 3)
-                       :margin-bottom  (px 2)
-                       :vertical-align "middle"
-                       :opacity        (if valid?
-                                         "0"
-                                         "1")}))])
-       (div
-        :toggle (cell= (and (not valid?) focused?))
-        :css {:position     "absolute"
-              :top          (px 24)
-              :font-size    (pct 75)
-              :background   "rgba(221,221,221,0.95)"
-              :border       "1px solid #888"
-              :min-width    (pct 100)
-              :max-width    (px 500)
-              :padding-left (px 2)
-              :z-index      1}
-        (cell= (:message parsed)))))))
-
-;; TODO: We could consider using a lens here instead of separate
-;; source and update
-(defelem time-edit
-  [{:keys [source update] :as attrs} _]
-  (validating-edit
-   attrs
-   :width 65
-   :fmt format-time
-   :placeholder "dd/hhmm"
-   :conform (fn [val]
-              (formula-of
-               [val]
-                (let [[all dd hh mm] (re-matches #"(\d+)/(\d\d):(\d\d)" (or val ""))
-                      day             (->> dd js/Number. long)
-                      hour            (->> hh js/Number. long)
-                      min             (->> mm js/Number. long)
-                      valid?          (and dd hh mm
-                                           (int? day)
-                                           (int? hour)
-                                           (int? min)
-                                           (<= 0 hour 23)
-                                           (<= 0 min 59))
-                      val             {:day    day
-                                       :hour   hour
-                                       :minute min}
-                      over-max?       (and valid?
-                                           (-> @weather-params :time :max)
-                                           (< (-> @weather-params
-                                                  :time
-                                                  :max
-                                                  time/campaign-time->minutes)
-                                              (time/campaign-time->minutes val)))]
-                  {:valid?  (and valid? (not over-max?))
-                   :message (cond
-                              (not valid?) "Time must be in the format 'dd/hh:mm'"
-                              over-max?    (str "Time cannot be set later than "
-                                                (-> @weather-params :time :max format-time)))
-                   :value   {:day    day
-                             :hour   hour
-                             :minute min}})))))
 
 (defn edit-field
   ([c path] (edit-field c path {}))
@@ -2981,7 +2753,8 @@
      (-> attrs
          (dissoc :path)
          (assoc :source (formula-of [source] (get-in source path)))
-         (assoc :update #(swap! source assoc-in path %))))))
+         (assoc :update #(swap! source assoc-in path %))
+         (assoc :max-time (get-in @weather-params [:time :max]))))))
 
 (defn button-bar
   "Returns UI for the 'button bar' that goes across the top of the
@@ -3199,15 +2972,6 @@
                (td (edit-field weather-params [:wind-stability-areas @index :wind :speed]))
                (td (edit-field weather-params [:wind-stability-areas @index :wind :heading])))))
          (buttons/image-button
-          :src "images/trash.png"
-          :width "16px"
-          :title "Remove"
-          :click #(swap! weather-params
-                         update
-                         :wind-stability-areas
-                         (fn [areas]
-                           (remove-nth areas @index))))
-         (buttons/image-button
           :click #(swap! weather-params
                          update-in
                          [:wind-stability-areas @index :editing?]
@@ -3217,6 +2981,16 @@
           :width "16px"
           :height "16px"
           :latched? (cell= (:editing? area)))
+         (buttons/image-button
+          :css {:float "right"}
+          :src "images/trash.png"
+          :width "16px"
+          :title "Remove"
+          :click #(swap! weather-params
+                         update
+                         :wind-stability-areas
+                         (fn [areas]
+                           (remove-nth areas @index))))
          (hr)))))
    (buttons/a-button
     :click #(swap! weather-params
@@ -3229,7 +3003,14 @@
                                    :speed 5}
                             :index (count areas)
                             :editing? true})))
-    "Add New")))
+    "Add New")
+   (div
+    (input :type "checkbox"
+           ;; Inverted so we can be backward-compatible
+           :value (-> map-display :hide-wind-stability? not cell=)
+           :change #(swap! map-display update :hide-wind-stability? not))
+    (with-help [:map-controls :show-wind-stability?]
+      (label "Show wind stability regions?")))))
 
 (defn weather-override-parameters
   [_]
@@ -3321,15 +3102,6 @@
              (checkbox "Exclude from forecast?" :exclude-from-forecast?
                        {:row-attrs {:toggle (cell= (:animate? override))}}))))
          (buttons/image-button
-          :src "images/trash.png"
-          :width "16px"
-          :title "Remove"
-          :click #(swap! weather-params
-                         update
-                         :weather-overrides
-                         (fn [overrides]
-                           (remove-nth overrides @index))))
-         (buttons/image-button
           :click #(swap! weather-params
                          update-in
                          [:weather-overrides @index :editing?]
@@ -3338,7 +3110,17 @@
           :src "images/move.svg"
           :width "16px"
           :height "16px"
-          :latched? (cell= (:editing? override)))))))
+          :latched? (cell= (:editing? override)))
+         (buttons/image-button
+          :css {:float "right"}
+          :src "images/trash.png"
+          :width "16px"
+          :title "Remove"
+          :click #(swap! weather-params
+                         update
+                         :weather-overrides
+                         (fn [overrides]
+                           (remove-nth overrides @index))))))))
    (buttons/a-button
     :click #(swap! weather-params
                    (fn [wp]
@@ -3449,16 +3231,16 @@
 
 (defmethod cloud-param-conformer :default
   [params column category]
-  (int-conformer 0 99999))
+  (comm/int-conformer 0 99999))
 
 (defmethod cloud-param-conformer :visibility
   [params column category]
-  (float-conformer 0 30))
+  (comm/float-conformer 0 30))
 
 (defmethod cloud-param-conformer :stratus-base
   [params column category]
   (fn [val-c]
-    (let [conformer (int-conformer 0 99999)
+    (let [conformer (comm/int-conformer 0 99999)
           conformed (conformer val-c)]
      (formula-of
       [params conformed]
@@ -3479,7 +3261,7 @@
 (defmethod cloud-param-conformer :stratus-top
   [params column category]
   (fn [val-c]
-    (let [ic (int-conformer 0 99999)
+    (let [ic (comm/int-conformer 0 99999)
           conformed (ic val-c)]
       (formula-of
        [params conformed]
@@ -3501,7 +3283,7 @@
 (defmethod cloud-param-conformer :cumulus-base
   [params column category]
   (fn [val-c]
-    (let [ic (int-conformer 0 99999)
+    (let [ic (comm/int-conformer 0 99999)
           conformed (ic val-c)]
       (formula-of
        [params conformed]
@@ -3700,7 +3482,7 @@
                     (validating-edit
                      :width 50
                      :source (cell= (:step movement-params))
-                     :conform conform-positive-integer
+                     :conform comm/conform-positive-integer
                      :update #(swap! movement-params assoc :step %)
                      :placeholder "e.g. 60"
                      :fmt str)]))))
@@ -3835,7 +3617,7 @@
               (validating-edit
                :width 32
                :source (path-lens display-params [:multi-save :step])
-               :conform conform-positive-integer
+               :conform comm/conform-positive-integer
                :fmt str
                :placeholder "60"))
          (let [progress    (cell nil)
@@ -4600,21 +4382,12 @@
                                         (tr
                                          (with-help [:map-controls key]
                                            (td label))
-                                         (let [id (str (gensym))]
-                                           (td
-                                            (datalist
-                                             :id id
-                                             (for [val (range (* 100 min) (* 100 (inc max)) (* (- max min) 25))]
-                                               (option :value val)))
-                                            (input {:type  "range"
-                                                    :list  id
-                                                    :min   (long (* min 100))
-                                                    :max   (long (* max 100))
-                                                    :value (-> map-display (get key) (* 100) cell=)
-                                                    :input #(swap! map-display
-                                                                   assoc
-                                                                   key
-                                                                   (/ @% 100.0))})))
+                                         (td
+                                          (comm/slider
+                                           :min min
+                                           :max max
+                                           :ticks 5
+                                           :value (path-lens map-display [key])))
                                          (td
                                           (buttons/a-button
                                            :click #(swap! map-display
@@ -4662,6 +4435,7 @@
    (airbase-display-controls "Airbase Display Options")
    (let [flight-path-display-controls (:map-display-controls-fn flight-paths-layer)]
      (flight-path-display-controls "Flight Path Display Options"))))
+
 
 ;;; General layout
 
@@ -4824,6 +4598,12 @@
              :height  (px 64)}
        :src "images/1stVFW_Insignia-64.png"))))))
 
+(defn- layer-controls
+  "Return controls for a layer."
+  [layer & args]
+  (let [ctor (:controls-fn layer)]
+    (apply ctor args)))
+
 (def section-ctor
   {:mission-info-section        mission-info-section
    :save-briefing-section       save-briefing-section
@@ -4840,11 +4620,12 @@
    :advanced-controls           advanced-controls
    ;; :flight-path-controls flight-path-controls
    :flights-section             (fn [opts]
-                                  (let [ctor             (:controls-fn flight-paths-layer)
-                                        scroll-container (::scroll-container opts)]
-                                    (ctor scroll-container)))
+                                  (layer-controls flight-paths-layer
+                                                  (::scroll-container opts)))
    :air-forces-section          air-forces-section
    :map-controls-section        map-controls-section
+   :annotation-controls         (fn [opts]
+                                  (layer-controls annotations-layer))
    :oob-section                 order-of-battle-section
    :test-section                test-section})
 

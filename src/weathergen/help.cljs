@@ -3,7 +3,7 @@
             [goog.string :as gstring]
             [goog.string.format]
             [hiccups.runtime]
-            [hoplon.core :refer [b dl dt dd div do-watch em i img li ol p span strong ul with-timeout]]
+            [hoplon.core :refer [b dl dt dd div do-watch em i img li ol p span strong table tbody td tr ul with-timeout]]
             [hoplon.svg :as svg]
             [javelin.core :refer [cell cell= with-let]]
             [rum.core :as rum]
@@ -12,7 +12,7 @@
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
             [weathergen.ui.buttons :as buttons]
-            [weathergen.ui.common :as comm :refer [inl px]]
+            [weathergen.ui.common :as comm :refer [inl px when-dom3]]
             [weathergen.wind :as wind])
   (:require-macros [hiccups.core :as hic]))
 
@@ -56,6 +56,10 @@
              :p      p
              :span   span
              :strong strong
+             :table  table
+             :tbody  tbody
+             :td     td
+             :tr     tr
              :ul     ul}]
  (defn- hoplonify
    [node]
@@ -941,7 +945,117 @@ forward and backward in time. "])
     :reset-icon-size
     (content
      [:div
-      [:p "Click this button to reset the icon sizing to its default value."]])}
+      [:p "Click this button to reset the icon sizing to its default value."]])
+
+    :annotations
+    {:overview
+     (content
+      [:div
+       [:p "Use this section to add annotations - bits of text, arrows, borders, images, etc. - to the map. Annotations are saved in the briefing file so they can be shared with partipating pilots. Use the Add New button to create annotations, the "
+        [:img {:src   "images/edit.svg"
+               :width (px 16)}]
+        " button to edit existing annotations, the "
+        [:img {:src   "images/hide-eye.svg"
+               :width (px 16)}]
+        " button to hide or show an annotation, and the "
+        [:img {:src   "images/trash.png"
+               :width (px 16)}]
+        " button to delete an annotation."]
+       [:p "When editing, the following controls will appear on the screen, depending on what type of annotation is currently being edited:"]
+       [:table
+        [:tbody
+         [:tr
+          [:td [:img {:src   "images/rotate.svg"
+                      :width (px 16)}]]
+          [:td "Click and drag this to rotate the selected annotation."]]
+         [:tr
+          [:td [:img {:src    "images/move.svg"
+                      :width  (px 16)
+                      :height (px 16)}]]
+          [:td "Click and drag this to move the selected annotation."]]
+         [:tr
+          [:td [:img {:src   "images/text-resize.svg"
+                      :width (px 16)}]]
+          [:td "Click and drag this to change the size of the text."]]
+         [:tr
+          [:td [:img {:src   "images/checkmark.png"
+                      :width (px 16)}]]
+          [:td "Click this button to finish editing and remove the edit controls from view."]]
+         [:tr
+          [:td [:img {:src   "images/trash.png"
+                      :width (px 16)}]]
+          [:td "Click this button to delete the annotation."]]
+         [:tr
+          [:td [:img {:src   "images/resize.svg"
+                      :width (px 16)}]]
+          [:td "Click and drag this to change the size of the annotation."]]]]])
+
+     :type
+     (content
+      [:div
+       [:p "Sets the type of the annotation. One of:"]
+       [:dl
+        [:dt "Text"]
+        [:dd "A block of text."]
+
+        [:dt "Rectangle"]
+        [:dd "A rectangle with or without a border, and with or without a filled interior region."]
+
+        [:dt "Arrow"]
+        [:dd "An arrow shape."]
+
+        [:dt "Oval"]
+        [:dd "An oval with or without a border, and with or without a filled interior region."]
+
+        [:dt "Image"]
+        [:dd "An image from your hard drive or from a URL."]]])
+
+     :font-size
+     (content
+      [:div
+       [:p "The size of the font in a text annotation. A number between 1.0 and 100.0."]])
+
+     :font
+     (content
+      [:div
+       [:p "The font used for drawing a text annotation."]])
+
+     :color
+     (content
+      [:div
+       [:p "Use this dropdown to control the color in which the text will be drawn. The slider at the bottom controls transparency."]])
+
+     :background
+     (content
+      [:div
+       [:p "Use this dropdown to control the background drawn behind the text. The slider at the bottom controls transparency: move it all the way to the left to have no background drawn."]])
+
+     :text
+     (content
+      [:div
+       [:p "Changes the text that will appear. You can also click on the text on the map while editing to change the text directly."]])
+
+     :location
+     (content
+      [:div
+       [:p "The X and Y location of this annotation. It is generally easier to move things with the mouse by clicking and dragging the "
+        [:img {:src    "images/move.svg"
+               :width  (px 16)
+               :height (px 16)}]
+        " button."]])
+
+     :size
+     (content
+      [:div
+       [:p "The width and height of this annotation. It is generally easier to resize things with the mouse by clicking and dragging the "
+        [:img {:src   "images/resize.svg"
+               :width (px 16)}]
+        " button."]])
+
+     :rotation
+     (content
+      [:div
+       [:p "The rotation of the selected annotation, in degrees."]])}}
 
    :flights
    {:mission-key
@@ -1264,8 +1378,9 @@ forward and backward in time. "])
                     (fn [old new]
                       (when (and (not old) new)
                         ;; (.log js/console "Focusing help element")
-                        (with-timeout 0
-                          (.focus e))))))
+                        (;;with-timeout 0
+                         when-dom3 e
+                         #(.focus e))))))
         content))))
 
   (rum/defcs RHelp < rum/reactive (rum/local nil ::this-instance)

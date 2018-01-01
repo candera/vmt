@@ -3020,6 +3020,7 @@ type: 0x64 -> image
 (-> bugged-mission :objectives last :radar-data)
 
 
-
-
-
+(pprint (macroexpand-1 '(weathergen.cljs.macros/with-default-lenses
+                          {foo 3
+                           bar 3}
+                          (+ foo bar))))

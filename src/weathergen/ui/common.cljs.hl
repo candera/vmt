@@ -21,9 +21,42 @@
             [weathergen.falcon.files.mission :as mission]
             [weathergen.filesystem :as fs]
             [weathergen.math :as math]
-            [weathergen.settings :refer [app-dir]])
+            [weathergen.settings :refer [app-dir]]
+            [weathergen.time :as time])
   (:require-macros
    [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of hint-> hint]]))
+
+(defn parse-int
+  "Parses an int from a string, returning the int, or nil if it cannot
+  be parsed as an int."
+  [s]
+  (let [n (-> s js/Number. .valueOf)
+        l (long n)]
+    (when (int? n)
+      l)))
+
+(defn parse-float
+  "Parses a number from a string, returning it, or nil if it cannot
+  be parsed."
+  [s]
+  (let [n (-> s js/Number. .valueOf)]
+    (when-not (js/isNaN n)
+      n)))
+
+(defn when-dom3
+  "Like `when-dom` but (hopefully) without the CPU problems."
+  [elem f]
+  (let [counter (atom [0 0 0 10 10 20 20 40 40 80 80 100 250 500])]
+    (if (-> js/document .-documentElement (.contains elem))
+      (f)
+      (let [interval (first @counter)]
+        (when (= interval 500)
+          (.warn js/console
+                 "element did not get added to the DOM in a timely manner"
+                 elem))
+        (swap! counter #(drop 1 %))
+        (with-timeout (or interval 1000)
+          (when-dom3 elem f))))))
 
 ;; (set! *warn-on-infer* true)
 
@@ -384,8 +417,7 @@
                            js/jQuery
                            ;; (hint-> js/HTMLInputElement)
                            (.minicolors "value" (to-hex-str n) #_(to-hex8-str n))))))
-        (with-timeout 0
-          ;; when-dom i
+        (when-dom3 i
           #(-> i
                js/jQuery
                (hint-> js/HTMLInputElement)
@@ -487,30 +519,68 @@
           :css (cell= {:color color})
           (cell= name)))))))
 
+(defn- iterator-seq
+  [iter]
+  (loop [v    []
+         curr (.next iter)]
+    (if (.-done curr)
+      v
+      (recur (conj v (.-value curr))
+             (.next iter)))))
+
+;; ;; Doesn't work: MutationObservers don't recursively watch the
+;; ;; tree.
+;; (defn when-dom2
+;;   "Like `when-dom`, but without the infinite loop."
+;;   [elem f]
+;;   (if (-> js/document .-body (.contains elem))
+;;     (f)
+;;     (let [observer (atom nil)
+;;           check    (fn [records]
+;;                      (.log js/console
+;;                            "mutated"
+;;                            (->> records
+;;                                 (mapcat #(-> % .-addedNodes .values iterator-seq))
+;;                                 (into [])))
+;;                      (when (->> records
+;;                                 (mapcat #(-> % .-addedNodes .values iterator-seq))
+;;                                 (some #(= % elem)))
+;;                        (.log js/console "found it!")
+;;                        (.disconnect @observer)
+;;                        (f)))]
+;;       (reset! observer (js/MutationObserver. check))
+;;       (.observe @observer
+;;                 (.-body js/document)
+;;                 #js {:childList true
+;;                      :subtree   true})
+;;       elem)))
+
 (defelem select2
   [attrs kids]
-  (with-attr-bindings attrs [data formatter value]
-    (let [index      (->> data
+  (with-attr-bindings attrs [choices formatter value]
+    (assert formatter "select2 requires a formatter")
+    (let [index      (->> choices
                           (zipmap (map #(gstring/format "%05d" %) (range)))
                           (into (sorted-map)))
           formatter* (fn [state]
-                       (formatter (get index (.-id state))))]
+                       (formatter (get index (.-id state))))
+          lookup     (fn [val]
+                       (some->> index
+                                (filter (fn [[id item]]
+                                          (= (:value item) val)))
+                                first
+                                key))]
       (with-let [elem (select attrs kids)]
         (do-watch value
                   (fn [_ n]
                     (let [e (js/$ elem)]
-                      (if-let [found (some->> index
-                                              (filter (fn [[id item]]
-                                                        (= (:value item) n)))
-                                              first
-                                              key)]
+                      (if-let [found (lookup n)]
                         (doto e
                           (.val found)
                           (.trigger "change"))
                         ;; TODO: How do we handle this?
-                        (.log js/console "item" (pr-str n) "not found")))))
-        (with-timeout 0
-          ;; when-dom elem
+                        (.warn js/console "select2: item" (pr-str n) "not found")))))
+        (when-dom3 elem
           #(-> elem
                js/jQuery
                (hint-> js/jQuery)
@@ -526,7 +596,9 @@
                                             (get index)
                                             :value)]
                                  #_(.log js/console "changed" v)
-                                 (reset! value v))))))))))
+                                 (reset! value v))))
+               (.val (lookup @value))
+               (.trigger "change")))))))
 
 (defn image-cache-path
   "Returns a path to where we should cache an image."
@@ -581,6 +653,100 @@
                  (fn [blob]
                    (save-blob-async blob path)))
         (.toDataURL canvas)))))
+
+;; Conformers are functions that take a cell containing a string value
+;; to conform, and return a cell (presumably a formula of the input
+;; cell) that yields a map containing keys:
+;;
+;; :valid? - True if the value is acceptable
+;; :message - Text describing the problem if any
+;; :value - The parsed value
+;;
+;; Note that even if :valid? is false, value may still contain a
+;; value, for those cases where the value could be parsed, but is not
+;; actually valid, like an altitude that's out of bounds. This is
+;; useful in cases where the invalid value is affected by other
+;; values, and may become valid due to changes elsewhere.
+
+(defn conform-nonnegative-integer
+  [s]
+  (formula-of
+   [s]
+   (let [parsed (parse-int s)
+         valid? (and parsed
+                     (not (neg? parsed)))]
+     {:valid? valid?
+      :message (when-not valid?
+                 "Must be whole number, greather than or equal to zero.")
+      :value parsed})))
+
+(defn conform-positive-integer
+  [s]
+  (formula-of
+   [s]
+   (let [parsed (parse-int s)
+         valid? (and parsed (pos? parsed))]
+     {:valid? valid?
+      :message (when-not valid?
+                 "Must be an integer greater than zero.")
+      :value parsed})))
+
+(defn int-conformer
+  "Returns a conformer that will ensure a value parses to an int
+  between `from` and `to`, inclusive."
+  [from to]
+  (let [message (gstring/format "Must be an integer between %d and %d."
+                                from to)]
+    (fn [s]
+      (formula-of
+       [s]
+        (let [parsed (parse-int s)
+              valid? (and parsed (<= from parsed to))]
+          {:valid?  valid?
+           :message (when-not valid?
+                      message)
+           :value   parsed})))))
+
+(defn float-conformer
+  "Returns a conformer that will ensure a value parses to a floating
+  point number between `from` and `to`, inclusive."
+  [from to]
+  (let [message (gstring/format "Must be a number between %f and %f."
+                                from to)]
+    (fn [s]
+      (formula-of
+       [s]
+       (let [n (-> s js/Number. .valueOf)
+             valid? (<= from n to)]
+         {:valid? valid?
+          :message (when-not valid?
+                     message)
+          :value (when-not (js/isNaN n)
+                   n)})))))
+
+(defn conform-nonnegative-float
+  [s]
+  (formula-of
+   [s]
+   (let [parsed (parse-float s)
+         valid? (and parsed (not (neg? parsed)))]
+     {:valid? valid?
+      :message (when-not valid?
+                 "Must be a number greater or equal to zero.")
+      :value parsed})))
+
+(defn compose-conformers
+  "Given two conformers, returns a conformer that will validate only
+  if both of them do. Checks c1 first."
+  [c1 c2]
+  (fn [s]
+    (let [p1 (c1 s)
+          p2 (c2 s)]
+     (formula-of
+      [p1 p2]
+      (if (:valid? p1)
+        p2
+        p1)))))
 
 (defelem team-selector
   "Draws a grid of flags and checkboxes to pick teams."
@@ -764,7 +930,7 @@
       [(when ticks
          (datalist
           :id id
-          (for [val (range 0 101 (/ 100 ticks))]
+          (for [val (range 0 101 (/ 100 (dec ticks)))]
             (option :value val))))
        (input {:type  "range"
                :list  (when ticks id)
@@ -772,6 +938,167 @@
                :max   100
                :value v
                :input #(reset! v @%)})])))
+
+(def ESCAPE_KEY 27)
+(def ENTER_KEY 13)
+
+(defelem validating-edit
+  "Renders a control that will provide feedback as to whether the
+  contents are valid.
+
+  :conform : A function of one argument, a cell containing the current
+  value of the control. Returns a call whose value is a map with keys
+  `:valid?`, `:value`, and `:message`, expressing whether the value is
+  valid, and if not, why not.
+  :fmt : A function that turns the validated value into a displayable
+  string
+  :source: A cell containing the source data for the input control.
+  :update: A function that will be called with the new, valid value.
+  Defaults to setting the source cell.
+  :width: Width in pixels of the input area.
+  :placeholder: Placeholder when input is empty.
+  :css: Styling applied to container div.
+  :align: Specifies text alignment of the input box"
+  [attrs _]
+  (with-attr-bindings attrs [conform fmt source update width placeholder css align]
+    (let [interim  (cell nil)
+          fmt      (or fmt str)
+          value    (formula-of
+                     [interim source]
+                     (if interim
+                       interim
+                       (fmt source)))
+          parsed   (conform value)
+          update   (or update
+                       #(swap! source
+                               (constantly %)))
+          state    (cell :set)
+          focused? (cell false)
+          align    (cell= align)
+          valid?   (formula-of
+                     [parsed]
+                     (empty? (:message parsed)))]
+      (div
+       attrs
+       :css (merge {:position     "relative"
+                    :overflow     "show"
+                    :white-space  "nowrap"
+                    :width        (px (or width 125))
+                    :margin-right (px 3)}
+                   css)
+       (let [i (input :type "text"
+                      :placeholder placeholder
+                      :input #(do
+                                (reset! interim @%)
+                                (reset! state :editing)
+                                #_(if (and (:valid? @parsed)
+                                           (= (:value @parsed) @source))
+                                    (dosync
+                                     (reset! state :set)
+                                     (reset! interim nil))
+                                    (reset! state :editing)))
+                      :change #(let [p @parsed]
+                                 (when-let [v (:value p)]
+                                   (dosync
+                                    (update v)
+                                    (reset! interim nil)
+                                    (reset! state :set))))
+                      :keyup (fn [^KeyboardEvent e]
+                               (when (= ESCAPE_KEY (.-keyCode e))
+                                 (dosync
+                                  (reset! interim nil)
+                                  (reset! state :set))))
+                      :focus #(reset! focused? true)
+                      :blur #(let [p @parsed]
+                               (dosync
+                                (reset! focused? false)
+                                (when-let [v (:value p)]
+                                  (update v)
+                                  (reset! interim nil)
+                                  (reset! state :set))))
+                      :css (formula-of
+                             [state valid? align]
+                             {:font-style    (if (= state :editing)
+                                               "italic"
+                                               "")
+                              :color         (if valid?
+                                               ""
+                                               (colors :invalid))
+                              :background    (if valid?
+                                               ""
+                                               (colors :invalid-background))
+                              :width         (px (- (or width 125)
+                                                    (if valid? 0 20)))
+                              :padding-right (when-not valid? (px 20))
+                              :margin-right  (when-not valid? (px -20))
+                              :text-align    (when align align)})
+                      :value value)]
+         [^js/HTMLImageElement i
+          (img :src "images/error.png"
+               :title (cell= (:message parsed))
+               :click #(-> i (hint-> js/HTMLImageElement) .focus)
+               :css (formula-of
+                      [valid?]
+                      {:position       "relative"
+                       :right          0
+                       :width          (px 14)
+                       :margin-left    (px 3)
+                       :margin-bottom  (px 2)
+                       :vertical-align "middle"
+                       :opacity        (if valid?
+                                         "0"
+                                         "1")}))])
+       (div
+        :toggle (cell= (and (not valid?) focused?))
+        :css {:position     "absolute"
+              :top          (px 24)
+              :font-size    (pct 75)
+              :background   "rgba(221,221,221,0.95)"
+              :border       "1px solid #888"
+              :min-width    (pct 100)
+              :max-width    (px 500)
+              :padding-left (px 2)
+              :z-index      1}
+        (cell= (:message parsed)))))))
+
+;; TODO: We could consider using a lens here instead of separate
+;; source and update
+(defelem time-edit
+  [attrs _]
+  (with-attr-bindings attrs [source update max-time]
+   (validating-edit
+    attrs
+    :width 65
+    :fmt format-time
+    :placeholder "dd/hhmm"
+    :conform (fn [val]
+               (formula-of
+                 [val]
+                 (let [[all dd hh mm] (re-matches #"(\d+)/(\d\d):(\d\d)" (or val ""))
+                       day             (->> dd js/Number. long)
+                       hour            (->> hh js/Number. long)
+                       min             (->> mm js/Number. long)
+                       valid?          (and dd hh mm
+                                            (int? day)
+                                            (int? hour)
+                                            (int? min)
+                                            (<= 0 hour 23)
+                                            (<= 0 min 59))
+                       val             {:day    day
+                                        :hour   hour
+                                        :minute min}
+                       over-max?       (and valid?
+                                            max-time
+                                            (< (time/campaign-time->minutes max-time)
+                                               (time/campaign-time->minutes val)))]
+                   {:valid?  (and valid? (not over-max?))
+                    :message (cond
+                               (not valid?) "Time must be in the format 'dd/hh:mm'"
+                               over-max?    (str "Time cannot be set later than "
+                                                 (format-time max-time)))
+                    :value   {:day    day
+                              :hour   hour
+                              :minute min}}))))))
 
 ;; Note that if we ever go back to a default we've used before, we'll
 ;; pick up whatever the old saved value is. That's a little weird but
@@ -886,12 +1213,16 @@
 ;; the order of the data. Using a fragment to assemble the existing
 ;; elements in the new order seems to work, so that's what I'm going
 ;; with. Need to remember to talk to Micha about this.
+;;
+;; TODO: It would be great if the resulting cells were lenses. Not
+;; sure that's possible.
 (defn keyed-loop-tpl*
   "Like Hoplon's `loop-tpl*` but accepts a `key-fn` which, given an item
   returns an (immutable) key under which to cache it. "
   [items key-fn tpl]
-  (let [pos-map (formula-of [items]
-                  (zipmap (map key-fn items)
+  (let [items* (cell= (vec items))
+        pos-map (formula-of [items*]
+                  (zipmap (map key-fn items*)
                           (range)))
         index     (atom {})]
     (with-let [current (cell [])]
@@ -902,7 +1233,7 @@
                "pos-map" (pr-str @pos-map))
          (reset! current
                  (with-let [frag (.createDocumentFragment js/document)]
-                   (doseq [item @items]
+                   (doseq [item @items*]
                      (let [k (key-fn item)]
                        (when-not (contains? @index k)
                          (swap! index
@@ -914,7 +1245,7 @@
                                                "Creating template item"
                                                "k" k)
                                          (tpl
-                                          (formula-of [items pos-map]
+                                          (formula-of [items* pos-map]
                                             (when-let [pos (get pos-map k)]
-                                              (nth items pos nil)))))}))
+                                              (nth items* pos nil)))))}))
                        (gdom/appendChild frag (get-in @index [k :ui])))))))))))

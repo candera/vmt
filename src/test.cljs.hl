@@ -128,7 +128,7 @@
                 (tr (td (cell= (:key item)))
                     (td (cell= (:text item)))))))))
        (hr)
-       (let [v (cell "Arial")]
+       (let [v (cell "No Such")]
          (div
           (div v
                (buttons/a-button
@@ -137,20 +137,20 @@
           (comm/select2
            :css {:width (px 170)}
            :value v
-           :data (for [font ["Arial"
-                             "Bookman"
-                             "Comic Sans MS"
-                             "Courier"
-                             "Courier New"
-                             "Garamond"
-                             "Georgia"
-                             "Helvetica"
-                             "Palatino"
-                             "Times"
-                             "Times New Roman"
-                             "Verdana"]]
-                   {:value font
-                    :label font})
+           :choices (for [font ["Arial"
+                                "Bookman"
+                                "Comic Sans MS"
+                                "Courier"
+                                "Courier New"
+                                "Garamond"
+                                "Georgia"
+                                "Helvetica"
+                                "Palatino"
+                                "Times"
+                                "Times New Roman"
+                                "Verdana"]]
+                      {:value font
+                       :label font})
            :formatter (fn [{:keys [label]}]
                         (span :css {:font-family label}
                               label)))))
@@ -209,14 +209,14 @@
                           (fn [items]
                             (let [n (rand-int (count items))]
                               (with-let [i* (concat (take n items)
-                                                 [{:id  (->> items
-                                                             (map :id)
-                                                             (reduce max 0)
-                                                             inc)
-                                                   :a (rand-int 1000)
-                                                   :b (rand-int 1000)
-                                                   :c (str (rand-int 1000))}]
-                                                 (drop n items))]
+                                                    [{:id  (->> items
+                                                                (map :id)
+                                                                (reduce max 0)
+                                                                inc)
+                                                      :a (rand-int 1000)
+                                                      :b (rand-int 1000)
+                                                      :c (str (rand-int 1000))}]
+                                                    (drop n items))]
                                 (.log js/console "Inserting" n (pr-str i*))))))
            "Insert one")
           (buttons/a-button

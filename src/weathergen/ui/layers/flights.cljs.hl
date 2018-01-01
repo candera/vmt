@@ -755,17 +755,17 @@
   [mission {:keys [map-zoom map-text-scale visible-teams] :as opts}]
   (let [map-flight-path-size  (cell 0)
         map-flight-path-scale (cell= (Math/pow 4.0 map-flight-path-size))
-        state                (merge opts
-                                    {:mission              mission
-                                     :checked-flights      (cell #{})
-                                     :highlighted-flight   (cell nil)
-                                     :display              (cell {})
-                                     :all-flights          (cell= (::mission/flights mission))
-                                     :selected-teams       (cell #{})
-                                     :map-flight-path-size  map-flight-path-size
-                                     :map-flight-path-scale map-flight-path-scale})
-        watchable            (formula-of [mission visible-teams]
-                               [mission visible-teams])]
+        state                 (merge opts
+                                     {:mission               mission
+                                      :checked-flights       (cell #{})
+                                      :highlighted-flight    (cell nil)
+                                      :display               (cell {})
+                                      :all-flights           (cell= (::mission/flights mission))
+                                      :selected-teams        (cell #{})
+                                      :map-flight-path-size  map-flight-path-size
+                                      :map-flight-path-scale map-flight-path-scale})
+        watchable             (formula-of [mission visible-teams]
+                                [mission visible-teams])]
     (do-watch watchable
               ::reset-on-mission-change
               (fn [_ [mission visible-teams]]
@@ -789,5 +789,5 @@
            :controls-fn (fn [scroll-container]
                           (controls (assoc state :scroll-container scroll-container)))
            :map-display-controls-fn #(flight-path-display-controls % state)
-           :overlay (overlay state))))
+           :overlay-fn (fn [] (overlay state)))))
 

@@ -124,6 +124,10 @@
   [deg]
   (-> deg (* Math/PI) (/ 180.0)))
 
+(defn rad->deg
+  [rad]
+  (-> rad (* 180.0) (/ Math/PI)))
+
 (defn rotate
   [deg [x y]]
   (let [rad (deg->rad (- deg))

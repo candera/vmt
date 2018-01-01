@@ -1,0 +1,513 @@
+(ns weathergen.ui.layers.annotations
+  "Responsible for drawing the map annotations and the associated
+  controls. Annotations are informational overlays added to the map:
+  squares, ovals, text, lines, etc."
+  (:require [clojure.pprint :refer [pprint]]
+            [goog.string :as gstring]
+            [goog.string.format]
+            [hoplon.svg :as svg]
+            [weathergen.help :as help :refer [with-help]]
+            [weathergen.math :as math]
+            [weathergen.ui.buttons :as buttons]
+            [weathergen.ui.common :as comm :refer [colors control-section
+                                                   dropdown
+                                                   ems
+                                                   get-image
+                                                   format-time inl
+                                                   map-lens
+                                                   path-lens pct pre-cell px
+                                                   styled team-color triangle
+                                                   validating-edit]])
+  (:require-macros
+   [weathergen.cljs.macros :refer [hint->
+                                   hint->>
+                                   keyed-for-tpl
+                                   with-attr-bindings
+                                   with-bbox
+                                   with-default-lenses
+                                   with-key-lenses
+                                   with-time]]))
+
+(def font-scale-factor ;;0.25
+  7.87406581267874E-4)
+
+(let [base 1.0875853314770578 ;; 1.5
+      factor font-scale-factor]
+  (defn- font-size->scale
+    [font-size]
+    (-> (Math/pow base font-size)
+        (* factor)))
+
+  (defn- scale->font-size
+    [scale]
+    (-> scale
+        (/ factor)
+        Math/log
+        (/ (Math/log base)))))
+
+(comm/register-class!
+ ::no-focus-border
+ [:&:hover {:outline "none"}])
+
+(defn- overlay
+  "Renders the UI for the display of the annotations."
+  [{:keys [annotations map-viewbox map-zoom suppress-bullseye-info-box?]} register-drag-handler]
+  (svg/g
+   :id "annotations-overlay"
+   (keyed-for-tpl key
+     [[k _] annotations]
+     (let [annotation (comm/map-lens annotations k)]
+       (with-key-lenses [type
+                         font-size
+                         font-family
+                         font-color
+                         background
+                         text
+                         x
+                         y
+                         width
+                         height
+                         rotation
+                         editing?
+                         hidden?] annotation
+         (with-default-lenses
+           {x         0
+            y         0
+            width     0
+            height    0
+            rotation  0
+            font-size 0}
+           (let [editing-text? (cell false)
+                 dragging      (cell nil)
+                 scale-factor  (formula-of [font-size]
+                                 (font-size->scale font-size))
+                 scaled-width  (cell= (/ width font-scale-factor))
+                 scaled-height (cell= (/ height font-scale-factor))]
+             (svg/g
+              :css (formula-of [editing? hidden?]
+                     {:display (when (and (not editing?) hidden?)
+                                 "none")})
+              :transform (cell= (comm/svg-translate x y))
+              (svg/g
+               :transform (cell= (comm/svg-rotate rotation))
+               (svg/g
+                :transform (cell= (comm/svg-scale scale-factor))
+                (svg/foreignObject
+                 :width (cell= (/ width scale-factor))
+                 :height (cell= (/ height scale-factor))
+                 (with-let [elem (div :class (comm/class-for ::no-focus-border))]
+                   (elem
+                    :xmlns "http://www.w3.org/1999/xhtml"
+                    :contenteditable (when-tpl editing-text? "true")
+                    :click (fn []
+                             (reset! editing-text? true)
+                             (with-timeout 0
+                               (.focus elem)))
+                    :keyup (fn [^KeyboardEvent e]
+                             (when (= comm/ESCAPE_KEY (.-keyCode e))
+                               (dosync
+                                (reset! text (-> elem .-innerText))
+                                (reset! editing-text? false))))
+                    :mousemove (fn [e]
+                                 (reset! suppress-bullseye-info-box? true)
+                                 (.preventDefault e))
+                    :blur (fn [e]
+                            (dosync
+                             (reset! text (-> elem .-innerText))
+                             (reset! editing-text? false)))
+                    :css (formula-of [font-family font-color background font-size editing? dragging]
+                           {:white-space    "pre-wrap"
+                            :pointer-events (if (and editing? (nil? dragging)) "all" "none")
+                            :cursor         (when editing? "text")
+                            :font-family    font-family
+                            :padding        (ems 0 0.2)
+                            :color          (comm/to-rgba font-color)
+                            :background     (comm/to-rgba background)})
+                    text))))
+               (when-tpl editing?
+                 (let [large-border-width (cell= (/ 0.2 map-zoom))
+                       small-border-width (cell= (* large-border-width 0.65))
+                       outer-width        (cell= (+ width (* 2 large-border-width)))
+                       outer-height       (cell= (+ height (* 2 large-border-width)))]
+                   (svg/g
+                    :debug "edit controls"
+                    (svg/g
+                     :debug "edit border"
+                     (svg/rect
+                      :width (cell= (- outer-width large-border-width))
+                      :height (cell= (- outer-height large-border-width))
+                      :x (cell= (* large-border-width -0.5))
+                      :y (cell= (* large-border-width -0.5))
+                      :stroke "lightblue"
+                      :fill "none"
+                      :stroke-width large-border-width)
+                     (svg/rect
+                      :width (cell= (- outer-width large-border-width))
+                      :height (cell= (- outer-height large-border-width))
+                      :x (cell= (* large-border-width -0.5))
+                      :y (cell= (* large-border-width -0.5))
+                      :stroke "blue"
+                      :fill "none"
+                      :stroke-width small-border-width))
+                    (let [size   (cell= (/ 1.7 map-zoom))
+                          button (fn [{:keys [x y name src drag click]}]
+                                   (svg/g
+                                    :debug name
+                                    :transform (cell= (comm/svg-translate x y))
+                                    :mousedown (fn [_]
+                                                 (when drag
+                                                   (register-drag-handler
+                                                    (let [drag-fn (drag)]
+                                                      (reset! dragging name)
+                                                      (fn [dpos final?]
+                                                        (drag-fn dpos final?)
+                                                        (when final?
+                                                          (reset! dragging nil)))))))
+                                    :click (fn [_]
+                                             (when click (click)))
+                                    (svg/rect
+                                     :x 0
+                                     :y 0
+                                     :width size
+                                     :height size
+                                     :stroke "black"
+                                     :fill (formula-of [dragging]
+                                             (if (= dragging name)
+                                               "lightblue"
+                                               "white"))
+                                     :stroke-width (cell= (/ 0.1 map-zoom)))
+                                    (svg/image
+                                     :xlink-href src
+                                     :x (cell= (* size 0.1))
+                                     :y (cell= (* size 0.1))
+                                     :width (cell= (* size 0.8))
+                                     :height (cell= (* size 0.8)))))]
+                      (svg/g
+                       :debug (cell= (str "edit buttons. Dragging: " (pr-str dragging)))
+                       (button {:name "Rotate"
+                                :x    (cell= (- (+ size (/ large-border-width 2))))
+                                :y    (cell= (- (+ size (/ large-border-width 2))))
+                                :src  "images/rotate.svg"
+                                :drag (fn []
+                                        (let [extent (* 0.5 (:width @map-viewbox))
+                                              theta0 @rotation]
+                                          (fn [[dx dy] final?]
+                                            (reset! rotation
+                                                    (-> dx
+                                                        (/ extent)
+                                                        (* 360)
+                                                        (+ theta0))))))})
+                       (button {:name "Move"
+                                :x    (cell= (+ width (/ large-border-width 2)))
+                                :y    (cell= (- (+ size (/ large-border-width 2))))
+                                :src  "images/move.svg"
+                                :drag (fn []
+                                        (let [x0 (:x @annotation)
+                                              y0 (:y @annotation)]
+                                          (fn [[dx dy] final?]
+                                            (swap! annotation
+                                                   assoc
+                                                   :x (+ x0 dx)
+                                                   :y (+ y0 dy)))))})
+                       (button {:name "Resize Text"
+                                :x    (cell= (+ size (/ large-border-width -2)))
+                                :y    (cell= (- (+ size (/ large-border-width 2))))
+                                :src  "images/text-resize.svg"
+                                :drag (fn []
+                                        (let [extent (* 0.5 (:width @map-viewbox))
+                                              size0 @font-size]
+                                          (fn [[dx dy] final?]
+                                            (reset! font-size
+                                                    (-> dx
+                                                        (/ extent)
+                                                        (* 100)
+                                                        (+ size0)
+                                                        (max 1)
+                                                        (min 100))))))})
+                       (button {:name  "Done"
+                                :x     (cell= (- (+ size (/ large-border-width 2))))
+                                :y     (cell= (+ height (/ large-border-width 2)))
+                                :src   "images/checkmark.png"
+                                :click #(reset! editing? false)})
+                       (button {:name  "Delete"
+                                :x     (cell= (+ size (/ large-border-width -2)))
+                                :y     (cell= (+ height (/ large-border-width 2)))
+                                :src   "images/trash.png"
+                                :click #(swap! annotations dissoc @k)})
+                       (button {:name "Resize"
+                                :x    (cell= (+ width (/ large-border-width 2)))
+                                :y    (cell= (+ height (/ large-border-width 2)))
+                                :src  "images/resize.svg"
+                                :drag (fn []
+                                        (let [w0     @width
+                                              h0     @height
+                                              theta0 @rotation]
+                                          (fn [dpos final?]
+                                            (let [[dx' dy'] (math/rotate theta0 dpos)
+                                                  w         (+ w0 dx')
+                                                  h         (+ h0 dy')]
+                                              (swap! annotation
+                                                     assoc
+                                                     :width (max 0 w)
+                                                     :height (max 0 h))))))})))))))))))))))
+
+(defn- text-annotation-controls
+  "Returns UI for the controls used to render a text annotation."
+  [annotation]
+  (with-key-lenses [font-size font-family font-color
+                    background
+                    text
+                    x y
+                    width height
+                    rotation] annotation
+    (with-default-lenses
+      {x         0
+       y         0
+       width     0
+       height    0
+       rotation  0
+       font-size 0}
+      (let [coord-edit #(validating-edit
+                         :width 50
+                         :source %
+                         :conform comm/conform-nonnegative-float
+                         :placeholder "0.00"
+                         :fmt (fn [v] (.toFixed v 2)))]
+        [(tr (td (with-help [:map-controls :annotations :font-size]
+                   "Font Size:"))
+             (td :colspan 2
+                 (comm/slider
+                  :css {:width (px 70)}
+                  :value font-size
+                  :min 1
+                  :max 100))
+             (td (validating-edit
+                  :source font-size
+                  :width 50
+                  :placeholder "0.00"
+                  :conform (comm/float-conformer 1 100)
+                  :fmt (fn [v] (.toFixed v 2)))))
+         (tr (td (with-help [:map-controls :annotations :font]
+                   "Font:"))
+             (td :colspan 2
+                 (comm/select2
+                  :css {:width (px 170)}
+                  :value font-family
+                  :choices (for [font ["Arial"
+                                       "Bookman"
+                                       "Comic Sans MS"
+                                       "Courier"
+                                       "Courier New"
+                                       "Garamond"
+                                       "Georgia"
+                                       "Helvetica"
+                                       "Palatino"
+                                       "Times"
+                                       "Times New Roman"
+                                       "Verdana"]]
+                             {:value font
+                              :label font})
+                  :formatter (fn [{:keys [label]}]
+                               (span :css {:font-family label}
+                                     label)))))
+         (tr (td (with-help [:map-controls :annotations :color]
+                   "Color:"))
+             (td :colspan 2
+                 (comm/color-picker2
+                  :value font-color
+                  :alpha? true)))
+         (tr (td (with-help [:map-controls :annotations :background]
+                   "Background:"))
+             (td :colspan 2
+                 (comm/color-picker2
+                  :value background
+                  :alpha? true)))
+         (tr (td (with-help [:map-controls :annotations :text]
+                   "Text:"))
+             (td :colspan 2
+                 (with-let [elem (textarea)]
+                   (do-watch text
+                             (fn [_ _]
+                               (with-timeout 0
+                                 (-> elem
+                                     js/jQuery
+                                     (.css #js {:height     "auto"
+                                                :overflow-y "hidden"})
+                                     (.height (max 20 (.-scrollHeight elem)))))))
+                   (elem
+                    :css (formula-of [font-family]
+                           {:font-family font-family
+                            :font-size   (pct 100)})
+                    :value text
+                    :placeholder "Enter text here"
+                    :input #(reset! text @%)))))
+         (tr (td (with-help [:map-controls :annotations :location]
+                   "Location:"))
+             (td (coord-edit x))
+             (td (coord-edit y)))
+         (tr (td (with-help [:map-controls :annotations :size]
+                   "Size:"))
+             (td (coord-edit width))
+             (td (coord-edit height)))
+         (tr (td (with-help [:map-controls :annotations :rotation]
+                   "Rotation:"))
+             (td (validating-edit
+                  :width 50
+                  :source rotation
+                  :conform (comm/float-conformer -360 360)
+                  :placeholder "0.00"
+                  :fmt (fn [v] (.toFixed v 2)))))]))))
+
+(defn- rectangle-annotation-controls
+  "Returns UI for the controls used to render a rectangle annotation."
+  [annotation]
+  [(tr (td "Border color:")
+       (td "TODO"))
+   (tr (td "Border width:")
+       (td "TODO"))
+   (tr (td "Fill:")
+       (td "TODO"))])
+
+(defn- arrow-annotation-controls
+  "Returns UI for the controls used to render an arrow annotation."
+  [annotation]
+  [(tr (td "TODO")
+       (td "TODO"))])
+
+(defn- oval-annotation-controls
+  "Returns UI for the controls used to render an oval annotation."
+  [annotation]
+  [(tr (td "TODO")
+       (td "TODO"))])
+
+(defn- image-annotation-controls
+  "Returns UI for the controls used to render an image annotation."
+  [annotation]
+  [(tr (td "TODO")
+       (td "TODO"))])
+
+(defn- controls
+  "Returns UI for the map annotation controls."
+  [{:keys [annotations map-viewbox] :as state}]
+  (control-section
+   :title (with-help [:map-controls :annotations :overview]
+            "Annotations")
+   (div
+    (div
+     :css {:display   "flex"
+           :flex-wrap "wrap"}
+     (keyed-for-tpl key
+       [[k _] annotations]
+       (let [annotation (map-lens annotations k)]
+         (with-key-lenses [type editing? hidden?] annotation
+           (div
+            :css (formula-of [hidden?]
+                   {:border-width  (px 3)
+                    :border-style  "double"
+                    :border-color  "grey"
+                    :padding       (px 0 5 30)
+                    :margin-bottom (px 3)
+                    :margin-right  (px 3)
+                    :background    (if hidden? "rgb(211, 211, 211)" "#f3f3f3")
+                    :position      "relative"})
+            #_(pre
+               :css {:white-space "pre-wrap"}
+               (cell= (with-out-str (pprint annotation))))
+            (table
+             (tr (td (with-help [:map-controls :annotations :type]
+                       "Type:"))
+                 (td (dropdown
+                      :value type
+                      :choices [{:value :text
+                                 :label "Text"}
+                                {:value :rectangle
+                                 :label "Rectangle"}
+                                {:value :arrow
+                                 :label "Arrow"}
+                                {:value :oval
+                                 :label "Oval"}
+                                {:value :image
+                                 :label "Image"}])))
+             (case-tpl type
+               :text (text-annotation-controls annotation)
+               :rectangle (rectangle-annotation-controls annotation)
+               :arrow (arrow-annotation-controls annotation)
+               :oval (oval-annotation-controls annotation)
+               :image (image-annotation-controls annotation)))
+            (buttons/image-button
+             :css {:position "absolute"
+                   :bottom   (px 5)}
+             :click #(swap! editing? not)
+             :title "Edit"
+             :src "images/edit.svg"
+             :width "16px"
+             :height "16px"
+             :latched? editing?)
+            (buttons/image-button
+             :css {:position "absolute"
+                   :bottom   (px 5)
+                   :left (px 32)}
+             :click #(swap! hidden? not)
+             :title "Hide"
+             :src "images/hide-eye.svg"
+             :width "16px"
+             :height "16px"
+             :latched? hidden?)
+            (buttons/image-button
+             :css {:position "absolute"
+                   :bottom   (px 5)
+                   :right    (px 5)}
+             :src "images/trash.png"
+             :width "16px"
+             :title "Remove"
+             :click #(swap! annotations
+                            dissoc
+                            @k)))))))
+    (buttons/a-button
+     :click #(let [{:keys [x y width height]} @map-viewbox]
+               (swap! annotations
+                      assoc
+                      (->> @annotations
+                           keys
+                           (reduce max 0)
+                           inc)
+                      {:type        :text
+                       :text        "Edit this text"
+                       :font-size   (scale->font-size (/ width 59 4))
+                       :font-color  "white"
+                       :font-family "Times New Roman"
+                       :background  "#80000000"
+                       :x           (+ x (/ width 4.0))
+                       :y           (+ y (/ height 2.0))
+                       :width       (/ width 2)
+                       :height      (/ height 12)
+                       :rotation    0
+                       :editing?    true
+                       :hidden?     false}))
+     "Add New"))))
+
+(defn create
+  "Creates the annotations layer."
+  [mission {:keys [map-viewbox map-zoom] :as state}]
+  (let [state (assoc state :annotations (cell (sorted-map)))]
+    {:controls-fn (fn [] (controls state))
+     :overlay-fn  (fn [register-drag-handler]
+                    (overlay state register-drag-handler))
+     :state       state}))
+
+(defn briefing-data
+  "Returns data for saving in a briefing file."
+  [layer]
+  {:annotations (->> layer
+                     :state
+                     :annotations
+                     deref
+                     (reduce-kv (fn [annotations k annotation]
+                                  (assoc annotations k (assoc annotation :editing? false)))
+                                (sorted-map)))})
+
+(defn load-briefing-data
+  "Given briefing data, update the layer with the state from it."
+  [this data]
+  (reset! (get-in this [:state :annotations])
+          (or (:annotations data) (sorted-map))))
