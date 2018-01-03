@@ -4,6 +4,8 @@
 #+TITLE:
 
 * Change Log
+** v055-9 (dev-only)
+- Rectangle annotations
 ** v055-8 (dev-only)
 - Text annotations
 ** v055-5 (dev-only)

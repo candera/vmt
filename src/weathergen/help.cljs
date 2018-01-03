@@ -1055,7 +1055,32 @@ forward and backward in time. "])
      :rotation
      (content
       [:div
-       [:p "The rotation of the selected annotation, in degrees."]])}}
+       [:p "The rotation of the selected annotation, in degrees."]])
+
+     :border-style
+     (content
+      [:div
+       [:p "What type of border, if any, to draw around the annotation."]])
+
+     :border-color
+     (content
+      [:div
+       [:p "Sets the color and transparency of the border."]])
+
+     :border-width
+     (content
+      [:div
+       [:p "Sets the width or thickness of the border."]])
+
+     :border-dash-length
+     (content
+      [:div
+       [:p "When drawing a dashed border, controls how long the dashes are."]])
+
+     :border-dash-spacing
+     (content
+      [:div
+       [:p "When drawing a dashed border, controls how much space there is between the dashes."]])}}
 
    :flights
    {:mission-key

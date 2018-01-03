@@ -28,10 +28,17 @@
                                    with-key-lenses
                                    with-time]]))
 
-(def font-scale-factor ;;0.25
+(comm/register-class!
+ ::no-focus-border
+ [:&:hover {:outline "none"}])
+
+;;; Overlay
+
+(def font-scale-factor
   7.87406581267874E-4)
 
-(let [base 1.0875853314770578 ;; 1.5
+;; TODO: Convert these to use linear->exp and exp->linear, below
+(let [base 1.0875853314770578
       factor font-scale-factor]
   (defn- font-size->scale
     [font-size]
@@ -45,13 +52,125 @@
         Math/log
         (/ (Math/log base)))))
 
-(comm/register-class!
- ::no-focus-border
- [:&:hover {:outline "none"}])
+(defn- linear->exp
+  "Converts `val`, a value on the linear interval `linear-min` to
+  `linear-max`, exponentially along the interval `exp-min` to
+  `exp-max`."
+  [val linear-min linear-max exp-min exp-max]
+  (let [a (/ exp-max exp-min)
+        b (Math/pow a (/ 1.0 (- linear-max linear-min)))
+        c (/ exp-min (Math/pow b linear-min))]
+    (* c (Math/pow b val))))
+
+(defn- exp->linear
+  "Complement of `linear->exp`."
+  [val linear-min linear-max exp-min exp-max]
+  (let [a (/ exp-max exp-min)
+        b (Math/pow a (/ 1.0 (- linear-max linear-min)))
+        c (/ exp-min (Math/pow b linear-min))]
+    (/ (Math/log (/ val c))
+       (Math/log b))))
+
+(defn- text-overlay
+  [{:keys [suppress-bullseye-info-box? dragging]} annotation]
+  (with-key-lenses [font-size
+                    font-family
+                    font-color
+                    background
+                    text
+                    width
+                    height
+                    editing?] annotation
+    (with-default-lenses
+      {width     0
+       height    0
+       font-size 0}
+      (let [editing-text? (cell false)
+            scale-factor  (formula-of [font-size]
+                            (font-size->scale font-size))]
+        (svg/g
+         :transform (cell= (comm/svg-scale scale-factor))
+         (svg/foreignObject
+          :width (cell= (/ width scale-factor))
+          :height (cell= (/ height scale-factor))
+          (with-let [elem (div :class (comm/class-for ::no-focus-border))]
+            (elem
+             :xmlns "http://www.w3.org/1999/xhtml"
+             :contenteditable (when-tpl editing-text? "true")
+             :click (fn []
+                      (reset! editing-text? true)
+                      (with-timeout 0
+                        (.focus elem)))
+             :keyup (fn [^KeyboardEvent e]
+                      (when (= comm/ESCAPE_KEY (.-keyCode e))
+                        (dosync
+                         (reset! text (-> elem .-innerText))
+                         (reset! editing-text? false))))
+             :mousemove (fn [e]
+                          (reset! suppress-bullseye-info-box? true)
+                          (.preventDefault e)
+                          false)
+             :blur (fn [e]
+                     (dosync
+                      (reset! text (-> elem .-innerText))
+                      (reset! editing-text? false)))
+             :css (formula-of [font-family font-color background font-size editing? dragging]
+                    {:white-space    "pre-wrap"
+                     :pointer-events (if (and editing? (nil? dragging)) "all" "none")
+                     :cursor         (when editing? "text")
+                     :font-family    font-family
+                     :padding        (ems 0 0.2)
+                     :color          (comm/to-rgba font-color)
+                     :background     (comm/to-rgba background)})
+             text))))))))
+
+(defn- rectangle-overlay
+  [state annotation]
+  (with-key-lenses [background
+                    border-color
+                    border-width
+                    border-style
+                    border-dash-length
+                    border-dash-spacing
+                    width
+                    height] annotation
+    (with-default-lenses
+      {border-width       0
+       border-dash-length 0
+       border-dash-spacing  0
+       width              0
+       height             0}
+      (let [bw     (formula-of [border-style border-width]
+                     (if (= :none border-style)
+                       0
+                       (/ border-width 200)))
+            offset (cell= (/ bw 2))
+            w      (cell= (max 0 (- width bw)))
+            h      (cell= (max 0 (- height bw)))]
+        (svg/rect
+         :x offset
+         :y offset
+         :width w
+         :height h
+         :stroke (cell= (comm/to-rgba border-color))
+         :stroke-width bw
+         :fill (cell= (comm/to-rgba background))
+         :stroke-dasharray (formula-of [border-style border-dash-length border-dash-spacing]
+                             (when (= border-style :dashed)
+                               (let [dash-length (linear->exp border-dash-length
+                                                              1 100
+                                                              0.005 10)
+                                     gap-length (* dash-length (linear->exp border-dash-spacing
+                                                                            1 100
+                                                                            0.01 100))]
+                                (str dash-length
+                                     " "
+                                     gap-length)))))))))
 
 (defn- overlay
   "Renders the UI for the display of the annotations."
-  [{:keys [annotations map-viewbox map-zoom suppress-bullseye-info-box?]} register-drag-handler]
+  [{:keys [annotations map-viewbox map-zoom] :as state}
+   register-drag-handler]
   (svg/g
    :id "annotations-overlay"
    (keyed-for-tpl key
@@ -77,12 +196,7 @@
             height    0
             rotation  0
             font-size 0}
-           (let [editing-text? (cell false)
-                 dragging      (cell nil)
-                 scale-factor  (formula-of [font-size]
-                                 (font-size->scale font-size))
-                 scaled-width  (cell= (/ width font-scale-factor))
-                 scaled-height (cell= (/ height font-scale-factor))]
+           (let [dragging      (cell nil)]
              (svg/g
               :css (formula-of [editing? hidden?]
                      {:display (when (and (not editing?) hidden?)
@@ -90,40 +204,10 @@
               :transform (cell= (comm/svg-translate x y))
               (svg/g
                :transform (cell= (comm/svg-rotate rotation))
-               (svg/g
-                :transform (cell= (comm/svg-scale scale-factor))
-                (svg/foreignObject
-                 :width (cell= (/ width scale-factor))
-                 :height (cell= (/ height scale-factor))
-                 (with-let [elem (div :class (comm/class-for ::no-focus-border))]
-                   (elem
-                    :xmlns "http://www.w3.org/1999/xhtml"
-                    :contenteditable (when-tpl editing-text? "true")
-                    :click (fn []
-                             (reset! editing-text? true)
-                             (with-timeout 0
-                               (.focus elem)))
-                    :keyup (fn [^KeyboardEvent e]
-                             (when (= comm/ESCAPE_KEY (.-keyCode e))
-                               (dosync
-                                (reset! text (-> elem .-innerText))
-                                (reset! editing-text? false))))
-                    :mousemove (fn [e]
-                                 (reset! suppress-bullseye-info-box? true)
-                                 (.preventDefault e))
-                    :blur (fn [e]
-                            (dosync
-                             (reset! text (-> elem .-innerText))
-                             (reset! editing-text? false)))
-                    :css (formula-of [font-family font-color background font-size editing? dragging]
-                           {:white-space    "pre-wrap"
-                            :pointer-events (if (and editing? (nil? dragging)) "all" "none")
-                            :cursor         (when editing? "text")
-                            :font-family    font-family
-                            :padding        (ems 0 0.2)
-                            :color          (comm/to-rgba font-color)
-                            :background     (comm/to-rgba background)})
-                    text))))
+               (let [state* (assoc state :dragging dragging)]
+                 (case-tpl type
+                   :text (text-overlay state* annotation)
+                   :rectangle (rectangle-overlay state* annotation)))
                (when-tpl editing?
                  (let [large-border-width (cell= (/ 0.2 map-zoom))
                        small-border-width (cell= (* large-border-width 0.65))
@@ -209,21 +293,22 @@
                                                    assoc
                                                    :x (+ x0 dx)
                                                    :y (+ y0 dy)))))})
-                       (button {:name "Resize Text"
-                                :x    (cell= (+ size (/ large-border-width -2)))
-                                :y    (cell= (- (+ size (/ large-border-width 2))))
-                                :src  "images/text-resize.svg"
-                                :drag (fn []
-                                        (let [extent (* 0.5 (:width @map-viewbox))
-                                              size0 @font-size]
-                                          (fn [[dx dy] final?]
-                                            (reset! font-size
-                                                    (-> dx
-                                                        (/ extent)
-                                                        (* 100)
-                                                        (+ size0)
-                                                        (max 1)
-                                                        (min 100))))))})
+                       (when-tpl (cell= (= type :text))
+                         (button {:name "Resize Text"
+                                  :x    (cell= (+ size (/ large-border-width -2)))
+                                  :y    (cell= (- (+ size (/ large-border-width 2))))
+                                  :src  "images/text-resize.svg"
+                                  :drag (fn []
+                                          (let [extent (* 0.5 (:width @map-viewbox))
+                                                size0 @font-size]
+                                            (fn [[dx dy] final?]
+                                              (reset! font-size
+                                                      (-> dx
+                                                          (/ extent)
+                                                          (* 100)
+                                                          (+ size0)
+                                                          (max 1)
+                                                          (min 100))))))}))
                        (button {:name  "Done"
                                 :x     (cell= (- (+ size (/ large-border-width 2))))
                                 :y     (cell= (+ height (/ large-border-width 2)))
@@ -251,122 +336,174 @@
                                                      :width (max 0 w)
                                                      :height (max 0 h))))))})))))))))))))))
 
+;;; Controls
+
+(defn- coord-edit
+  "Returns UI for a coordinate edit over `source`."
+  [source]
+  (validating-edit
+   :width 50
+   :source source
+   :conform comm/conform-nonnegative-float
+   :placeholder "0.00"
+   :fmt (fn [v] (.toFixed v 2))))
+
+(defn- location-controls
+  "Returns UI for the location of an annotation."
+  [annotation]
+  (with-key-lenses [x y] annotation
+    (with-default-lenses
+      {x 0
+       y 0}
+      (tr (td (with-help [:map-controls :annotations :location]
+                "Location:"))
+          (td (coord-edit x))
+          (td (coord-edit y))))))
+
+(defn- size-controls
+  "Returns UI for the size of an annotation."
+  [annotation]
+  (with-key-lenses [width height] annotation
+    (with-default-lenses
+      {width  0
+       height 0}
+      (tr (td (with-help [:map-controls :annotations :size]
+                "Size:"))
+          (td (coord-edit width))
+          (td (coord-edit height))))))
+
+(defn- rotation-controls
+  "Returns UI for the rotation of an annotation."
+  [annotation]
+  (with-key-lenses [rotation] annotation
+    (with-default-lenses
+      {rotation 0}
+      (tr (td (with-help [:map-controls :annotations :rotation]
+                "Rotation:"))
+          (td (validating-edit
+               :width 50
+               :source rotation
+               :conform (comm/float-conformer -360 360)
+               :placeholder "0.00"
+               :fmt (fn [v] (.toFixed v 2))))))))
+
+(defn- range-controls
+  "Returns UI for a range slider that moves between 1 and 100."
+  [label help-tag source]
+  (tr (td (with-help [:map-controls :annotations help-tag]
+            label))
+      (td :colspan 2
+          (comm/slider
+           :css {:width (px 70)}
+           :value source
+           :min 1
+           :max 100))
+      (td (validating-edit
+           :source source
+           :width 50
+           :placeholder "0.00"
+           :conform (comm/float-conformer 1 100)
+           :fmt (fn [v] (.toFixed v 2))))))
+
+(defn- color-controls
+  "Returns UI for a color picker control."
+  [label help-tag source]
+  (tr (td (with-help [:map-controls :annotations help-tag]
+            label))
+      (td :colspan 2
+          (comm/color-picker2
+           :value source
+           :alpha? true))))
+
 (defn- text-annotation-controls
   "Returns UI for the controls used to render a text annotation."
   [annotation]
   (with-key-lenses [font-size font-family font-color
                     background
                     text
-                    x y
                     width height
                     rotation] annotation
     (with-default-lenses
-      {x         0
-       y         0
-       width     0
-       height    0
-       rotation  0
-       font-size 0}
-      (let [coord-edit #(validating-edit
-                         :width 50
-                         :source %
-                         :conform comm/conform-nonnegative-float
-                         :placeholder "0.00"
-                         :fmt (fn [v] (.toFixed v 2)))]
-        [(tr (td (with-help [:map-controls :annotations :font-size]
-                   "Font Size:"))
-             (td :colspan 2
-                 (comm/slider
-                  :css {:width (px 70)}
-                  :value font-size
-                  :min 1
-                  :max 100))
-             (td (validating-edit
-                  :source font-size
-                  :width 50
-                  :placeholder "0.00"
-                  :conform (comm/float-conformer 1 100)
-                  :fmt (fn [v] (.toFixed v 2)))))
-         (tr (td (with-help [:map-controls :annotations :font]
-                   "Font:"))
-             (td :colspan 2
-                 (comm/select2
-                  :css {:width (px 170)}
-                  :value font-family
-                  :choices (for [font ["Arial"
-                                       "Bookman"
-                                       "Comic Sans MS"
-                                       "Courier"
-                                       "Courier New"
-                                       "Garamond"
-                                       "Georgia"
-                                       "Helvetica"
-                                       "Palatino"
-                                       "Times"
-                                       "Times New Roman"
-                                       "Verdana"]]
-                             {:value font
-                              :label font})
-                  :formatter (fn [{:keys [label]}]
-                               (span :css {:font-family label}
-                                     label)))))
-         (tr (td (with-help [:map-controls :annotations :color]
-                   "Color:"))
-             (td :colspan 2
-                 (comm/color-picker2
-                  :value font-color
-                  :alpha? true)))
-         (tr (td (with-help [:map-controls :annotations :background]
-                   "Background:"))
-             (td :colspan 2
-                 (comm/color-picker2
-                  :value background
-                  :alpha? true)))
-         (tr (td (with-help [:map-controls :annotations :text]
-                   "Text:"))
-             (td :colspan 2
-                 (with-let [elem (textarea)]
-                   (do-watch text
-                             (fn [_ _]
-                               (with-timeout 0
-                                 (-> elem
-                                     js/jQuery
-                                     (.css #js {:height     "auto"
-                                                :overflow-y "hidden"})
-                                     (.height (max 20 (.-scrollHeight elem)))))))
-                   (elem
-                    :css (formula-of [font-family]
-                           {:font-family font-family
-                            :font-size   (pct 100)})
-                    :value text
-                    :placeholder "Enter text here"
-                    :input #(reset! text @%)))))
-         (tr (td (with-help [:map-controls :annotations :location]
-                   "Location:"))
-             (td (coord-edit x))
-             (td (coord-edit y)))
-         (tr (td (with-help [:map-controls :annotations :size]
-                   "Size:"))
-             (td (coord-edit width))
-             (td (coord-edit height)))
-         (tr (td (with-help [:map-controls :annotations :rotation]
-                   "Rotation:"))
-             (td (validating-edit
-                  :width 50
-                  :source rotation
-                  :conform (comm/float-conformer -360 360)
-                  :placeholder "0.00"
-                  :fmt (fn [v] (.toFixed v 2)))))]))))
+      {font-size 0}
+      [(range-controls "Font Size:" :font-size font-size)
+       (tr (td (with-help [:map-controls :annotations :font]
+                 "Font:"))
+           (td :colspan 2
+               (comm/select2
+                :css {:width (px 170)}
+                :value font-family
+                :choices (for [font ["Arial"
+                                     "Bookman"
+                                     "Comic Sans MS"
+                                     "Courier"
+                                     "Courier New"
+                                     "Garamond"
+                                     "Georgia"
+                                     "Helvetica"
+                                     "Palatino"
+                                     "Times"
+                                     "Times New Roman"
+                                     "Verdana"]]
+                           {:value font
+                            :label font})
+                :formatter (fn [{:keys [label]}]
+                             (span :css {:font-family label}
+                                   label)))))
+       (color-controls "Color:" :color font-color)
+       (color-controls "Background:" :background background)
+       (tr (td (with-help [:map-controls :annotations :text]
+                 "Text:"))
+           (td :colspan 2
+               (with-let [elem (textarea)]
+                 (do-watch text
+                           (fn [_ _]
+                             (with-timeout 0
+                               (-> elem
+                                   js/jQuery
+                                   (.css #js {:height     "auto"
+                                              :overflow-y "hidden"})
+                                   (.height (max 20 (.-scrollHeight elem)))))))
+                 (elem
+                  :css (formula-of [font-family]
+                         {:font-family font-family
+                          :font-size   (pct 100)})
+                  :value text
+                  :placeholder "Enter text here"
+                  :input #(reset! text @%)))))])))
 
 (defn- rectangle-annotation-controls
-  "Returns UI for the controls used to render a rectangle annotation."
+  "Returns UI for the copntrols used to render a rectangle annotation."
   [annotation]
-  [(tr (td "Border color:")
-       (td "TODO"))
-   (tr (td "Border width:")
-       (td "TODO"))
-   (tr (td "Fill:")
-       (td "TODO"))])
+  (with-key-lenses [border-color border-width border-style border-dash-length border-dash-spacing background] annotation
+    (with-default-lenses
+      {border-width       0
+       border-dash-length 0
+       border-dash-spacing  0}
+      (let [dashed? (cell= (= border-style :dashed))
+            has-border? (cell= (#{:dashed :solid} border-style))]
+       (tbody
+        (color-controls "Background:" :background background)
+        (tr (td (with-help [:map-controls :annotations :border-style]
+                  "Border style:"))
+            (td :colspan 2
+                (comm/select2
+                 :css {:width (px 170)}
+                 :value border-style
+                 :choices [{:value :none
+                            :label "No Border"}
+                           {:value :solid
+                            :label "Solid"}
+                           {:value :dashed
+                            :label "Dashed"}]
+                 :formatter :label)))
+        (when-tpl has-border?
+          (color-controls "Border color:" :border-color border-color))
+        (when-tpl has-border?
+          (range-controls "Border width:" :border-width border-width))
+        (when-tpl dashed?
+            (range-controls "Dash length:" :border-dash-length border-dash-length))
+        (when-tpl dashed?
+          (range-controls "Dash spacing:" :border-dash-spacing border-dash-spacing)))))))
 
 (defn- arrow-annotation-controls
   "Returns UI for the controls used to render an arrow annotation."
@@ -400,6 +537,22 @@
        [[k _] annotations]
        (let [annotation (map-lens annotations k)]
          (with-key-lenses [type editing? hidden?] annotation
+           (do-watch type
+                     (fn [_ n]
+                       (.log js/console "Type has changed to" (pr-str n)
+                             "border-width" (pr-str (:border-width n)))
+                       (cond
+                         (= n :rectangle)
+                         (swap! annotation
+                                #(cond-> %
+                                   (nil? (:border-width %))
+                                   (assoc :border-width (/ (:font-size %) 6))
+
+                                   (nil? (:border-dash-length %))
+                                   (assoc :border-dash-length (:font-size %))
+
+                                   (nil? (:border-dash-spacing %))
+                                   (assoc :border-dash-spacing 50))))))
            (div
             :css (formula-of [hidden?]
                    {:border-width  (px 3)
@@ -408,7 +561,14 @@
                     :padding       (px 0 5 30)
                     :margin-bottom (px 3)
                     :margin-right  (px 3)
-                    :background    (if hidden? "rgb(211, 211, 211)" "#f3f3f3")
+                    :background    (when hidden?
+                                     "repeating-linear-gradient(
+                                        45deg,
+                                        rgba(211, 211, 211, 0.6),
+                                        rgba(211, 211, 211, 0.6) 10px,
+                                        rgba(243, 243, 243, 0.6) 10px,
+                                        rgba(243, 243, 243, 0.6) 20px)")
+                    #_(if hidden? "rgb(211, 211, 211)" "#f3f3f3")
                     :position      "relative"})
             #_(pre
                :css {:white-space "pre-wrap"}
@@ -433,7 +593,10 @@
                :rectangle (rectangle-annotation-controls annotation)
                :arrow (arrow-annotation-controls annotation)
                :oval (oval-annotation-controls annotation)
-               :image (image-annotation-controls annotation)))
+               :image (image-annotation-controls annotation))
+             (location-controls annotation)
+             (size-controls annotation)
+             (rotation-controls annotation))
             (buttons/image-button
              :css {:position "absolute"
                    :bottom   (px 5)}
@@ -446,7 +609,7 @@
             (buttons/image-button
              :css {:position "absolute"
                    :bottom   (px 5)
-                   :left (px 32)}
+                   :left     (px 32)}
              :click #(swap! hidden? not)
              :title "Hide"
              :src "images/hide-eye.svg"
@@ -471,19 +634,20 @@
                            keys
                            (reduce max 0)
                            inc)
-                      {:type        :text
-                       :text        "Edit this text"
-                       :font-size   (scale->font-size (/ width 59 4))
-                       :font-color  "white"
-                       :font-family "Times New Roman"
-                       :background  "#80000000"
-                       :x           (+ x (/ width 4.0))
-                       :y           (+ y (/ height 2.0))
-                       :width       (/ width 2)
-                       :height      (/ height 12)
-                       :rotation    0
-                       :editing?    true
-                       :hidden?     false}))
+                      {:type         :text
+                       :text         "Edit this text"
+                       :font-size    (scale->font-size (/ width 59 4))
+                       :font-color   "white"
+                       :font-family  "Times New Roman"
+                       :background   "#80000000"
+                       :x            (+ x (/ width 4.0))
+                       :y            (+ y (/ height 2.0))
+                       :width        (/ width 2)
+                       :height       (/ height 12)
+                       :rotation     0
+                       :editing?     true
+                       :hidden?      false
+                       :border-style :solid}))
      "Add New"))))
 
 (defn create

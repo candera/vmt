@@ -556,10 +556,17 @@
 ;;       elem)))
 
 (defelem select2
+  "Renders a jQuery Select2 control. `:choices` is a (non-cell)
+  sequence of maps, each of which must contain a `:value` key. These
+  values will be used to set the cell passed in for `:value`.
+  `:formatter` is a function which, when passed one of the items from
+  the `:choices` sequence, returns UI used to display it in the
+  dropdown."
   [attrs kids]
   (with-attr-bindings attrs [choices formatter value]
     (assert formatter "select2 requires a formatter")
-    (let [index      (->> choices
+    (let [formatter  (or formatter :label)
+          index      (->> choices
                           (zipmap (map #(gstring/format "%05d" %) (range)))
                           (into (sorted-map)))
           formatter* (fn [state]
