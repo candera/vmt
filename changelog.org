@@ -4,6 +4,8 @@
 #+TITLE:
 
 * Change Log
+** v055-11 (dev-only)
+- Different (better?) rotation controls.
 ** v055-9 (dev-only)
 - Rectangle annotations
 ** v055-8 (dev-only)
