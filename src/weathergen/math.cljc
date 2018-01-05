@@ -43,6 +43,10 @@
   [& vs]
   (apply mapv + vs))
 
+(defn vector-scale
+  [c v]
+  (mapv #(* c %) v))
+
 (defn scramble
   (^double [^long x] (scramble x 1)
    ;; This is faster and seems to give just as good a result. But it
@@ -85,7 +89,6 @@
        (recur (+ result (* (continuous-noise-field (/ x z) (/ y z) seed)
                            (/ z zoom 2.0)))
               (/ z 2))))))
-
 
 (defn magnitude
   [[x y]]
