@@ -561,10 +561,11 @@
   values will be used to set the cell passed in for `:value`.
   `:formatter` is a function which, when passed one of the items from
   the `:choices` sequence, returns UI used to display it in the
-  dropdown."
+  dropdown.
+
+  Formatter defaults to `:label`."
   [attrs kids]
   (with-attr-bindings attrs [choices formatter value]
-    (assert formatter "select2 requires a formatter")
     (let [formatter  (or formatter :label)
           index      (->> choices
                           (zipmap (map #(gstring/format "%05d" %) (range)))
@@ -945,6 +946,16 @@
                :max   100
                :value v
                :input #(reset! v @%)})])))
+
+(defelem checkbox
+  "Renders an HTML checkbox."
+  [attrs _]
+  (with-attr-bindings attrs [change value]
+    (let [change* (or change #(swap! value not))]
+      (input (assoc attrs
+                    :type "checkbox"
+                    :change change*
+                    :value value)))))
 
 (def ESCAPE_KEY 27)
 (def ENTER_KEY 13)

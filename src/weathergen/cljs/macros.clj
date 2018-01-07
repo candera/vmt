@@ -178,10 +178,10 @@
 
 (defmacro with-key-lenses
   "Expands to multiple path lenses over `c`, one for each key in `ks`."
-  [ks sym & body]
+  [c ks & body]
   `(let [~@(->> ks
                 (mapcat (fn [k]
-                          [k (list 'weathergen.ui.common/path-lens sym [(keyword (name k))])])))]
+                          [k (list 'weathergen.ui.common/path-lens c [(keyword (name k))])])))]
      ~@body))
 
 (defmacro with-default-lenses
