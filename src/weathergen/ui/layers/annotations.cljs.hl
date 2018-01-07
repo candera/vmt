@@ -717,6 +717,21 @@
             (buttons/image-button
              :css {:position "absolute"
                    :bottom   (px 5)
+                   :left     (px 59)}
+             :click #(swap! annotations
+                            assoc
+                            (->> @annotations
+                                 keys
+                                 (reduce max 0)
+                                 inc)
+                            @annotation)
+             :title "Hide"
+             :src "images/copy.svg"
+             :width "16px"
+             :height "16px")
+            (buttons/image-button
+             :css {:position "absolute"
+                   :bottom   (px 5)
                    :right    (px 5)}
              :src "images/trash.png"
              :width "16px"
