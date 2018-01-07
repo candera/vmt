@@ -4505,25 +4505,26 @@
       (let [visible? (cell true)]
         (div
          :fade-toggle visible?
-         :css {:border "double"
-               :border-color "black"
-               :background "#945594"
-               :color "white"
-               :position "relative"
+         :css {:border        "double"
+               :border-color  "black"
+               :background    "#945594"
+               :color         "white"
+               :position      "relative"
                :margin-bottom (px 3)
-               :padding (px 0 3)}
+               :padding       (px 0 3)}
          (styled
           :garden [:a {:color "#ebff00"}]
-          :css {:display "inline-block"
+          :css {:display       "inline-block"
                 :padding-right (px 10)}
           message)
          (div
-          :css {:position "absolute"
-                :font-size (pct 150)
+          :css {:position    "absolute"
+                :color       "#ff6b6b"
+                :font-size   (pct 150)
                 :font-weight "bold"
-                :top (px -8)
-                :right (px 5)
-                :cursor "pointer"}
+                :top         (px -8)
+                :right       (px 5)
+                :cursor      "pointer"}
           :click #(reset! visible? false)
           "×"))))))
 

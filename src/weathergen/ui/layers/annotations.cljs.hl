@@ -433,8 +433,7 @@
   [label help-tag source]
   (tr (td (with-help [:map-controls :annotations help-tag]
             label))
-      (td :colspan 2
-          (comm/slider
+      (td (comm/slider
            :css {:width (px 70)}
            :value source
            :min 1
@@ -451,10 +450,21 @@
   [label help-tag source]
   (tr (td (with-help [:map-controls :annotations help-tag]
             label))
-      (td :colspan 2
-          (comm/color-picker2
+      (td (comm/color-picker2
            :value source
-           :alpha? true))))
+           :alpha? true))
+      (td (validating-edit
+           :width 70
+           :source source
+           :conform (fn [source*]
+                      (formula-of [source*]
+                        (let [c      (comm/tinycolor source*)
+                              valid? (.isValid c)]
+                          {:valid?  valid?
+                           :message (when-not valid? "Must be a valid color")
+                           :value   source*})))
+           :placeholder "#aarrggbb"
+           :fmt identity))))
 
 (defn- text-annotation-controls
   "Returns UI for the controls used to render a text annotation."
@@ -476,7 +486,7 @@
                  "Font:"))
            (td :colspan 2
                (comm/select2
-                :css {:width (px 170)}
+                :css {:width (pct 100)}
                 :value font-family
                 :choices (for [font ["Arial"
                                      "Bookman"
@@ -499,7 +509,7 @@
                  "Horizontal alignment:"))
            (td :colspan 2
                (comm/select2
-                :css {:width (px 170)}
+                :css {:width (pct 100)}
                 :value halign
                 :choices [{:value "left"
                            :label "Left"}
@@ -511,7 +521,7 @@
                  "Vertical alignment:"))
            (td :colspan 2
                (comm/select2
-                :css {:width (px 170)}
+                :css {:width (pct 100)}
                 :value valign
                 :choices [{:value :top
                            :label "Top"}
@@ -544,20 +554,11 @@
                           :font-style           (when font-italic? "italic")
                           :font-weight          (when font-bold? "bold")
                           :font-size            (pct 100)
+                          :width                (pct 100)
                           :horizontal-alignment halign})
                   :value text
                   :placeholder "Enter text here"
                   :input #(reset! text @%)))))))))
-
-(defn- rectangle-annotation-controls
-  "Returns UI for the copntrols used to render a rectangle annotation."
-  [annotation]
-  (with-key-lenses annotation
-    [border-color border-width border-style border-dash-length border-dash-spacing background]
-    (with-default-lenses
-      {border-width       0
-       border-dash-length 0
-       border-dash-spacing  0})))
 
 (defn- arrow-annotation-controls
   "Returns UI for the controls used to render an arrow annotation."
@@ -592,7 +593,7 @@
                     "Border style:"))
               (td :colspan 2
                   (comm/select2
-                   :css {:width (px 170)}
+                   :css {:width (pct 100)}
                    :value border-style
                    :choices [{:value :none
                               :label "No Border"}
@@ -648,9 +649,8 @@
                     :padding       (px 0 5 30)
                     :margin-bottom (px 3)
                     :margin-right  (px 3)
-                    :min-width     (px 430)
+                    :min-width     (px 350)
                     :min-height    (px 330)
-                    #_             (if hidden? "rgb(211, 211, 211)" "#f3f3f3")
                     :position      "relative"})
             (div
              :css {:margin (px 5 0 15 7)}
@@ -747,7 +747,8 @@
                        :rotation     0
                        :editing?     true
                        :hidden?      false
-                       :border-style :solid}))
+                       :border-style :solid
+                       :border-color "black"}))
      "Add New"))))
 
 (defn create
