@@ -43,6 +43,10 @@
   [& vs]
   (apply mapv + vs))
 
+(defn vector-subtract
+  [& vs]
+  (apply mapv - vs))
+
 (defn vector-scale
   [c v]
   (mapv #(* c %) v))
