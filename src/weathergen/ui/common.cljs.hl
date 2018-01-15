@@ -1139,7 +1139,9 @@
 (defn svg-translate
   "Returns an SVG translate string."
   [x y]
-  (gstring/format "translate(%f,%f)" x y))
+  (if (and x y)
+    (gstring/format "translate(%f,%f)" x y)
+    ""))
 
 (defn svg-rotate
   "Returns an SVG rotate string."

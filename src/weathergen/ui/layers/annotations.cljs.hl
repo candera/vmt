@@ -76,7 +76,8 @@
 (defn- stroke-and-fill-attrs
   [annotation]
   (with-key-lenses annotation
-    [background
+    [fill-color
+     filled?
      border-color
      border-dash-length
      border-dash-spacing
@@ -92,7 +93,9 @@
                    (/ border-width 200)))]
         {:stroke           (cell= (comm/to-rgba border-color))
          :stroke-width     bw
-         :fill             (cell= (comm/to-rgba background))
+         :fill             (cell= (if filled?
+                                    (comm/to-rgba fill-color)
+                                    "none"))
          :stroke-dasharray (formula-of [border-style border-dash-length border-dash-spacing]
                              (when (= border-style :dashed)
                                (let [dash-length (linear->exp border-dash-length
@@ -109,8 +112,7 @@
   "Returns SVG for the contents of the annotation"
   [{:keys [suppress-bullseye-info-box? dragging]} annotation]
   (with-key-lenses annotation
-    [background
-     border-color border-width border-style border-dash-length border-dash-spacing
+    [border-color border-width border-style border-dash-length border-dash-spacing
      editing?
      font-bold? font-color font-italic? font-family font-size
      halign
@@ -221,7 +223,6 @@
      font-size
      font-family
      font-color
-     background
      text
      x
      y
@@ -412,27 +413,31 @@
    {:keys [annotations map-viewbox map-zoom] :as state}
    {:keys [register-drag delete-annotation] :as handlers}]
   (with-key-lenses annotation
-    [x1 y1 x2 y2 arrowhead-width arrowhead-length shaft heft editing?]
+    [points arrowhead-width arrowhead-length shaft heft editing?]
     (with-default-lenses
-      {x1               0
-       y1               0
-       x2               0
-       y2               0
+      {points           [[0 0] [0 0]]
        arrowhead-width  0
        arrowhead-length 0
-       shaft        0}
+       shaft            0}
       (let [dragging (cell nil)
-            rotation (formula-of [x1 y1 x2 y2]
-                       (-> [x2 y2]
-                           (math/vector-subtract [x1 y1])
-                           arrow-rotation))
-            length   (formula-of [x1 y1 x2 y2]
-                       (-> [x2 y2]
-                           (math/vector-subtract [x1 y1])
-                           math/magnitude))]
+            rotation (formula-of [points]
+                       (let [a (get-in points [0 :coords])
+                             b (get-in points [1 :coords])]
+                         (-> b
+                             (math/vector-subtract a)
+                             arrow-rotation)))
+            length   (formula-of [points]
+                       (let [a (get-in points [0 :coords])
+                             b (get-in points [1 :coords])]
+                         (-> b
+                             (math/vector-subtract a)
+                             math/magnitude)))]
         (svg/g
          :debug "Arrow annotation"
-         :transform (cell= (comm/svg-translate x1 y1))
+         :transform (formula-of [points]
+                      (let [a       (get-in points [0 :coords])
+                            [ax ay] a]
+                        (comm/svg-translate ax ay)))
          :css (formula-of [editing?]
                 {:cursor         (when editing? "move")
                  :pointer-events (when-not editing? "none")})
@@ -441,22 +446,22 @@
           (svg/g
            :mousedown (fn [_]
                         (reset! dragging "all")
-                        (let [{:keys [x1 y1 x2 y2]} @annotation]
+                        (let [[a b] (:points @annotation)]
                           (register-drag
-                           (fn [[dx dy] final?]
+                           (fn [[dx dy :as dp] final?]
                              (swap! annotation
-                                    assoc
-                                    :x1 (+ x1 dx)
-                                    :y1 (+ y1 dy)
-                                    :x2 (+ x2 dx)
-                                    :y2 (+ y2 dy))
+                                    #(-> %
+                                         (assoc-in [:points 0 :coords]
+                                                   (math/vector-add (:coords a) dp))
+                                         (assoc-in [:points 1 :coords]
+                                                   (math/vector-add (:coords b) dp))))
                              (when final?
                                (reset! dragging nil))))))
            (stroke-and-fill-attrs annotation)
            (svg/polygon
             :points (formula-of [arrowhead-width arrowhead-length shaft heft length]
                       (let [heft*           (linear->exp heft 1 100 0.1 10)
-                            shaft*      (* heft* (linear->exp shaft 1 100 0.005 4))
+                            shaft*          (* heft* (linear->exp shaft 1 100 0.005 4))
                             head-width      (linear->exp arrowhead-width 1 100 0.005 25)
                             head-length     (linear->exp arrowhead-length 1 100 0.005 10)
                             abs-head-width  (* head-width heft*)
@@ -484,77 +489,131 @@
                 ;; TODO: Make all of this stuff work so that the boxes' x and y refer to the
                 ;; center of the box, not the upper left corner. And rotate them 180 degrees
                 ;; when the absolute rotation is greater than 90.
-                (let [button (fn [{:keys [x y name src drag click]}]
-                               (svg/g
-                                :debug name
-                                :transform (cell= (comm/svg-xform-combine
-                                                   (comm/svg-translate x y)
-                                                   (comm/svg-rotate (- rotation))))
-                                :mousedown (fn [_]
-                                             (when drag
-                                               (register-drag
-                                                (let [drag-fn (drag)]
-                                                  (reset! dragging name)
-                                                  (fn [dpos final?]
-                                                    (drag-fn dpos final?)
-                                                    (when final?
-                                                      (reset! dragging nil)))))))
-                                :click (fn [_]
-                                         (when click (click)))
-                                (svg/rect
-                                 :x (cell= (- half-size))
-                                 :y (cell= (- half-size))
-                                 :width size
-                                 :height size
-                                 :stroke "black"
-                                 :fill (formula-of [dragging]
-                                         (if (= dragging name)
-                                           "lightblue"
-                                           "white"))
-                                 :stroke-width (cell= (/ 0.1 map-zoom)))
-                                (svg/text
-                                 :transform (formula-of [size rotation]
-                                              (comm/svg-xform-combine
-                                               (comm/svg-rotate 0 #_(if (< (Math/abs rotation) 90) 0 180))
-                                               (comm/svg-scale (/ size 17))))
-                                 :css {:pointer-events "none"}
-                                 :x 0
-                                 :y 1.5
-                                 :font-family "Helvetica"
-                                 :stroke "Black"
-                                 :alignment-baseline "middle"
-                                 :text-anchor "middle"
-                                 :text name)
-                                #_(svg/image
-                                   :xlink-href src
-                                   :x (cell= (* size 0.1))
-                                   :y (cell= (* size 0.1))
-                                   :width (cell= (* size 0.8))
-                                   :height (cell= (* size 0.8)))))]
-                  (svg/g
-                   :debug (cell= (str "edit buttons. Dragging: " (pr-str dragging)))
-                   (button {:name "A"
-                            :x    0
-                            :y    0
-                            :drag (fn []
-                                    (let [ax0 (:x1 @annotation)
-                                          ay0 (:y1 @annotation)]
-                                      (fn [[dx dy] final?]
-                                        (swap! annotation
-                                               assoc
-                                               :x1 (+ ax0 dx)
-                                               :y1 (+ ay0 dy)))))})
-                   (button {:name "B"
-                            :x    length
-                            :y    0
-                            :drag (fn []
-                                    (let [x20 (:x2 @annotation)
-                                          y20 (:y2 @annotation)]
-                                      (fn [[dx dy] final?]
-                                        (swap! annotation
-                                               assoc
-                                               :x2 (+ x20 dx)
-                                               :y2 (+ y20 dy)))))})))))))))))))
+                (let [button (fn [{:keys [x y name label src drag click cursor scale]}]
+                               (let [size      (cell= (* size (or scale 1)))
+                                     half-size (cell= (/ size 2))]
+                                 (svg/g
+                                  :debug name
+                                  :transform (cell= (comm/svg-xform-combine
+                                                     (comm/svg-translate x y)
+                                                     (comm/svg-rotate (- rotation))))
+                                  :mousedown (fn [_]
+                                               (when drag
+                                                 (register-drag
+                                                  (let [drag-fn (drag)]
+                                                    (reset! dragging name)
+                                                    (fn [dpos final?]
+                                                      (drag-fn dpos final?)
+                                                      (when final?
+                                                        (reset! dragging nil)))))))
+                                  :click (fn [_]
+                                           (when click (click)))
+                                  :css {:cursor cursor}
+                                  (svg/rect
+                                   :x (cell= (- half-size))
+                                   :y (cell= (- half-size))
+                                   :width size
+                                   :height size
+                                   :stroke "black"
+                                   :fill (formula-of [dragging]
+                                           (if (= dragging name)
+                                             "lightblue"
+                                             "white"))
+                                   :stroke-width (cell= (/ 0.1 map-zoom)))
+                                  (when label
+                                    (svg/text
+                                     :transform (formula-of [size rotation]
+                                                  (comm/svg-xform-combine
+                                                   (comm/svg-rotate 0 #_(if (< (Math/abs rotation) 90) 0 180))
+                                                   (comm/svg-scale (/ size 17))))
+                                     :css {:pointer-events "none"}
+                                     :x 0
+                                     :y 1.5
+                                     :font-family "Helvetica"
+                                     :stroke "Black"
+                                     :alignment-baseline "middle"
+                                     :text-anchor "middle"
+                                     :text label))
+                                  (when src
+                                    (svg/image
+                                     :xlink-href src
+                                     :x (cell= (* size -0.4))
+                                     :y (cell= (* size -0.4))
+                                     :width (cell= (* size 0.8))
+                                     :height (cell= (* size 0.8)))))))]
+                  (let [spacing   (cell= (* 3 size))
+                        bar-width (cell= (* size 0.1))]
+                    (svg/g
+                     :debug (cell= (str "edit buttons. Dragging: " (pr-str dragging)))
+                     (svg/rect
+                      :x (cell= (- spacing))
+                      :y 0
+                      :width spacing
+                      :height bar-width
+                      :fill "blue"
+                      :stroke "lightblue"
+                      :stroke-width (cell= (/ bar-width 2)))
+                     (svg/rect
+                      :x 0
+                      :y (cell= (- spacing))
+                      :width bar-width
+                      :height (cell= (* 2 spacing))
+                      :fill "blue"
+                      :stroke "lightblue"
+                      :stroke-width (cell= (/ bar-width 2)))
+                     (button {:name  "A"
+                              :label "A"
+                              :x     0
+                              :y     0
+                              :drag  (fn []
+                                       (let [[a b] (:points @annotation)]
+                                         (fn [[dx dy :as dp] final?]
+                                           (swap! annotation
+                                                  assoc-in
+                                                  [:points 0 :coords]
+                                                  (math/vector-add (:coords a) dp)))))})
+                     (button {:name  "B"
+                              :label "B"
+                              :x     length
+                              :y     0
+                              :drag  (fn []
+                                       (let [[a b] (:points @annotation)]
+                                         (fn [[dx dy :as dp] final?]
+                                           (swap! annotation
+                                                  assoc-in
+                                                  [:points 1 :coords]
+                                                  (math/vector-add (:coords b) dp)))))})
+                     (button {:name   "Move"
+                              :cursor "move"
+                              :scale  2
+                              :x      (cell= (- spacing))
+                              :y      0
+                              :src    "images/move.svg"
+                              :drag   (fn []
+                                        (let [[a b] (:points @annotation)]
+                                          (fn [[dx dy :as dp] final?]
+                                            (swap! annotation
+                                                   #(-> %
+                                                        (assoc-in [:points 0 :coords]
+                                                                  (math/vector-add (:coords a) dp))
+                                                        (assoc-in [:points 1 :coords]
+                                                                  (math/vector-add (:coords b) dp))))
+                                            (when final?
+                                              (reset! dragging nil)))))})
+                     (button {:name   "Done"
+                              :cursor "pointer"
+                              :scale  2
+                              :x      0
+                              :y      spacing
+                              :src    "images/checkmark.png"
+                              :click  #(reset! editing? false)})
+                     (button {:name   "Delete"
+                              :cursor "pointer"
+                              :scale  2
+                              :x      0
+                              :y      (cell= (- spacing))
+                              :src    "images/trash.png"
+                              :click  delete-annotation}))))))))))))))
 
 (defn- overlay
   "Renders the UI for the display of the annotations."
@@ -562,8 +621,7 @@
    register-drag-handler]
   (svg/g
    :id "annotations-overlay"
-   (keyed-for-tpl key
-     [[k _] annotations]
+   (keyed-for-tpl key [[k _] annotations]
      (let [annotation (comm/map-lens annotations k)
            delete     (fn []
                         (swap! annotations dissoc @k))]
@@ -615,9 +673,12 @@
 (defn- location-controls
   "Returns UI for the location of an annotation."
   [label help-tag x y]
-  (tr (td (helped help-tag label))
-      (td (coord-edit x))
-      (td (coord-edit y))))
+  (with-default-lenses
+    {x 0
+     y 0}
+    (tr (td (helped help-tag label))
+        (td (coord-edit x))
+        (td (coord-edit y)))))
 
 (defn- shape-location-controls
   "Returns UI for the location of a shape annotation."
@@ -670,6 +731,15 @@
            :conform (comm/float-conformer 1 100)
            :fmt (fn [v] (.toFixed v 2))))))
 
+(defn- checkbox-controls
+  "Returns UI for a boolean option."
+  [label help-tag source]
+  (tr (td (helped help-tag label))
+      (td (comm/checkbox
+           :css {:width          (pct 100)
+                 :vertical-align "middle"}
+           :value source))))
+
 (defn- color-controls
   "Returns UI for a color picker control."
   [label help-tag source]
@@ -690,23 +760,19 @@
            :placeholder "#aarrggbb"
            :fmt identity))))
 
-(defn- arrow-location-a-controls
-  "Returns UI for the location of point A of an arrow"
-  [annotation]
-  (with-key-lenses annotation [x1 y1]
-    (with-default-lenses
-      {x1 0
-       y1 0}
-      (location-controls "A:" :point-a x1 y1))))
-
-(defn- arrow-location-b-controls
-  "Returns UI for the location of point B of an arrow"
-  [annotation]
-  (with-key-lenses annotation [x2 y2]
-    (with-default-lenses
-      {x2 0
-       y2 0}
-      (location-controls "B:" :point-a x2 y2))))
+(defn- point-controls
+  "Returns UI for the locations of points within a line or arrow."
+  [annotation allow-modify?]
+  (with-key-lenses annotation [points]
+    (table
+     (keyed-for-tpl :key [point points]
+       (let [index (comm/path-lens point [:index])
+             x     (comm/path-lens point [:coords 0])
+             y     (comm/path-lens point [:coords 1])]
+         (location-controls (cell= (str (js/String.fromCharCode (+ 65 index)) ":"))
+                            :points
+                            x
+                            y))))))
 
 (defn- arrow-appearance-controls
   "Returns UI for the appearance of an arrow."
@@ -720,15 +786,14 @@
       (table
        (range-controls "Overall:" :heft heft)
        (range-controls "Shaft:" :shaft shaft)
-       (range-controls "Arrowhead Width:" :arrowhead-width arrowhead-width)
-       (range-controls "Arrowhead Length:" :arrowhead-length arrowhead-length)))))
+       (range-controls "Head Width:" :arrowhead-width arrowhead-width)
+       (range-controls "Head Length:" :arrowhead-length arrowhead-length)))))
 
-(defn- text-annotation-controls
+(defn- text-controls
   "Returns UI for the controls used to render a text annotation."
   [annotation]
   (with-key-lenses annotation
-    [background
-     font-size font-family font-color font-bold? font-italic?
+    [font-size font-family font-color font-bold? font-italic?
      halign
      height
      rotation
@@ -869,7 +934,8 @@
                                             :font-family         "Times New Roman"
                                             :halign              "center"
                                             :valign              :middle
-                                            :background          "#80000000"
+                                            :fill-color          "#80000000"
+                                            :filled?             true
                                             :x                   (+ x (/ width 4))
                                             :y                   (+ y (/ height 2.0))
                                             :width               (/ width 2)
@@ -889,7 +955,7 @@
           "Add Shape")
          (buttons/a-button
           :click #(make :arrow (fn [{:keys [font-size width x y]}]
-                                 (let [zoom           @map-zoom
+                                 (let [zoom    @map-zoom
                                        rescale (fn [val lower upper]
                                                  (-> val
                                                      (linear->exp 1 100 lower upper)
@@ -899,142 +965,169 @@
                                     :arrowhead-width  (rescale 65 0.005 25)
                                     :arrowhead-length (rescale 82 0.005 10)
                                     :heft             50
-                                    :x1               x
-                                    :y1               y
-                                    :x2               (+ x width)
-                                    :y2               y})))
-          "Add Arrow")))
+                                    :points           [{:key    0
+                                                        :index  0
+                                                        :coords [x y]}
+                                                       {:key    1
+                                                        :index  1
+                                                        :coords [(+ x width) y]}]})))
+          "Add Arrow")
+         (buttons/a-button
+          :click #(make :lines (fn [{:keys [font-size width x y]}]
+                                 (let [zoom    @map-zoom
+                                       rescale (fn [val lower upper]
+                                                 (-> val
+                                                     (linear->exp 1 100 lower upper)
+                                                     (/ zoom)
+                                                     (exp->linear 1 100 lower upper)))]
+                                   {:points [{:key    0
+                                              :index  0
+                                              :coords [x y]}
+                                             {:key    1
+                                              :index  1
+                                              :coords [(+ x width) y]}]})))
+          "Add Lines")))
       (div
        :css {:display   "flex"
              :flex-wrap "wrap"}
        (keyed-for-tpl key
-         [[k _] annotations]
+           [[k _] annotations]
          (let [annotation (map-lens annotations k)]
-           (with-key-lenses annotation [type editing? hidden? background]
-             (do-watch type
-                       (fn [_ n]
-                         #_(.log js/console "Type has changed to" (pr-str n)
-                                 "border-width" (pr-str (:border-width n)))
-                         (cond
-                           (#{:rectangle :oval} n)
-                           (swap! annotation
-                                  #(cond-> %
-                                     ))
+             (with-key-lenses annotation [type editing? hidden? fill-color filled?]
+               (do-watch type
+                         (fn [_ n]
+                           #_(.log js/console "Type has changed to" (pr-str n)
+                                   "border-width" (pr-str (:border-width n)))
+                           (cond
+                             (#{:rectangle :oval} n)
+                             (swap! annotation
+                                    #(cond-> %
+                                       ))
 
-                           (= :arrow n)
-                           (swap! annotation
-                                  #(cond-> %)))))
-             (div
-              :css (formula-of [hidden?]
-                     {:border-width  (px 3)
-                      :border-style  (if hidden? "dashed" "double")
-                      :border-color  "grey"
-                      :padding       (px 0 5 30)
-                      :margin-bottom (px 3)
-                      :margin-right  (px 3)
-                      :min-width     (px 350)
-                      :min-height    (px 330)
-                      :position      "relative"})
-              (div
-               :css {:margin (px 5 0 15 7)}
-               (inl
-                {:css {:margin-right (px 10)}}
-                (helped :type "Type:"))
-               (inl
-                (if-tpl (cell= (#{:rectangle :oval} type))
-                  (comm/select2
-                   :value type
-                   :choices [{:value :rectangle
-                              :label "Rectangle"}
-                             {:value :oval
-                              :label "Oval"}])
-                  (span {:css {:font-size "110%"}}
-                        "Arrow"))))
-              (let [all-tabs   [{:id    :shape-positioning
-                                 :title "Positioning"
-                                 :ui
-                                 (table
-                                  (shape-location-controls annotation)
-                                  (size-controls annotation)
-                                  (rotation-controls annotation))}
-                                {:id    :arrow-positioning
-                                 :title "Positioning"
-                                 :ui
-                                 (table
-                                  (arrow-location-a-controls annotation)
-                                  (arrow-location-b-controls annotation))}
-                                {:id    :arrow-appearance
-                                 :title "Appearance"
-                                 :ui    (arrow-appearance-controls annotation)}
-                                {:id    :border
-                                 :title "Border"
-                                 :ui    (border-controls annotation)}
-                                {:id    :background
-                                 :title "Fill"
-                                 :ui
-                                 (table
-                                  (color-controls "Color:" :background background))}
-                                {:id    :text
-                                 :title "Text"
-                                 :ui    (text-annotation-controls annotation)}
-                                {:id    :debug
-                                 :title "Debug"
-                                 :ui    (pre
-                                         :css {:white-space "pre-wrap"}
-                                         (cell= (with-out-str (pprint (into (sorted-map) annotation)))))}]
-                    shape-tabs #{:shape-positioning :border :background :text :debug}
-                    arrow-tabs #{:arrow-positioning :arrow-appearance :border :background :text :debug}]
-                (if-tpl (cell= (= :arrow type))
-                  (tabs/tabs
-                   :selected (cell :arrow-positioning)
-                   :tabs (->> all-tabs (filter #(-> % :id arrow-tabs))))
-                  (tabs/tabs
-                   :selected (cell :shape-positioning)
-                   :tabs (->> all-tabs (filter #(-> % :id shape-tabs))))))
-              (buttons/image-button
-               :css {:position "absolute"
-                     :bottom   (px 5)}
-               :click #(swap! editing? not)
-               :title "Edit"
-               :src "images/edit.svg"
-               :width "16px"
-               :height "16px"
-               :latched? editing?)
-              (buttons/image-button
-               :css {:position "absolute"
-                     :bottom   (px 5)
-                     :left     (px 32)}
-               :click #(swap! hidden? not)
-               :title "Hide"
-               :src "images/hide-eye.svg"
-               :width "16px"
-               :height "16px"
-               :latched? hidden?)
-              (buttons/image-button
-               :css {:position "absolute"
-                     :bottom   (px 5)
-                     :left     (px 59)}
-               :click #(swap! annotations
-                              assoc
-                              (->> @annotations
-                                   keys
-                                   (reduce max 0)
-                                   inc)
-                              @annotation)
-               :title "Hide"
-               :src "images/copy.svg"
-               :width "16px"
-               :height "16px")
-              (buttons/image-button
-               :css {:position "absolute"
-                     :bottom   (px 5)
-                     :right    (px 5)}
-               :src "images/trash.png"
-               :width "16px"
-               :title "Remove"
-               :click #(swap! annotations
-                              dissoc
-                              @k)))))))))))
+                             (= :arrow n)
+                             (swap! annotation
+                                    #(cond-> %)))))
+               (div
+                :css (formula-of [hidden?]
+                       {:border-width  (px 3)
+                        :border-style  (if hidden? "dashed" "double")
+                        :border-color  "grey"
+                        :padding       (px 0 5 30)
+                        :margin-bottom (px 3)
+                        :margin-right  (px 3)
+                        :min-width     (px 350)
+                        :min-height    (px 330)
+                        :position      "relative"})
+                (div
+                 :css {:margin (px 5 0 15 7)}
+                 (inl
+                  {:css {:margin-right (px 10)}}
+                  (helped :type "Type:"))
+                 (inl
+                  (if-tpl (cell= (#{:rectangle :oval} type))
+                    (comm/select2
+                     :value type
+                     :choices [{:value :rectangle
+                                :label "Rectangle"}
+                               {:value :oval
+                                :label "Oval"}])
+                    (span {:css {:font-size "110%"}}
+                          "Arrow"))))
+                (let [all-tabs   [{:id    :shape-positioning
+                                   :title "Positioning"
+                                   :ui
+                                   (table
+                                    (shape-location-controls annotation)
+                                    (size-controls annotation)
+                                    (rotation-controls annotation))}
+                                  {:id    :arrow-positioning
+                                   :title "Positioning"
+                                   :ui    (point-controls annotation false)}
+                                  {:id    :line-positioning
+                                   :title "Positioning"
+                                   :ui    (point-controls annotation true)}
+                                  {:id    :arrow-appearance
+                                   :title "Appearance"
+                                   :ui    (arrow-appearance-controls annotation)}
+                                  {:id    :border
+                                   :title "Border"
+                                   :ui    (border-controls annotation)}
+                                  {:id    :fill
+                                   :title "Fill"
+                                   :ui
+                                   (comm/styled
+                                    :garden [:td {:min-width (px 40)}]
+                                    (table
+                                     (checkbox-controls "Fill:" :filled? filled?)
+                                     (when-tpl filled?
+                                       (color-controls "Color:" :fill-color fill-color))))}
+                                  {:id    :text
+                                   :title "Text"
+                                   :ui    (text-controls annotation)}
+                                  {:id    :debug
+                                   :title "Debug"
+                                   :ui    (pre
+                                           :css {:white-space "pre-wrap"}
+                                           (cell= (with-out-str (pprint (into (sorted-map) annotation)))))}]
+                      shape-tabs #{:shape-positioning :border :fill :text :debug}
+                      arrow-tabs #{:arrow-positioning :arrow-appearance :border :fill :debug}
+                      line-tabs  #{:line-positioning :border :fill :debug}]
+                  (cond-tpl
+                    (cell= (= :arrow type))
+                    (tabs/tabs
+                     :selected (cell :arrow-positioning)
+                     :tabs (->> all-tabs (filter #(-> % :id arrow-tabs))))
+
+                    (cell= (= :line type))
+                    (tabs/tabs
+                     :selected (cell :line-positioning)
+                     :tabs (->> all-tabs (filter #(-> % :id line-tabs))))
+
+                    :else
+                    (tabs/tabs
+                     :selected (cell :shape-positioning)
+                     :tabs (->> all-tabs (filter #(-> % :id shape-tabs))))))
+                (buttons/image-button
+                 :css {:position "absolute"
+                       :bottom   (px 5)}
+                 :click #(swap! editing? not)
+                 :title "Edit"
+                 :src "images/edit.svg"
+                 :width "16px"
+                 :height "16px"
+                 :latched? editing?)
+                (buttons/image-button
+                 :css {:position "absolute"
+                       :bottom   (px 5)
+                       :left     (px 32)}
+                 :click #(swap! hidden? not)
+                 :title "Hide"
+                 :src "images/hide-eye.svg"
+                 :width "16px"
+                 :height "16px"
+                 :latched? hidden?)
+                (buttons/image-button
+                 :css {:position "absolute"
+                       :bottom   (px 5)
+                       :left     (px 59)}
+                 :click #(swap! annotations
+                                assoc
+                                (swap! index inc)
+                                @annotation)
+                 :title "Hide"
+                 :src "images/copy.svg"
+                 :width "16px"
+                 :height "16px")
+                (buttons/image-button
+                 :css {:position "absolute"
+                       :bottom   (px 5)
+                       :right    (px 5)}
+                 :src "images/trash.png"
+                 :width "16px"
+                 :title "Remove"
+                 :click #(swap! annotations
+                                dissoc
+                                @k)))))))))))
 
 (defn create
   "Creates the annotations layer."
