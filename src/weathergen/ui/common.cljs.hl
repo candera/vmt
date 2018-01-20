@@ -1063,6 +1063,7 @@
                        :margin-left    (px 3)
                        :margin-bottom  (px 2)
                        :vertical-align "middle"
+                       :pointer-events (when valid? "none")
                        :opacity        (if valid?
                                          "0"
                                          "1")}))])
@@ -1207,14 +1208,15 @@
     content)))
 
 (defn path-lens
-  "Returns a lens over a `get-in` style path `p` into cell `c`."
+  "Returns a lens over a `get-in` style path `p` into cell `c`. Path `p`
+  can be a cell."
   [c p]
   (lens
    (formula-of
-    [c]
+    [c p]
     (get-in c p))
    (fn [v]
-     (swap! c assoc-in p v))))
+     (swap! c assoc-in (if (cell? p) @p p) v))))
 
 (defn map-lens
   "Returns a lens over item at key `k` in map `m`, where both `m` and

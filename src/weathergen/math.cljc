@@ -24,6 +24,13 @@
 
 (def whole long)
 
+(defn clamp
+  [min max val]
+  (cond
+    (< val min) min
+    (< max val) max
+    :else val))
+
 (defn mean
   [x y]
   (/ (+ x y) 2.0))
@@ -50,6 +57,11 @@
 (defn vector-scale
   [c v]
   (mapv #(* c %) v))
+
+(defn vector-clamp
+  [[x y] [minx miny] [maxx maxy]]
+  [(clamp minx maxx x)
+   (clamp miny maxy y)])
 
 (defn scramble
   (^double [^long x] (scramble x 1)
@@ -110,13 +122,6 @@
          dfdx (/ (- fx f0) delta)
          dfdy (/ (- fy f0) delta)]
      [dfdx dfdy])))
-
-(defn clamp
-  [min max val]
-  (cond
-    (< val min) min
-    (< max val) max
-    :else val))
 
 (defn nearest
   "Round x to the nearest n. E.g. (nearest 10 15) => 20"
