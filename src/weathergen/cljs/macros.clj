@@ -197,3 +197,9 @@
                                    (reset! ~sym v#)))])))]
      ~@body))
 
+(defmacro map-lens-tpl
+  "Expands to bind `key-sym` and `val-sym` to lenses over map in cell `map-cell`."
+  [key-sym val-sym map-cell & body]
+  `(keyed-for-tpl key [[~key-sym ~'_] ~map-cell]
+     (let [~val-sym (weathergen.ui.common/map-lens ~map-cell ~key-sym)]
+       ~@body)))

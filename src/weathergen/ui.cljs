@@ -64,6 +64,7 @@
                                                    validating-edit
                                                    time-edit]]
             [weathergen.ui.grids :as grids]
+            [weathergen.ui.layers.acmi]
             [weathergen.ui.layers.annotations]
             [weathergen.ui.layers.flights]
             [weathergen.ui.trees :as trees]
@@ -480,6 +481,12 @@
    mission
    {:map-viewbox                 map-viewbox
     :map-zoom                    map-zoom
+    :suppress-bullseye-info-box? suppress-bullseye-info-box?}))
+
+(def acmi-layer
+  (weathergen.ui.layers.acmi/create
+   mission
+   {:map-zoom                    map-zoom
     :suppress-bullseye-info-box? suppress-bullseye-info-box?}))
 
 ;;; Formulas
@@ -2617,6 +2624,7 @@
                      (weather-overrides-overlay weather-params register-drag-handler)
                      ;;(flight-paths-overlay [nx ny] display-params)
                      selected-cell-overlay
+                     (layer-overlay acmi-layer)
                      (layer-overlay annotations-layer register-drag-handler)
                      (layer-overlay flight-paths-layer)
                      airbases-info-overlay
@@ -4628,6 +4636,8 @@
    :annotation-controls         (fn [opts]
                                   (layer-controls annotations-layer))
    :oob-section                 order-of-battle-section
+   :acmi-controls               (fn [opts]
+                                  (layer-controls acmi-layer))
    :test-section                test-section})
 
 (defn weather-page

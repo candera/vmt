@@ -1,0 +1,1 @@
+../../submodules/lsobot/src/lsobot/spec_gen.clj

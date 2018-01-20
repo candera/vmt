@@ -1,0 +1,3 @@
+[submodule "submodules/lsobot"]
+	path = submodules/lsobot
+	url = git@github.com:candera/lsobot

@@ -3024,3 +3024,27 @@ type: 0x64 -> image
                           {foo 3
                            bar 3}
                           (+ foo bar))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def a (-> "/tmp/Ronchi_OCA2.txt.acmi" slurp acmi/read-acmi))
+
+(->> a ::acmi/frames last keys)
+
+(->> a ::acmi/frames last ::acmi/entities vals rand-nth keys)
+
+(->> a ::acmi/frames last ::acmi/entities vals rand-nth ::acmi/object-type)
+
+(->> a ::acmi/frames last ::acmi/entities vals (map ::acmi/object-type) distinct pprint)
+
+(->> a ::acmi/frames last ::acmi/entities vals (filter ::acmi/removed?) count)
+
+(->> a
+     ::acmi/frames
+     (mapcat ::acmi/events)
+     (map ::acmi/event-type)
+     distinct)
+
+(-> a ::acmi/frames last ::acmi/entities vals rand-nth (select-keys [::acmi/u ::acmi/v ::acmi/alt ::acmi/lat ::acmi/long]))
+
+(pprint (macroexpand-1 '(weathergen.cljs.macros/map-lens-tpl k v m (+ m k v))))

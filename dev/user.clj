@@ -9,6 +9,7 @@
             [cognitect.transit :as transit]
             [garden.core :refer [css]]
             [garden.selectors :as css-sel]
+            [lsobot.acmi :as acmi]
             [octet.core :as buf]
             [taoensso.timbre :as log]
             [weathergen.coordinates :as coords]

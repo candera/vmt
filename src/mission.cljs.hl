@@ -104,6 +104,9 @@
               :wind-stability-parameters {}
               :weather-override-parameters {}
               :advanced-controls {}]}
+  {:title "ACMI"
+   :id :acmi
+   :sections [:acmi-controls {}]}
   #_{:title    "Test and Debug"
    :id       :test
    :sections [:test-section {}]}])

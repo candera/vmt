@@ -17,14 +17,24 @@
 
 (def ft-per-nm 6076.12)
 (def ft-per-km 3280.84)
+(def ft-per-m (/ ft-per-km 1000))
 (def nm-per-km (/ ft-per-km ft-per-nm))
 
 ;; TODO: The problem here is that not all maps are 1024x1024.
 (def nm-per-map (-> 1024 (* ft-per-km) (/ ft-per-nm)))
 
+;; We're assuming the maps are square but that seems safe
+(defn nm-per-map2
+  [mission]
+  (-> mission :campaign-info :theater-size-x (* ft-per-km) (/ ft-per-nm)))
+
 (defn nm->ft
   [nm]
   (* nm ft-per-nm))
+
+(defn m->ft
+  [m]
+  (* m ft-per-m))
 
 (defn fgrid->nm
   "Converts from Falcon grid (km) to nm"
@@ -36,6 +46,10 @@
 (defn ft->nm
   [ft]
   (/ ft ft-per-nm))
+
+(defn m->nm
+  [m]
+  (-> m (/ 1000) km->nm))
 
 (defn dm->deg [[d m]]
   (+ d (/ m 60.0)))
@@ -75,6 +89,20 @@
   [[nx ny] x y]
   [(-> y ft->nm (/ nm-per-map) (* ny))
    (- nx (-> x ft->nm (/ nm-per-map) (* nx)))])
+
+(defn ffeet->weather2
+  "Returns fractional weatherspace coordinates given Falcon-style x/y feet"
+  [mission x y]
+  ;; TODO: Still assuming 59x59
+  {:y (-> y ft->nm (/ (nm-per-map2 mission)) (* 59))
+   :x (- 59 (-> x ft->nm (/ (nm-per-map2 mission)) (* 59)))})
+
+(defn acmi->weather
+  "Given a position in ACMI space (like ffeet, but in meters), return
+  one in weather space."
+  [mission u v]
+  {:x (-> u m->nm (/ (nm-per-map2 mission)) (* 59))
+   :y (- 59 (-> v m->nm (/ (nm-per-map2 mission)) (* 59)))})
 
 (defn weather->fgrid
   "Converts from weatherspace coordinates to fgrid coords."
@@ -131,5 +159,4 @@
           d [dx dy]]
       {:heading (math/heading d)
        :distance (-> d math/magnitude (* nm-per-km))})))
-
 
