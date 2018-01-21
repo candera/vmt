@@ -2456,8 +2456,9 @@
                                 (swap! drag-handler #(or % h)))
         doc-move              (fn [^js/MouseEvent e]
                                 (if-let [h @drag-handler]
-                                  (let [x       (aget e "offsetX")
-                                        y       (aget e "offsetY")
+                                  (let [x       (aget e "pageX")
+                                        y       (aget e "pageY")
+                                        _       (.log js/console e)
                                         [sx sy] @drag-start
                                         dx      (- x sx)
                                         dy      (- y sy)]
@@ -2465,8 +2466,8 @@
                                     (.preventDefault e))))
         doc-up                (fn doc-up [e]
                                 (when-let [h @drag-handler]
-                                  (let [x       (aget e "offsetX")
-                                        y       (aget e "offsetY")
+                                  (let [x       (aget e "pageX")
+                                        y       (aget e "pageY")
                                         [sx sy] @drag-start
                                         dx      (- x sx)
                                         dy      (- y sy)]
@@ -2569,7 +2570,6 @@
                                          "xmlns"       "http://www.w3.org/2000/svg"})))
                      :mousemove (fn [e]
                                   (dosync
-                                   (reset! mouse-raw-offset [(aget e "offsetX") (aget e "offsetY")])
                                    (reset! suppress-bullseye-info-box? false)
                                    (reset! mouse-location
                                            (let [[x y] (mouse-weather-coords e)]
@@ -2581,7 +2581,8 @@
                                     (reset! hover-cell nil)))
                      :mousedown (fn [e]
                                   ;; (.log js/console e)
-                                  (reset! drag-start [(aget e "offsetX") (aget e "offsetY")])
+                                  (reset! drag-start
+                                          [(aget e "pageX") (aget e "pageY")])
                                   (when-not @drag-handler
                                     (let [{px0 :x py0 :y} @map-pan]
                                       ;; We have to handle drag coordinates
