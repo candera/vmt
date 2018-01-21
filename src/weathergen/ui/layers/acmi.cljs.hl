@@ -44,8 +44,7 @@
   [mission {:keys [suppress-bullseye-info-box? map-zoom acmis] :as state}]
   (svg/g
    :debug "ACMI layer"
-   (map-lens-tpl
-    path data acmis
+   (map-lens-tpl acmis [path data]
     (let [frame        (formula-of [data]
                          (-> data ::acmi/frames last))
           entities     (formula-of [frame]
@@ -70,8 +69,7 @@
        :entities (cell= (count entities))
        (svg/g
         :debug "entities"
-        (map-lens-tpl
-         entity-id entity entities
+        (map-lens-tpl entities [entity-id entity]
          (let [coords (formula-of [mission entity]
                         (let [{:keys [::acmi/u ::acmi/v]} entity]
                           ;; Yet another place we assume 59x59
@@ -159,8 +157,7 @@
       (buttons/a-button
        :click (fn [_] (reset! acmis {}))
        "Clear")
-      (map-lens-tpl
-       path data acmis
+      (map-lens-tpl acmis [path data]
        (div
         (cell= (when path
                  (str (fs/basename path)
