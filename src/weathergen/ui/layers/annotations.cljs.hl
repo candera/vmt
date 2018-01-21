@@ -24,6 +24,7 @@
    [weathergen.cljs.macros :refer [hint->
                                    hint->>
                                    keyed-for-tpl
+                                   map-lens-tpl
                                    with-attr-bindings
                                    with-bbox
                                    with-default-lenses
@@ -113,7 +114,8 @@
      border-dash-length
      border-dash-spacing
      border-style
-     border-width]
+     border-width
+     open?]
     (with-default-lenses
       {border-dash-length  0
        border-dash-spacing 0
@@ -124,7 +126,7 @@
                    (/ border-width 200)))]
         {:stroke           (cell= (comm/to-rgba border-color))
          :stroke-width     bw
-         :fill             (cell= (if filled?
+         :fill             (cell= (if (and (not open?) filled?)
                                     (comm/to-rgba fill-color)
                                     "none"))
          :stroke-dasharray (formula-of [border-style border-dash-length border-dash-spacing]
@@ -448,7 +450,7 @@
    {:keys [annotations map-viewbox map-zoom dragging rotation add-points?] :as state}
    {:keys [register-drag delete-annotation] :as handlers}]
   (with-key-lenses annotation
-    [points editing? filled?]
+    [points editing? open?]
     (let [ks       (->> points keys cell=)
           k0       (cell= (first ks))
           k1       (cell= (second ks))
@@ -459,14 +461,14 @@
           p1       (map-lens points k1)
           pn       (map-lens points kn)
           n        (cell= (count points))
-          rotation (formula-of [p0 p1 pn n filled?]
+          rotation (formula-of [p0 p1 pn n open?]
                      (let [v01 (-> p1
                                    (math/vector-subtract p0)
                                    math/normalize)
                            v0n (-> pn
                                    (math/vector-subtract p0)
                                    math/normalize)]
-                       (annotation-rotation (if (and filled? (< 2 n))
+                       (annotation-rotation (if (and (not open?) (< 2 n))
                                               (midpoint v01 v0n)
                                               v01))))]
       (svg/g
@@ -575,7 +577,7 @@
                                                      [:points @k]
                                                      (math/vector-add p0 dp)))))})))))
                  (when add-points?
-                   (let [intermediaries (formula-of [points filled?]
+                   (let [intermediaries (formula-of [points open?]
                                           (let [[_ pfirst] (first points)
                                                 [_ plast]  (last points)
                                                 mids       (mapv (fn [[kprev pprev] [knext pnext]]
@@ -584,7 +586,7 @@
                                                                  points
                                                                  (drop 1 points))]
                                             (into (sorted-map)
-                                                  (if (and filled? (< 2 (count points)))
+                                                  (if (and (not open?) (< 2 (count points)))
                                                     (conj mids [nil (midpoint pfirst plast)])
                                                     mids))))]
                      (do-watch intermediaries
@@ -727,7 +729,7 @@
    {:keys [annotations map-viewbox map-zoom] :as state}
    {:keys [register-drag delete-annotation] :as handlers}]
   (with-key-lenses annotation
-    [points filled? editing?]
+    [points editing? open?]
     (let [dragging (cell nil)
           path (formula-of [points]
                  (->> points
@@ -749,9 +751,9 @@
                          (move-all dp final?)
                          (when final?
                            (reset! dragging nil))))))
-       (if-tpl filled?
-         (svg/polygon attrs :points path)
-         (svg/polyline attrs :points path))
+       (if-tpl open?
+         (svg/polyline attrs :points path)
+         (svg/polygon attrs :points path))
        (linear-edit-buttons annotation
                             (assoc state
                                    :dragging dragging
@@ -912,49 +914,60 @@
            :fmt identity))))
 
 (defn- point-controls
+  [points]
+  (table
+   (map-lens-tpl points [k point]
+    (let [point-names (point-names points)
+          x     (comm/path-lens point [0])
+          y     (comm/path-lens point [1])]
+      (location-controls (cell= (str (point-names k) ":"))
+                         :points
+                         x
+                         y
+                         (td
+                          (buttons/image-button
+                           :click (fn [_]
+                                    (swap! points dissoc @k))
+                           ;; :css {:margin-left (px 10)}
+                           :src "images/trash.png"
+                           :title "Delete Point"
+                           :width (px 16))))))))
+
+(defn- line-point-controls
   "Returns UI for the locations of points within a line or arrow."
-  [annotation allow-modify? map-viewbox]
-  (with-key-lenses annotation [points]
-    (let [point-names (point-names points)]
-      (div
-       (table
-        (keyed-for-tpl key [[k _] points]
-          (let [point (comm/map-lens points k)
-                x     (comm/path-lens point [0])
-                y     (comm/path-lens point [1])]
-            (location-controls (cell= (str (point-names k) ":"))
-                               :points
-                               x
-                               y
-                               (when allow-modify?
-                                 (td
-                                  (buttons/image-button
-                                   :click (fn [_]
-                                            (swap! points dissoc @k))
-                                   ;; :css {:margin-left (px 10)}
-                                   :src "images/trash.png"
-                                   :title "Delete Point"
-                                   :width (px 16))))))))
-       (when allow-modify?
-         (buttons/a-button
-          :click (fn [_]
-                   (swap! annotation
-                          update
-                          :points
-                          assoc
-                          (unique-id)
-                          (if (empty? @points)
-                            (let [{:keys [x y width height]} @map-viewbox]
-                              [(+ x (/ width 2))
-                               (+ y (/ height 2))])
-                            (-> @points
-                                vals
-                                last
-                                (math/vector-add [0 (-> @map-viewbox
-                                                        :width
-                                                        (/ 20))])
-                                (math/vector-clamp [0 0] [59 59])))))
-          "Add New Point"))))))
+  [annotation map-viewbox]
+  (div
+   (with-key-lenses annotation [points open?]
+     (div
+      (inl
+       (helped :closed? "Closed?")
+       (comm/checkbox :value (comm/not-lens open?)))
+      (point-controls points)
+      (buttons/a-button
+       :click (fn [_]
+                (swap! annotation
+                       update
+                       :points
+                       assoc
+                       (unique-id)
+                       (if (empty? @points)
+                         (let [{:keys [x y width height]} @map-viewbox]
+                           [(+ x (/ width 2))
+                            (+ y (/ height 2))])
+                         (-> @points
+                             vals
+                             last
+                             (math/vector-add [0 (-> @map-viewbox
+                                                     :width
+                                                     (/ 20))])
+                             (math/vector-clamp [0 0] [59 59])))))
+       "Add New Point")))))
+
+(defn- arrow-point-controls
+  [annotation]
+  (div
+   (with-key-lenses annotation [points]
+     (point-controls points))))
 
 (defn- arrow-appearance-controls
   "Returns UI for the appearance of an arrow."
@@ -1158,7 +1171,8 @@
                                                    (/ zoom)
                                                    (exp->linear 1 100 lower upper)))]
                                  {:points (sorted-map 0 [x y]
-                                                      1 [(+ x width) y])})))
+                                                      1 [(+ x width) y])
+                                  :open? true})))
         "Add Lines")))
     (div
      :css {:display   "flex"
@@ -1166,7 +1180,7 @@
      (keyed-for-tpl key
          [[k _] annotations]
          (let [annotation (map-lens annotations k)]
-           (with-key-lenses annotation [type editing? hidden? fill-color filled?]
+           (with-key-lenses annotation [type editing? hidden? fill-color filled? open?]
              (do-watch type
                        (fn [_ n]
                          #_(.log js/console "Type has changed to" (pr-str n)
@@ -1222,12 +1236,11 @@
                                   (rotation-controls annotation))}
                                 {:id    :arrow-positioning
                                  :title "Positioning"
-                                 :ui    (point-controls annotation false nil)}
+                                 :ui    (arrow-point-controls annotation)}
                                 {:id    :line-positioning
-                                 :title "Positioning"
-                                 :ui    (point-controls annotation
-                                                        true
-                                                        map-viewbox)}
+                                 :title "Points"
+                                 :ui    (line-point-controls annotation
+                                                             map-viewbox)}
                                 {:id    :arrow-appearance
                                  :title "Appearance"
                                  :ui    (arrow-appearance-controls annotation)}
@@ -1236,6 +1249,7 @@
                                  :ui    (border-controls annotation)}
                                 {:id    :fill
                                  :title "Fill"
+                                 :hidden? (cell= (and (= type :lines) open?))
                                  :ui
                                  (comm/styled
                                   :garden [:td {:min-width (px 40)}]
