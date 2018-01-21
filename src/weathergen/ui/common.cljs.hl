@@ -1229,6 +1229,21 @@
    (fn [v]
      (swap! m assoc @k v))))
 
+(defn xform-lens
+  "Returns a lens over cell `c` where the value of the lens is `(f c)`
+  and the inverse of `f`. `f'` most be the inverse of `f`."
+  [c f f']
+  (lens
+   (formula-of [c]
+     (f c))
+   (fn [v]
+     (reset! c (f' v)))))
+
+(defn not-lens
+  "Returns a lens that is the logical inverse of `c`."
+  [c]
+  (xform-lens c not not))
+
 ;; I wound up needing this because I ran into all sorts of trouble
 ;; with Hoplon's dealing with collections. Specifically, when
 ;; reordering a collection, I found that the elements would not match
