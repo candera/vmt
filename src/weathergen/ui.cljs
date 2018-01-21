@@ -2458,7 +2458,6 @@
                                 (if-let [h @drag-handler]
                                   (let [x       (aget e "pageX")
                                         y       (aget e "pageY")
-                                        _       (.log js/console e)
                                         [sx sy] @drag-start
                                         dx      (- x sx)
                                         dy      (- y sy)]

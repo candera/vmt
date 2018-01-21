@@ -17,7 +17,8 @@
             [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [px]]
             [weathergen.ui.grids :as grids]
-            [weathergen.ui.layers.flights :as flights])
+            [weathergen.ui.layers.flights :as flights]
+            [weathergen.ui.tabs :as tabs])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
    [weathergen.cljs.macros :refer [with-time formula-of keyed-for-tpl]]))
@@ -81,6 +82,22 @@
                   (load-mission mission))
         "Load")
        (hr)
+       (let [hidden? (cell false)
+             tabs    [{:id    :a
+                       :title "A"
+                       :ui    (div "A")}
+                      {:id      :b
+                       :title   "B"
+                       :ui      (div "B")
+                       :hidden? hidden?}]]
+         (div
+          (buttons/a-button
+           :click #(swap! hidden? not)
+           "Toggle")
+          (tabs/tabs
+           :selected (cell :a)
+           :tabs tabs)))
+       (hr)
        (let [items (cell (for [n (range 20)]
                            {:key  n
                             :text (gstring/format "%02d" n)}))]
@@ -123,10 +140,10 @@
               (tr (td (cell= (:key item)))
                   (td (cell= (:text item)))))
             #_(keyed-for-tpl :key
-                [item items]
-                (.log js/console "item" (pr-str item))
-                (tr (td (cell= (:key item)))
-                    (td (cell= (:text item)))))))))
+                  [item items]
+                  (.log js/console "item" (pr-str item))
+                  (tr (td (cell= (:key item)))
+                      (td (cell= (:text item)))))))))
        (hr)
        (let [v (cell "No Such")]
          (div
@@ -185,13 +202,13 @@
                                    :b  (- 100 n)
                                    :c  (str (rand-int 1000))})
                                 (into [])))
-             data*    (formula-of [data filter?]
-                        (->> data
-                             (filter (fn [{:keys [a]}]
-                                       (if filter?
-                                         (even? a)
-                                         true)))
-                             (into [])))]
+             data*   (formula-of [data filter?]
+                       (->> data
+                            (filter (fn [{:keys [a]}]
+                                      (if filter?
+                                        (even? a)
+                                        true)))
+                            (into [])))]
          (div
           (buttons/a-button
            :latched? filter?
@@ -209,13 +226,13 @@
                           (fn [items]
                             (let [n (rand-int (count items))]
                               (with-let [i* (concat (take n items)
-                                                    [{:id  (->> items
-                                                                (map :id)
-                                                                (reduce max 0)
-                                                                inc)
-                                                      :a (rand-int 1000)
-                                                      :b (rand-int 1000)
-                                                      :c (str (rand-int 1000))}]
+                                                    [{:id (->> items
+                                                               (map :id)
+                                                               (reduce max 0)
+                                                               inc)
+                                                      :a  (rand-int 1000)
+                                                      :b  (rand-int 1000)
+                                                      :c  (str (rand-int 1000))}]
                                                     (drop n items))]
                                 (.log js/console "Inserting" n (pr-str i*))))))
            "Insert one")
@@ -252,8 +269,8 @@
                                            :b  (- 100 n)
                                            :c  (str (rand-int 1000))}
                                           )) #_[{:id 1 :a 1 :b 2 :c "three"}
-                                        {:id 2 :a 3 :b 1 :c "four"}
-                                        {:id 3 :a 2 :b 4}])
+                                                {:id 2 :a 3 :b 1 :c "four"}
+                                                {:id 3 :a 2 :b 4}])
            :key-fn          :id
            :row-attrs       (fn [id] {})
            :when-empty      "I am empty"
@@ -278,8 +295,8 @@
                                            :b  (- 100 n)
                                            :c  (str (rand-int 1000))}
                                           )) #_[{:id 1 :a 1 :b 2 :c "three"}
-                                        {:id 2 :a 3 :b 1 :c "four"}
-                                        {:id 3 :a 2 :b 4}])
+                                                {:id 2 :a 3 :b 1 :c "four"}
+                                                {:id 3 :a 2 :b 4}])
            :row-attrs       (fn [id] {})
            :when-empty      "I am empty"
            :columns         {:a {:title     "A"
