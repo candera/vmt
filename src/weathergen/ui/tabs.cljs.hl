@@ -8,14 +8,15 @@
 
 (defelem tabs
   "Renders a tab control. `selected` is a cell containing the ID of
-  the currently selected tab. `tabs` is a vector maps describing the
-  tabs.
+  the currently selected tab. `tabs` is a vector of maps describing
+  the tabs.
 
   Keys include:
 
   `:id` - Unique ID for the tab.
   `:title` - Title for the tab.
   `:ui` - Content for the tab.
+  `:hidden?` - A cell for whether the tab is hidden or not
   "
   [attrs _]
   (let [{:keys [selected tabs]} attrs]
@@ -23,11 +24,12 @@
      (div
       :css {:margin-bottom "7px"
             :border-bottom "1px solid lightgray"}
-      (for [{:keys [title id]} tabs]
-        (inl
+      (for [{:keys [title id hidden?]} tabs]
+        (div
          :click #(reset! selected id)
-         :css (formula-of [selected]
-                {:background (when (= selected id) "black")
+         :css (formula-of [selected hidden?]
+                {:display    (if hidden? "none" "inline-block")
+                 :background (when (= selected id) "black")
                  :color      (if (= selected id)
                                "white"
                                "#737373")
