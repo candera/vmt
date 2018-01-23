@@ -110,31 +110,31 @@
   (with-key-lenses annotation
     [fill-color
      filled?
-     border-color
-     border-dash-length
-     border-dash-spacing
-     border-style
-     border-width
+     edge-color
+     edge-dash-length
+     edge-dash-spacing
+     edge-style
+     edge-width
      open?]
     (with-default-lenses
-      {border-dash-length  0
-       border-dash-spacing 0
-       border-width        0}
-      (let [bw (formula-of [border-style border-width]
-                 (if (= :none border-style)
+      {edge-dash-length  0
+       edge-dash-spacing 0
+       edge-width        0}
+      (let [bw (formula-of [edge-style edge-width]
+                 (if (= :none edge-style)
                    0
-                   (/ border-width 200)))]
-        {:stroke           (cell= (comm/to-rgba border-color))
+                   (/ edge-width 200)))]
+        {:stroke           (cell= (comm/to-rgba edge-color))
          :stroke-width     bw
          :fill             (cell= (if (and (not open?) filled?)
                                     (comm/to-rgba fill-color)
                                     "none"))
-         :stroke-dasharray (formula-of [border-style border-dash-length border-dash-spacing]
-                             (when (= border-style :dashed)
-                               (let [dash-length (linear->exp border-dash-length
+         :stroke-dasharray (formula-of [edge-style edge-dash-length edge-dash-spacing]
+                             (when (= edge-style :dashed)
+                               (let [dash-length (linear->exp edge-dash-length
                                                               1 100
                                                               0.005 10)
-                                     gap-length  (* dash-length (linear->exp border-dash-spacing
+                                     gap-length  (* dash-length (linear->exp edge-dash-spacing
                                                                              1 100
                                                                              0.01 100))]
                                  (str dash-length
@@ -145,7 +145,7 @@
   "Returns SVG for the contents of the annotation"
   [{:keys [suppress-bullseye-info-box? dragging]} annotation]
   (with-key-lenses annotation
-    [border-color border-width border-style border-dash-length border-dash-spacing
+    [edge-color edge-width edge-style edge-dash-length edge-dash-spacing
      editing?
      font-bold? font-color font-italic? font-family font-size
      halign
@@ -155,15 +155,15 @@
      valign
      width]
     (with-default-lenses
-      {border-width        0
-       border-dash-length  0
-       border-dash-spacing 0
+      {edge-width        0
+       edge-dash-length  0
+       edge-dash-spacing 0
        width               0
        height              0}
-      (let [bw     (formula-of [border-style border-width]
-                     (if (= :none border-style)
+      (let [bw     (formula-of [edge-style edge-width]
+                     (if (= :none edge-style)
                        0
-                       (/ border-width 200)))
+                       (/ edge-width 200)))
             offset (cell= (/ bw 2))
             w      (cell= (max 0 (- width bw)))
             h      (cell= (max 0 (- height bw)))]
@@ -283,14 +283,14 @@
            (svg/g
             :debug "edit controls"
             (when-tpl editing?
-              (let [large-border-width (cell= (/ 0.2 map-zoom))
-                    small-border-width (cell= (* large-border-width 0.65))
-                    outer-width        (cell= (+ width (* 2 large-border-width)))
-                    outer-height       (cell= (+ height (* 2 large-border-width)))
+              (let [large-edge-width (cell= (/ 0.2 map-zoom))
+                    small-edge-width (cell= (* large-edge-width 0.65))
+                    outer-width        (cell= (+ width (* 2 large-edge-width)))
+                    outer-height       (cell= (+ height (* 2 large-edge-width)))
                     size               (cell= (/ 1.7 map-zoom))]
 
-                (let [path (formula-of [outer-width large-border-width size]
-                             (let [x (- (/ outer-width 2) large-border-width)
+                (let [path (formula-of [outer-width large-edge-width size]
+                             (let [x (- (/ outer-width 2) large-edge-width)
                                    y (* size -2.5)]
                                (str "M" x ",0"
                                     " L" x "," y)))]
@@ -298,29 +298,29 @@
                    (svg/path
                     :stroke "lightblue"
                     :fill "none"
-                    :stroke-width large-border-width
+                    :stroke-width large-edge-width
                     :d path)
                    (svg/path
                     :stroke "blue"
                     :fill "none"
-                    :stroke-width small-border-width
+                    :stroke-width small-edge-width
                     :d path)
                    (svg/rect
-                    :width (cell= (- outer-width large-border-width))
-                    :height (cell= (- outer-height large-border-width))
-                    :x (cell= (* large-border-width -0.5))
-                    :y (cell= (* large-border-width -0.5))
+                    :width (cell= (- outer-width large-edge-width))
+                    :height (cell= (- outer-height large-edge-width))
+                    :x (cell= (* large-edge-width -0.5))
+                    :y (cell= (* large-edge-width -0.5))
                     :stroke "lightblue"
                     :fill "none"
-                    :stroke-width large-border-width)
+                    :stroke-width large-edge-width)
                    (svg/rect
-                    :width (cell= (- outer-width large-border-width))
-                    :height (cell= (- outer-height large-border-width))
-                    :x (cell= (* large-border-width -0.5))
-                    :y (cell= (* large-border-width -0.5))
+                    :width (cell= (- outer-width large-edge-width))
+                    :height (cell= (- outer-height large-edge-width))
+                    :x (cell= (* large-edge-width -0.5))
+                    :y (cell= (* large-edge-width -0.5))
                     :stroke "blue"
                     :fill "none"
-                    :stroke-width small-border-width)
+                    :stroke-width small-edge-width)
                    (let [button (fn [{:keys [x y name src drag click]}]
                                   (svg/g
                                    :debug name
@@ -356,8 +356,8 @@
                      (svg/g
                       :debug (cell= (str "edit buttons. Dragging: " (pr-str dragging)))
                       (button {:name "Move"
-                               :x    (cell= (- (+ size (/ large-border-width 2))))
-                               :y    (cell= (- (+ size (/ large-border-width 2))))
+                               :x    (cell= (- (+ size (/ large-edge-width 2))))
+                               :y    (cell= (- (+ size (/ large-edge-width 2))))
                                :src  "images/move.svg"
                                :drag (fn []
                                        (let [x0 (:x @annotation)
@@ -369,7 +369,7 @@
                                                   :y (+ y0 dy)))))})
                       (button {:name "Rotate"
                                :x    (cell= (+ (/ width 2) (/ size -2)))
-                               :y    (cell= (- (+ (* size 3) (/ large-border-width 2))))
+                               :y    (cell= (- (+ (* size 3) (/ large-edge-width 2))))
                                :src  "images/rotate.svg"
                                :drag (fn []
                                        (let [theta0 @rotation
@@ -392,8 +392,8 @@
 
 
                       (button {:name "Resize Text"
-                               :x    (cell= (+ size (/ large-border-width -2)))
-                               :y    (cell= (- (+ size (/ large-border-width 2))))
+                               :x    (cell= (+ size (/ large-edge-width -2)))
+                               :y    (cell= (- (+ size (/ large-edge-width 2))))
                                :src  "images/text-resize.svg"
                                :drag (fn []
                                        (let [extent (* 0.5 (:width @map-viewbox))
@@ -407,18 +407,18 @@
                                                        (max 1)
                                                        (min 100))))))})
                       (button {:name  "Done"
-                               :x     (cell= (- (+ size (/ large-border-width 2))))
-                               :y     (cell= (+ height (/ large-border-width 2)))
+                               :x     (cell= (- (+ size (/ large-edge-width 2))))
+                               :y     (cell= (+ height (/ large-edge-width 2)))
                                :src   "images/checkmark.png"
                                :click #(reset! editing? false)})
                       (button {:name  "Delete"
-                               :x     (cell= (+ size (/ large-border-width -2)))
-                               :y     (cell= (+ height (/ large-border-width 2)))
+                               :x     (cell= (+ size (/ large-edge-width -2)))
+                               :y     (cell= (+ height (/ large-edge-width 2)))
                                :src   "images/trash.png"
                                :click delete-annotation})
                       (button {:name "Resize"
-                               :x    (cell= (+ width (/ large-border-width 2)))
-                               :y    (cell= (+ height (/ large-border-width 2)))
+                               :x    (cell= (+ width (/ large-edge-width 2)))
+                               :y    (cell= (+ height (/ large-edge-width 2)))
                                :src  "images/resize.svg"
                                :drag (fn []
                                        (let [w0     @width
@@ -451,180 +451,272 @@
    {:keys [register-drag delete-annotation] :as handlers}]
   (with-key-lenses annotation
     [points editing? open?]
-    (let [ks       (->> points keys cell=)
-          k0       (cell= (first ks))
-          k1       (cell= (second ks))
-          kn       (cell= (last ks))
-          p0       (map-lens points k0)
-          x0       (map-lens p0 0)
-          y0       (map-lens p0 1)
-          p1       (map-lens points k1)
-          pn       (map-lens points kn)
-          n        (cell= (count points))
-          rotation (formula-of [p0 p1 pn n open?]
-                     (let [v01 (-> p1
-                                   (math/vector-subtract p0)
-                                   math/normalize)
-                           v0n (-> pn
-                                   (math/vector-subtract p0)
-                                   math/normalize)]
-                       (annotation-rotation (if (and (not open?) (< 2 n))
-                                              (midpoint v01 v0n)
-                                              v01))))]
+    (let [ks        (->> points keys sort cell=)
+          k0        (cell= (first ks))
+          k1        (cell= (second ks))
+          kn-1      (cell= (last (butlast ks)))
+          kn        (cell= (last ks))
+          p0        (map-lens points k0)
+          x0        (map-lens p0 0)
+          y0        (map-lens p0 1)
+          p1        (map-lens points k1)
+          pn-1      (map-lens points kn-1)
+          pn        (map-lens points kn)
+          n         (cell= (count points))
+          rotations (formula-of [points ks k0 kn p0 p1 pn-1 pn n open?]
+                      (let [nexts   (->> ks cycle (drop 1))
+                            prevs   (->> ks cycle (drop (dec n)))
+                            closed? (and (not open?) (< 2 n))
+                            bisect  (fn [from to1 to2]
+                                      (let [v1 (-> to1
+                                                   (math/vector-subtract from)
+                                                   math/normalize)
+                                            v2 (-> to2
+                                                   (math/vector-subtract from)
+                                                   math/normalize)]
+                                        (annotation-rotation (midpoint v1 v2))))
+                            angles  (zipmap ks
+                                            (map bisect (map points ks) (map points nexts) (map points prevs)))]
+                        (if open?
+                          (assoc angles
+                                 k0 (bisect p0 p1 p1)
+                                 kn (bisect pn pn-1 pn-1))
+                          angles)))]
+      #_(do-watch rotations
+          (fn [_ n]
+            (swap! annotation assoc :rotations n)))
       (svg/g
        :debug "edit controls"
        (when-tpl (cell= (and editing? (pos? (count points))))
          (let [size      (cell= (/ 1.0 map-zoom))
                half-size (cell= (/ size 2))]
            (svg/g
-            ;; TODO: Make all of this stuff work so that the boxes' x and y refer to the
-            ;; center of the box, not the upper left corner. And rotate them 180 degrees
-            ;; when the absolute rotation is greater than 90.
-            (let [button (fn [{:keys [x y name label src drag click cursor scale rotation]}]
-                           (let [size      (cell= (* size (or scale 1)))
-                                 half-size (cell= (/ size 2))]
-                             (svg/g
-                              :debug name
-                              :transform (cell= (comm/svg-xform-combine
-                                                 (comm/svg-translate x y)
-                                                 (comm/svg-rotate (or rotation 0))))
-                              :mousedown (fn [_]
-                                           (when drag
-                                             (register-drag
-                                              (let [drag-fn (drag)]
-                                                (reset! dragging name)
-                                                (fn [dpos final?]
-                                                  (drag-fn dpos final?)
-                                                  (when final?
-                                                    (reset! dragging nil)))))))
-                              :click (fn [_]
-                                       (when click (click)))
-                              :css {:cursor cursor}
-                              (svg/rect
-                               :x (cell= (- half-size))
-                               :y (cell= (- half-size))
-                               :width size
-                               :height size
-                               :stroke "black"
-                               :fill (formula-of [dragging]
-                                       (if (= dragging name)
-                                         "lightblue"
-                                         "white"))
-                               :stroke-width (cell= (/ 0.1 map-zoom)))
-                              (when label
-                                (svg/text
-                                 :transform (formula-of [size]
-                                              (comm/svg-scale (/ size 17)))
-                                 :css {:pointer-events "none"}
-                                 :x 0
-                                 :y 1.5
-                                 :font-family "Helvetica"
-                                 :stroke "Black"
-                                 :alignment-baseline "middle"
-                                 :text-anchor "middle"
-                                 :text label))
-                              (when src
-                                (svg/image
-                                 :xlink-href src
-                                 :x (cell= (* size -0.4))
-                                 :y (cell= (* size -0.4))
-                                 :width (cell= (* size 0.8))
-                                 :height (cell= (* size 0.8)))))))]
-              (let [spacing   (cell= (* 3 size))
-                    bar-width (cell= (* size 0.1))]
-                (svg/g
-                 :debug (cell= (str "edit buttons. Dragging: " (pr-str dragging)))
-                 (svg/g
-                  :debug "Point adjustment buttons"
-                  :transform (formula-of [x0 y0 rotation]
-                               (comm/svg-xform-combine
-                                (comm/svg-translate x0 y0)
-                                (comm/svg-rotate rotation)))
-                  (svg/rect
-                   :x (cell= (- spacing))
-                   :y 0
-                   :width spacing
-                   :height bar-width
-                   :fill "blue"
-                   :stroke "lightblue"
-                   :stroke-width (cell= (/ bar-width 2)))
-                  (svg/rect
-                   :x 0
-                   :y (cell= (- spacing))
-                   :width bar-width
-                   :height (cell= (* 2 spacing))
-                   :fill "blue"
-                   :stroke "lightblue"
-                   :stroke-width (cell= (/ bar-width 2))))
-                 (let [point-names (point-names points)]
+            (let [button     (fn [{:keys [x y name label src drag click cursor scale rotation]}]
+                               (let [size      (cell= (* size (or scale 1)))
+                                     half-size (cell= (/ size 2))]
+                                 (svg/g
+                                  :debug name
+                                  :transform (cell= (comm/svg-xform-combine
+                                                     (comm/svg-translate x y)
+                                                     (comm/svg-rotate (or rotation 0))))
+                                  :mousedown (fn [_]
+                                               (when drag
+                                                 (register-drag
+                                                  (let [drag-fn (drag)]
+                                                    (reset! dragging name)
+                                                    (fn [dpos final?]
+                                                      (drag-fn dpos final?)
+                                                      (when final?
+                                                        (reset! dragging nil)))))))
+                                  :click (fn [_]
+                                           (when click (click)))
+                                  :css {:cursor cursor}
+                                  (svg/rect
+                                   :x (cell= (- half-size))
+                                   :y (cell= (- half-size))
+                                   :width size
+                                   :height size
+                                   :stroke "black"
+                                   :fill (formula-of [dragging]
+                                           (if (= dragging name)
+                                             "lightblue"
+                                             "white"))
+                                   :stroke-width (cell= (/ 0.1 map-zoom)))
+                                  (when label
+                                    (svg/text
+                                     :transform (formula-of [size]
+                                                  (comm/svg-scale (/ size 17)))
+                                     :css {:pointer-events "none"}
+                                     :x 0
+                                     :y 1.5
+                                     :font-family "Helvetica"
+                                     :stroke "Black"
+                                     :alignment-baseline "middle"
+                                     :text-anchor "middle"
+                                     :text label))
+                                  (when src
+                                    (svg/image
+                                     :xlink-href src
+                                     :x (cell= (* size -0.4))
+                                     :y (cell= (* size -0.4))
+                                     :width (cell= (* size 0.8))
+                                     :height (cell= (* size 0.8)))))))
+                  spacing-lg (cell= (* 3 size))
+                  spacing-sm (cell= (* spacing-lg 0.75))
+                  bar-width  (cell= (* size 0.1))]
+              (svg/g
+               :debug (cell= (str "edit buttons. Dragging: " (pr-str dragging)))
+
+               (svg/g
+                :debug "Big button bars"
+                :transform (formula-of [x0 y0 k0 rotations]
+                             (comm/svg-xform-combine
+                              (comm/svg-translate x0 y0)
+                              (comm/svg-rotate (get rotations k0 0))))
+                (svg/rect
+                 :x (cell= (- spacing-lg))
+                 :y 0
+                 :width spacing-lg
+                 :height bar-width
+                 :fill "blue"
+                 :stroke "lightblue"
+                 :stroke-width (cell= (/ bar-width 2)))
+                (svg/rect
+                 :x 0
+                 :y (cell= (- spacing-lg))
+                 :width bar-width
+                 :height (cell= (* 2 spacing-lg))
+                 :fill "blue"
+                 :stroke "lightblue"
+                 :stroke-width (cell= (/ bar-width 2))))
+
+               (when-tpl open?
+                 (let [rotation (cell= (get rotations kn 0))]
                    (svg/g
-                    :debug "Point buttons"
-                    (keyed-for-tpl key [[k _] points]
+                    :debug "Add new point (last) bar"
+                    :transform (formula-of [rotation pn]
+                                 (let [[xn yn] pn]
+                                   (comm/svg-xform-combine
+                                    (comm/svg-translate xn yn)
+                                    (comm/svg-rotate (+ 180 rotation)))))
+                    (svg/rect
+                     :x 0
+                     :y 0
+                     :width spacing-sm
+                     :height bar-width
+                     :fill "blue"
+                     :stroke "lightblue"
+                     :stroke-width (cell= (/ bar-width 2))))))
+
+               (let [point-names (point-names points)]
+                 (svg/g
+                  :debug "Point buttons"
+                  (map-lens-tpl points [k point]
+                    (let [rotation (map-lens rotations k)]
                       (svg/g
-                       :transform (formula-of [points k]
-                                    (comm/svg-translate (get-in points [k 0])
-                                                        (get-in points [k 1])))
-                       (button {:name   (cell= (point-names k))
-                                :label  (cell= (point-names k))
-                                :cursor "move"
-                                :x      0
-                                :y      0
-                                :drag   (fn []
-                                          (let [p0 (get-in @annotation [:points @k])]
-                                            (fn [[dx dy :as dp] final?]
-                                              (swap! annotation
-                                                     assoc-in
-                                                     [:points @k]
-                                                     (math/vector-add p0 dp)))))})))))
-                 (when add-points?
-                   (let [intermediaries (formula-of [points open?]
-                                          (let [[_ pfirst] (first points)
-                                                [_ plast]  (last points)
-                                                mids       (mapv (fn [[kprev pprev] [knext pnext]]
-                                                                   [(/ (+ kprev knext) 2)
-                                                                    (midpoint pprev pnext)])
-                                                                 points
-                                                                 (drop 1 points))]
-                                            (into (sorted-map)
-                                                  (if (and (not open?) (< 2 (count points)))
-                                                    (conj mids [nil (midpoint pfirst plast)])
-                                                    mids))))]
-                     (do-watch intermediaries
-                               (fn [_ n]
-                                 (swap! annotation assoc :intermediaries n)))
-                     (svg/g
-                      :debug "Add point buttons"
-                      (keyed-for-tpl key [[k _] intermediaries]
-                        (svg/g
-                         :transform (formula-of [intermediaries k]
-                                      (comm/svg-translate (get-in intermediaries [k 0])
-                                                          (get-in intermediaries [k 1])))
-                         (button {:name   (cell= (str "intermediary" k))
-                                  :label  "+"
-                                  :cursor "move"
-                                  :scale  0.8
-                                  :x      0
-                                  :y      0
-                                  :drag   (fn []
-                                            (let [k0 (or @k (unique-id))
-                                                  p0 (get @intermediaries @k)]
-                                              (fn [[dx dy :as dp] final?]
-                                                (swap! annotation
-                                                       assoc-in
-                                                       [:points k0]
-                                                       (math/vector-add p0 dp)))))}))))))
+                       :debug (cell= (point-names k))
+                       :transform (formula-of [point rotation]
+                                    (comm/svg-xform-combine
+                                     (comm/svg-translate (get point 0)
+                                                         (get point 1))
+                                     (comm/svg-rotate (or rotation 0))))
+                       (when add-points?
+                         (svg/g
+                          :debug (cell= (str "Delete point " k))
+                          (svg/rect
+                           :debug "Delete point bar"
+                           :x 0
+                           :y 0
+                           :width spacing-sm
+                           :height bar-width
+                           :fill "blue"
+                           :stroke "lightblue"
+                           :stroke-width (cell= (/ bar-width 2)))
+                          (button {:name     (cell= (str "-" (point-names k)))
+                                   :label    "-"
+                                   :cursor   "pointer"
+                                   :scale    0.8
+                                   :rotation (cell= (- rotation))
+                                   :x        spacing-sm
+                                   :y        0
+                                   :click    (fn [_]
+                                               (swap! points dissoc @k))})))
+                       (svg/g
+                        :debug "point button"
+                        (button {:name     (cell= (point-names k))
+                                 :label    (cell= (point-names k))
+                                 :cursor   "move"
+                                 :x        0
+                                 :y        0
+                                 :rotation (cell= (- rotation))
+                                 :drag     (fn []
+                                             (let [p0 (get-in @annotation [:points @k])]
+                                               (fn [[dx dy :as dp] final?]
+                                                 (swap! points
+                                                        assoc
+                                                        @k
+                                                        (math/vector-add p0 dp)))))})))))))
+               (when add-points?
+                 (let [intermediaries (formula-of [points open?]
+                                        (let [[_ pfirst] (first points)
+                                              [_ plast]  (last points)
+                                              mids       (mapv (fn [[kprev pprev] [knext pnext]]
+                                                                 [(/ (+ kprev knext) 2)
+                                                                  (midpoint pprev pnext)])
+                                                               points
+                                                               (drop 1 points))]
+                                          (into (sorted-map)
+                                                (if (and (not open?) (< 2 (count points)))
+                                                  (conj mids [nil (midpoint pfirst plast)])
+                                                  mids))))]
+                   #_(do-watch intermediaries
+                       (fn [_ n]
+                         (swap! annotation assoc :intermediaries n)))
+                   (svg/g
+                    :debug "Add point buttons"
+                    (svg/g
+                     :debug "Nonlast"
+                     (keyed-for-tpl key [[k _] intermediaries]
+                       (svg/g
+                        :transform (formula-of [intermediaries k]
+                                     (comm/svg-translate (get-in intermediaries [k 0])
+                                                         (get-in intermediaries [k 1])))
+                        (button {:name   (cell= (str "intermediary" k))
+                                 :label  "+"
+                                 :cursor "move"
+                                 :scale  0.8
+                                 :x      0
+                                 :y      0
+                                 :drag   (fn []
+                                           (let [k0 (or @k (unique-id))
+                                                 p0 (get @intermediaries @k)]
+                                             (fn [[dx dy :as dp] final?]
+                                               (swap! annotation
+                                                      assoc-in
+                                                      [:points k0]
+                                                      (math/vector-add p0 dp)))))}))))
+                    (svg/g
+                     :debug "Last"
+                     (when-tpl open?
+                       (let [rotation (cell= (get rotations kn 0))]
+                         (svg/g
+                          :debug "Add new point (last)"
+                          :transform (formula-of [rotation pn]
+                                       (let [[xn yn] pn]
+                                         (comm/svg-xform-combine
+                                          (comm/svg-translate xn yn)
+                                          (comm/svg-rotate (+ 180 rotation)))))
+                          (button {:name     (cell= (str "add" kn))
+                                   :label    "+"
+                                   :rotation (cell= (- rotation))
+                                   :cursor   "move"
+                                   :scale    0.8
+                                   :x        spacing-sm
+                                   :y        0
+                                   :drag     (fn []
+                                               (let [k0 (unique-id)
+                                                     p0 (math/vector-add
+                                                         (math/rotate (- 180 @rotation)
+                                                                      [@spacing-sm 0])
+                                                         @pn)]
+                                                 (fn [[dx dy :as dp] final?]
+                                                   (swap! annotation
+                                                          assoc-in
+                                                          [:points k0]
+                                                          (math/vector-add p0 dp)))))}))))))))
+               (let [r0 (cell= (get rotations k0 0))]
                  (svg/g
                   :debug "Big edit buttons"
-                  :transform (formula-of [x0 y0 rotation]
+                  :transform (formula-of [x0 y0 r0]
                                (comm/svg-xform-combine
                                 (comm/svg-translate x0 y0)
-                                (comm/svg-rotate rotation)))
+                                (comm/svg-rotate r0)))
                   (button {:name     "Move"
                            :cursor   "move"
                            :scale    2
-                           :x        (cell= (- spacing))
+                           :x        (cell= (- spacing-lg))
                            :y        0
-                           :rotation (cell= (- rotation))
+                           :rotation (cell= (- r0))
                            :src      "images/move.svg"
                            :drag     (fn []
                                        (move-all points))})
@@ -632,16 +724,16 @@
                            :cursor   "pointer"
                            :scale    2
                            :x        0
-                           :y        spacing
-                           :rotation (cell= (- rotation))
+                           :y        spacing-lg
+                           :rotation (cell= (- r0))
                            :src      "images/checkmark.png"
                            :click    #(reset! editing? false)})
                   (button {:name     "Delete"
                            :cursor   "pointer"
                            :scale    2
                            :x        0
-                           :y        (cell= (- spacing))
-                           :rotation (cell= (- rotation))
+                           :y        (cell= (- spacing-lg))
+                           :rotation (cell= (- r0))
                            :src      "images/trash.png"
                            :click    delete-annotation}))))))))))))
 
@@ -1071,43 +1163,43 @@
                   :placeholder "Enter text here"
                   :input #(reset! text @%)))))))))
 
-(defn- border-controls
-  "Returns UI for the controls used to set up borders."
+(defn- edge-controls
+  "Returns UI for the controls used to set up edges."
   [annotation]
   (with-key-lenses annotation
-    [border-style
-     border-width
-     border-color
-     border-dash-length
-     border-dash-spacing]
+    [edge-style
+     edge-width
+     edge-color
+     edge-dash-length
+     edge-dash-spacing]
     (with-default-lenses
-      {border-width        0
-       border-dash-length  0
-       border-dash-spacing 0}
+      {edge-width        0
+       edge-dash-length  0
+       edge-dash-spacing 0}
       (table
-       (let [dashed?     (cell= (= border-style :dashed))
-             has-border? (cell= (#{:dashed :solid} border-style))]
+       (let [dashed?     (cell= (= edge-style :dashed))
+             has-edge? (cell= (#{:dashed :solid} edge-style))]
          (tbody
-          (tr (td (helped :border-style "Border style:"))
+          (tr (td (helped :edge-style "Style:"))
               (td :colspan 2
                   (comm/select2
                    :css {:width (pct 100)}
-                   :value border-style
+                   :value edge-style
                    :choices [{:value :none
-                              :label "No Border"}
+                              :label "No Edge"}
                              {:value :solid
                               :label "Solid"}
                              {:value :dashed
                               :label "Dashed"}]
                    :formatter :label)))
-          (when-tpl has-border?
-            (color-controls "Border color:" :border-color border-color))
-          (when-tpl has-border?
-            (range-controls "Border width:" :border-width border-width))
+          (when-tpl has-edge?
+            (color-controls "Color:" :edge-color edge-color))
+          (when-tpl has-edge?
+            (range-controls "Width:" :edge-width edge-width))
           (when-tpl dashed?
-            (range-controls "Dash length:" :border-dash-length border-dash-length))
+            (range-controls "Dash length:" :edge-dash-length edge-dash-length))
           (when-tpl dashed?
-            (range-controls "Dash spacing:" :border-dash-spacing border-dash-spacing))))))))
+            (range-controls "Dash spacing:" :edge-dash-spacing edge-dash-spacing))))))))
 
 (defn- controls
   "Returns UI for the map annotation controls."
@@ -1121,27 +1213,27 @@
                    (swap! annotations
                           assoc
                           (unique-id)
-                          (let [defaults {:type                type
-                                          :text                "Edit this text"
-                                          :font-size           font-size
-                                          :font-color          "white"
-                                          :font-family         "Times New Roman"
-                                          :halign              "center"
-                                          :valign              :middle
-                                          :fill-color          "#80000000"
-                                          :filled?             true
-                                          :x                   (+ x (/ width 4))
-                                          :y                   (+ y (/ height 2.0))
-                                          :width               (/ width 2)
-                                          :height              (/ height 12)
-                                          :rotation            0
-                                          :editing?            true
-                                          :hidden?             false
-                                          :border-style        :solid
-                                          :border-color        "black"
-                                          :border-width        (/ 12 @map-zoom)
-                                          :border-dash-length  font-size
-                                          :border-dash-spacing 50}]
+                          (let [defaults {:type              type
+                                          :text              "Edit this text"
+                                          :font-size         font-size
+                                          :font-color        "white"
+                                          :font-family       "Times New Roman"
+                                          :halign            "center"
+                                          :valign            :middle
+                                          :fill-color        "#80000000"
+                                          :filled?           true
+                                          :x                 (+ x (/ width 4))
+                                          :y                 (+ y (/ height 2.0))
+                                          :width             (/ width 2)
+                                          :height            (/ height 12)
+                                          :rotation          0
+                                          :editing?          true
+                                          :hidden?           false
+                                          :edge-style        :solid
+                                          :edge-color        "black"
+                                          :edge-width        (/ 12 @map-zoom)
+                                          :edge-dash-length  font-size
+                                          :edge-dash-spacing 50}]
                             (merge defaults (overrides defaults))))))]
       (div
        (buttons/a-button
@@ -1172,19 +1264,19 @@
                                                    (exp->linear 1 100 lower upper)))]
                                  {:points (sorted-map 0 [x y]
                                                       1 [(+ x width) y])
-                                  :open? true})))
+                                  :open?  true})))
         "Add Lines")))
     (div
      :css {:display   "flex"
            :flex-wrap "wrap"}
      (keyed-for-tpl key
          [[k _] annotations]
-         (let [annotation (map-lens annotations k)]
+       (let [annotation (map-lens annotations k)]
            (with-key-lenses annotation [type editing? hidden? fill-color filled? open?]
              (do-watch type
                        (fn [_ n]
                          #_(.log js/console "Type has changed to" (pr-str n)
-                                 "border-width" (pr-str (:border-width n)))
+                                 "edge-width" (pr-str (:edge-width n)))
                          (cond
                            (#{:rectangle :oval} n)
                            (swap! annotation
@@ -1195,10 +1287,10 @@
                            (swap! annotation
                                   #(cond-> %)))))
              (div
-              :css (formula-of [hidden?]
+              :css (formula-of [hidden? editing?]
                      {:border-width  (px 3)
                       :border-style  (if hidden? "dashed" "double")
-                      :border-color  "grey"
+                      :background    (cond editing? "#e0ffff" hidden? "#f0f0f0")
                       :padding       (px 0 5 30)
                       :margin-bottom (px 3)
                       :margin-right  (px 3)
@@ -1244,11 +1336,11 @@
                                 {:id    :arrow-appearance
                                  :title "Appearance"
                                  :ui    (arrow-appearance-controls annotation)}
-                                {:id    :border
-                                 :title "Border"
-                                 :ui    (border-controls annotation)}
-                                {:id    :fill
-                                 :title "Fill"
+                                {:id    :edge
+                                 :title "Edges"
+                                 :ui    (edge-controls annotation)}
+                                {:id      :fill
+                                 :title   "Fill"
                                  :hidden? (cell= (and (= type :lines) open?))
                                  :ui
                                  (comm/styled
@@ -1265,9 +1357,9 @@
                                  :ui    (pre
                                          :css {:white-space "pre-wrap"}
                                          (cell= (with-out-str (pprint (into (sorted-map) annotation)))))}]
-                    shape-tabs #{:shape-positioning :border :fill :text :debug}
-                    arrow-tabs #{:arrow-positioning :arrow-appearance :border :fill :debug}
-                    line-tabs  #{:line-positioning :border :fill :debug}]
+                    shape-tabs #{:shape-positioning :edge :fill :text :debug}
+                    arrow-tabs #{:arrow-positioning :arrow-appearance :edge :fill :debug}
+                    line-tabs  #{:line-positioning :edge :fill :debug}]
                 (cond-tpl
                   (cell= (= :arrow type))
                   (tabs/tabs
