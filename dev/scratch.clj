@@ -3048,3 +3048,5 @@ type: 0x64 -> image
 (-> a ::acmi/frames last ::acmi/entities vals rand-nth (select-keys [::acmi/u ::acmi/v ::acmi/alt ::acmi/lat ::acmi/long]))
 
 (pprint (macroexpand-1 '(weathergen.cljs.macros/map-lens-tpl k v m (+ m k v))))
+
+(def b (-> "/tmp/Ronchi_OCA_lone_wolf.txt.acmi" slurp acmi/read-acmi time))

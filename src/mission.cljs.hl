@@ -75,16 +75,18 @@
          recommended."]))
 
 (ui/weather-page
- [{:title "Mission"
-   :id :mission-info
+ [{:title    "Mission"
+   :id       :mission-info
    :sections [:mission-info-section {}
               :save-briefing-section {}
               :briefing-notes-section {}]}
-  {:title "Map"
-   :id :map-controls
+  {:title    "Map"
+   :id       :map-controls
    :sections [:map-controls-section {}
-              :weather-display-controls {:title "Weather Display Options"}
-              :annotation-controls {}]}
+              :weather-display-controls {:title "Weather Display Options"}]}
+  {:title    "Annotations"
+   :id       :annotation-controls
+   :sections [:annotation-controls {}]}
   {:title    "Air Forces"
    :id       :air-forces
    :sections [:air-forces-section {}]}
@@ -104,9 +106,9 @@
               :wind-stability-parameters {}
               :weather-override-parameters {}
               :advanced-controls {}]}
-  {:title "ACMI"
-   :id :acmi
-   :sections [:acmi-controls {}]}
-  #_{:title    "Test and Debug"
-   :id       :test
-   :sections [:test-section {}]}])
+  #_{:title  "ACMI"
+     :id       :acmi
+     :sections [:acmi-controls {}]}
+  #_{:title  "Test and Debug"
+     :id       :test
+     :sections [:test-section {}]}])
