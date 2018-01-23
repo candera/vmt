@@ -4,6 +4,11 @@
 #+TITLE:
 
 * Change Log
+** v055-28 (dev-only)
+- Add copy button to annotations
+- Arrow annotations
+- Lines annotations
+- Fix bug where dragging off the map makes things jump around
 ** v055-12 (dev-only)
 - Remove text annotations in favor of allow text on any shape
 - Add oval/elliptical annotations
