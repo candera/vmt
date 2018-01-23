@@ -45,92 +45,92 @@
   (svg/g
    :debug "ACMI layer"
    (map-lens-tpl acmis [path data]
-    (let [frame        (formula-of [data]
-                         (-> data ::acmi/frames last))
-          entities     (formula-of [frame]
-                         (->> frame
-                              ::acmi/entities
-                              (filter (fn [[entity-id entity]]
-                                        (->> entity
-                                             ::acmi/object-type
-                                             (set/intersection #{"Weapon" "Decoy" "Air"})
-                                             empty?)))
-                              (into {})))
-          aspect-ratio 2.8
-          width        0.4
-          height       (* width aspect-ratio)
-          tip-size     3.5
-          tip-entity   (cell nil)]
-      (do-watch tip-entity
-                (fn [_ n]
-                  (reset! suppress-bullseye-info-box? n)))
-      (svg/g
-       :debug path
-       :entities (cell= (count entities))
+     (let [frame        (formula-of [data]
+                          (-> data ::acmi/frames last))
+           entities     (formula-of [frame]
+                          (->> frame
+                               ::acmi/entities
+                               (filter (fn [[entity-id entity]]
+                                         (->> entity
+                                              ::acmi/object-type
+                                              (set/intersection #{"Weapon" "Decoy" "Air"})
+                                              empty?)))
+                               (into {})))
+           aspect-ratio 2.8
+           width        0.4
+           height       (* width aspect-ratio)
+           tip-size     3.5
+           tip-entity   (cell nil)]
+       (do-watch tip-entity
+                 (fn [_ n]
+                   (reset! suppress-bullseye-info-box? n)))
        (svg/g
-        :debug "entities"
-        (map-lens-tpl entities [entity-id entity]
-         (let [coords (formula-of [mission entity]
-                        (let [{:keys [::acmi/u ::acmi/v]} entity]
-                          ;; Yet another place we assume 59x59
-                          (coords/acmi->weather mission u v)))]
-           (svg/g
-            :transform (formula-of [coords map-zoom]
-                         (let [{:keys [x y]} coords]
-                           (comm/svg-xform-combine
-                            (comm/svg-translate x y)
-                            (comm/svg-scale (/ 1.0 map-zoom)))))
-            (svg/rect
-             :transform (formula-of [entity]
-                          (comm/svg-rotate (::acmi/heading entity 90)))
-             :mouseenter #(reset! tip-entity @entity-id)
-             :mouseleave #(reset! tip-entity nil)
-             :x (/ width -2)
-             :y (/ height -2)
-             :width width
-             :height height
-             :fill (cell= (str/lower-case (or (::acmi/color entity) "black")))
-             :stroke "black"
-             :stroke-width (cell= (* (/ width 25)
-                                     (if (= tip-entity entity-id)
-                                       2
-                                       1))))))))
-       (svg/g
-        :debug (cell= (str "Tooltip: tip entity " tip-entity))
-        (when-tpl tip-entity
-          (let [entity (cell= (get entities tip-entity))
-                coords (formula-of [mission entity]
-                         (when entity
-                           (let [{:keys [::acmi/u ::acmi/v]} entity]
-                             (coords/acmi->weather mission u v))))]
-            (svg/g
-             :debug "Tooltip"
-             :transform (formula-of [coords map-zoom]
-                          (let [{:keys [x y]} coords]
-                            (comm/svg-xform-combine
-                             (comm/svg-translate x y)
-                             (comm/svg-scale (/ 1.0 map-zoom)))))
-             (with-bbox :w w :h h :watch entity
-               [t (svg/text
-                   :css {:pointer-events "none"}
-                   :x 0
-                   :y 0
-                   (cell= (::acmi/name entity)))]
-               (svg/g
-                :transform (comm/svg-scale 0.06)
-                (svg/rect
-                 :css {:pointer-events "none"}
-                 :x (cell= (* w -0.05))
-                 :y (cell= (- (* 0.8 h)))
-                 :width (cell= (* w 1.1))
-                 :height h
-                 :fill (cell= (comm/lighten
-                               (str/lower-case (or (::acmi/color entity) "black"))
-                               40))
-                 :opacity 0.8
-                 :stroke "black"
-                 :stroke-width (/ width 50))
-                t)))))))))))
+        :debug path
+        :entities (cell= (count entities))
+        (svg/g
+         :debug "entities"
+         (map-lens-tpl entities [entity-id entity]
+           (let [coords (formula-of [mission entity]
+                          (let [{:keys [::acmi/u ::acmi/v]} entity]
+                            ;; Yet another place we assume 59x59
+                            (coords/acmi->weather mission u v)))]
+             (svg/g
+              :transform (formula-of [coords map-zoom]
+                           (let [{:keys [x y]} coords]
+                             (comm/svg-xform-combine
+                              (comm/svg-translate x y)
+                              (comm/svg-scale (/ 1.0 map-zoom)))))
+              (svg/rect
+               :transform (formula-of [entity]
+                            (comm/svg-rotate (::acmi/heading entity 90)))
+               :mouseenter #(reset! tip-entity @entity-id)
+               :mouseleave #(reset! tip-entity nil)
+               :x (/ width -2)
+               :y (/ height -2)
+               :width width
+               :height height
+               :fill (cell= (str/lower-case (or (::acmi/color entity) "black")))
+               :stroke "black"
+               :stroke-width (cell= (* (/ width 25)
+                                       (if (= tip-entity entity-id)
+                                         2
+                                         1))))))))
+        (svg/g
+         :debug (cell= (str "Tooltip: tip entity " tip-entity))
+         (when-tpl tip-entity
+           (let [entity (cell= (get entities tip-entity))
+                 coords (formula-of [mission entity]
+                          (when entity
+                            (let [{:keys [::acmi/u ::acmi/v]} entity]
+                              (coords/acmi->weather mission u v))))]
+             (svg/g
+              :debug "Tooltip"
+              :transform (formula-of [coords map-zoom]
+                           (let [{:keys [x y]} coords]
+                             (comm/svg-xform-combine
+                              (comm/svg-translate x y)
+                              (comm/svg-scale (/ 1.0 map-zoom)))))
+              (with-bbox :w w :h h :watch entity
+                [t (svg/text
+                    :css {:pointer-events "none"}
+                    :x 0
+                    :y 0
+                    (cell= (::acmi/name entity)))]
+                (svg/g
+                 :transform (comm/svg-scale 0.06)
+                 (svg/rect
+                  :css {:pointer-events "none"}
+                  :x (cell= (* w -0.05))
+                  :y (cell= (- (* 0.8 h)))
+                  :width (cell= (* w 1.1))
+                  :height h
+                  :fill (cell= (comm/lighten
+                                (str/lower-case (or (::acmi/color entity) "black"))
+                                40))
+                  :opacity 0.8
+                  :stroke "black"
+                  :stroke-width (/ width 50))
+                 t)))))))))))
 
 (defn- controls
   [mission {:keys [acmis] :as state}]
