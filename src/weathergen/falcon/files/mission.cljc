@@ -1526,17 +1526,46 @@
 (defn- format-list
   "Given a collection of strings, concatenate them together inserting
   commas and the word \"and\" as appropirate."
-  [items]
-  (let [n (count items)]
-    (if (< (count items) 2)
-      (first items)
-      (str (->> items
-                butlast
-                (str/join ", "))
-           (when (< 2 (count items))
-             ",")
-           " and "
-           (last items)))))
+  ([items] (format-list {} items))
+  ([{:keys [separator] :as opts} items]
+   (let [n (count items)
+         separator (or separator ",")]
+     (if (< (count items) 2)
+       (first items)
+       (str (->> items
+                 butlast
+                 (str/join (str separator " ")))
+            (when (< 2 (count items))
+              separator)
+            " and "
+            (last items))))))
+
+(defn- report-airbases-with-invalid-owner
+  "Throw an error if an airbase has an invalid owner."
+  [mission]
+  (let [n-sides  (-> mission :teams count)
+        problems (for [airbase (::airbases mission)
+                       :when (<= n-sides (:owner airbase))]
+                   airbase)]
+    (when-not (empty? problems)
+      (throw (ex-info (str "The following airbases have an invalid owner: \n   "
+                           (->> problems
+                                (map (fn [{:keys [owner ::name]}]
+                                       (str name " has owner " owner)))
+                                (format-list {:separator ",\n  "}))
+                           ".\n\nValid owners are: \n   "
+                           (->> mission
+                                :teams
+                                (map :team)
+                                (map (fn [team]
+                                       (str (:name team)
+                                            " ("
+                                            (:who team)
+                                            ")")))
+                                (format-list {:separator ",\n  "}))
+                           ".")
+                      {:reason            :invalid-airbase-owner
+                       :omit-stack-trace? true})))))
 
 (defn- report-squadrons-without-airbases
   "Issue warnings for any squadrons that have no airbases."
@@ -1560,6 +1589,7 @@
   (progress/with-step "Verifying mission integrity"
     (fn []
       (report-squadrons-without-airbases mission)
+      (report-airbases-with-invalid-owner mission)
       mission)))
 
 (defn- postprocess-mission
