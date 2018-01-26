@@ -662,6 +662,8 @@
        (mapv #(read-theater-def data-dir %))
        (remove nil?)))
 
+(def whitespace #"[ \t=]+")
+
 (defn read-id-list-file
   "Reads an id list file consisting of pairs of names and ids. Returns
   a seq of those pairs."
@@ -674,7 +676,7 @@
        (remove str/blank?)
        ;; The equals is because one of the files uses it, I think
        ;; mistakenly
-       (map #(str/split % #"[ \t=]+"))
+       (map #(str/split % whitespace))
        (map (fn [[name id]]
               [name (or (util/str->long id)
                         (do (log/error "Error parsing image id"
@@ -1581,6 +1583,23 @@
         (calc ::army-bases army-bases)
         fixup-mission)))
 
+(defn- read-ppt-data
+  [installation theater]
+  (let [dir  (campaign-dir installation theater)
+        path (fs/path-combine dir "ppt.ini")]
+    (progress/with-step (str "Reading PPT.INI from " dir)
+      #(->> path
+            fs/file-text
+            str/split-lines
+            (map str/trim)
+            (remove str/blank?)
+            (map (fn [line]
+                   (str/split line whitespace 3)))
+            (mapv (fn [[id radius description]]
+                    {:id          id
+                     :radius-ft   (util/str->float radius)
+                     :description description}))))))
+
 ;; TODO: Consider renaming this read-database, and referring to the resulting object
 ;; as the database.
 (defn read-mission
@@ -1593,46 +1612,50 @@
                         #(load-installation install-dir))
         theater       (progress/with-step "Determining theater"
                         #(find-theater installation path))
+        campaign-dir  (campaign-dir installation theater)
         strings       (progress/with-step "Reading theater strings"
-                        #(read-strings-file (campaign-dir installation theater)))
+                        #(read-strings-file campaign-dir))
         database      (progress/with-step "Reading theater data"
                         #(assoc (load-initial-database installation theater)
                                 :strings strings))
         mission-files (progress/with-step (str "Reading mission files from " path)
                         #(read-embedded-files path database))
+
         {:keys [theater-name scenario]} (->> mission-files :campaign-info)
-        names         (progress/with-step "Reading theater names"
-                        #(read-strings (campaign-dir installation theater)
-                                       theater-name))
-        scenario-file (str scenario (extension path))
-        scenario-path (fs/path-combine (fs/parent path) scenario-file)
+
+        names          (progress/with-step "Reading theater names"
+                         #(read-strings campaign-dir theater-name))
+        scenario-file  (str scenario (extension path))
+        scenario-path  (fs/path-combine (fs/parent path) scenario-file)
         scenario-files (progress/with-step (str "Reading scenario file: "
                                                 scenario-file)
                          #(read-embedded-files scenario-path database))
-        mission (merge database
-                       mission-files
-                       ;; TODO: Figure out if we need to merge persistent objects
-                       {:objectives     (merge-objective-deltas
-                                         (:objectives scenario-files)
-                                         (:objective-deltas mission-files))
-                        :scenario-files scenario-files
-                        :path           path
-                        :names          names
-                        :installation   installation
-                        ;; Installations are the names of the
-                        ;; installations this mission might be in.
-                        ;; E.g. 4.33 UI and 4.33. We have to get help
-                        ;; from the user, since there's no way to tell
-                        ;; a priori
-                        :installs installs
-                        :candidate-installs (->> installs
-                                                 (filter (fn [[name dir]]
-                                                           (and (fs/exists? dir)
-                                                                (fs/exists? install-dir)
-                                                                (fs/identical? dir install-dir))))
-                                                 (into {}))
-                        :mission-name   (fs/basename path)
-                        :theater        theater})]
+        ppt-data       (read-ppt-data installation theater)
+        mission        (merge database
+                              mission-files
+                              ;; TODO: Figure out if we need to merge persistent objects
+                              {:objectives         (merge-objective-deltas
+                                                    (:objectives scenario-files)
+                                                    (:objective-deltas mission-files))
+                               :scenario-files     scenario-files
+                               :path               path
+                               :names              names
+                               :installation       installation
+                               ;; Installations are the names of the
+                               ;; installations this mission might be in.
+                               ;; E.g. 4.33 UI and 4.33. We have to get help
+                               ;; from the user, since there's no way to tell
+                               ;; a priori
+                               :installs           installs
+                               :candidate-installs (->> installs
+                                                        (filter (fn [[name dir]]
+                                                                  (and (fs/exists? dir)
+                                                                       (fs/exists? install-dir)
+                                                                       (fs/identical? dir install-dir))))
+                                                        (into {}))
+                               :mission-name       (fs/basename path)
+                               :theater            theater
+                               :ppt-data           ppt-data})]
     (postprocess-mission mission)))
 
 (defn mission->briefing

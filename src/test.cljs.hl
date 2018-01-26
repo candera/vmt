@@ -82,6 +82,27 @@
                   (load-mission mission))
         "Load")
        (hr)
+       (let [choices (cell [{:value "a"
+                             :label "A"}
+                            {:value "b"
+                             :label "B"}])
+             value (cell "a")]
+         (div
+          (div "Value: " value)
+          (div "Choices:" (cell= (pr-str choices)))
+          (buttons/a-button
+           :click #(let [x (str "oblkasd lkjasdf " (gensym))]
+                     (swap! choices conj {:value x
+                                          :label x}))
+           "Add")
+          (buttons/a-button
+           :click #(reset! choices [])
+           "Clear")
+          (comm/select2
+           :id "foo"
+           :choices choices
+           :value value)))
+       (hr)
        (let [hidden? (cell false)
              tabs    [{:id    :a
                        :title "A"
@@ -269,8 +290,8 @@
                                            :b  (- 100 n)
                                            :c  (str (rand-int 1000))}
                                           )) #_[{:id 1 :a 1 :b 2 :c "three"}
-                                                {:id 2 :a 3 :b 1 :c "four"}
-                                                {:id 3 :a 2 :b 4}])
+                                        {:id 2 :a 3 :b 1 :c "four"}
+                                        {:id 3 :a 2 :b 4}])
            :key-fn          :id
            :row-attrs       (fn [id] {})
            :when-empty      "I am empty"
@@ -295,8 +316,8 @@
                                            :b  (- 100 n)
                                            :c  (str (rand-int 1000))}
                                           )) #_[{:id 1 :a 1 :b 2 :c "three"}
-                                                {:id 2 :a 3 :b 1 :c "four"}
-                                                {:id 3 :a 2 :b 4}])
+                                        {:id 2 :a 3 :b 1 :c "four"}
+                                        {:id 3 :a 2 :b 4}])
            :row-attrs       (fn [id] {})
            :when-empty      "I am empty"
            :columns         {:a {:title     "A"

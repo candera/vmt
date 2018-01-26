@@ -556,7 +556,7 @@
 ;;       elem)))
 
 (defelem select2
-  "Renders a jQuery Select2 control. `:choices` is a (non-cell)
+  "Renders a jQuery Select2 control. `:choices` is a (cell or non-cell)
   sequence of maps, each of which must contain a `:value` key. These
   values will be used to set the cell passed in for `:value`.
   `:formatter` is a function which, when passed one of the items from
@@ -566,47 +566,68 @@
   Formatter defaults to `:label`."
   [attrs kids]
   (with-attr-bindings attrs [choices formatter value]
-    (let [formatter  (or formatter :label)
-          index      (->> choices
-                          (zipmap (map #(gstring/format "%05d" %) (range)))
-                          (into (sorted-map)))
+    (let [choices*   (cell= choices)
+          formatter  (or formatter :label)
+          index      (cell= (->> choices*
+                                 (zipmap (map #(gstring/format "%05d" %) (range)))
+                                 (into (sorted-map))))
           formatter* (fn [state]
-                       (formatter (get index (.-id state))))
+                       (formatter (get @index (.-id state))))
           lookup     (fn [val]
-                       (some->> index
+                       (some->> @index
                                 (filter (fn [[id item]]
                                           (= (:value item) val)))
                                 first
                                 key))]
       (with-let [elem (select attrs kids)]
         (do-watch value
-                  (fn [_ n]
-                    (let [e (js/$ elem)]
-                      (if-let [found (lookup n)]
-                        (doto e
-                          (.val found)
-                          (.trigger "change"))
-                        ;; TODO: How do we handle this?
-                        (.warn js/console "select2: item" (pr-str n) "not found")))))
+            (fn [_ n]
+              (let [e (js/$ elem)]
+                (if-let [found (lookup n)]
+                  (doto e
+                    (.val found)
+                    (.trigger "change"))
+                  ;; TODO: How do we handle this?
+                  (.warn js/console "select2: item" (pr-str n) "not found")))))
+        (add-watch index
+                   (gensym)
+                   (fn [_ _ _ n]
+                     (.log js/console "select2: add-watch running " (pr-str n))
+                     (let [s (-> elem
+                                 js/jQuery
+                                 (hint-> js/jQuery)
+                                 .empty
+                                 #_(.trigger "change"))]
+                       (-> (reduce (fn [s {:keys [value label]}]
+                                     (.log js/console "Adding"
+                                           ":label" label
+                                           ":id" (lookup value))
+                                     (.append s (js/Option. label (lookup value) false false)))
+                                   s
+                                   @choices*)
+                           (.val (lookup @value))
+                           (.trigger "change")))))
         (when-dom3 elem
-          #(-> elem
-               js/jQuery
-               (hint-> js/jQuery)
-               (.select2 #js {:data              (clj->js (for [[id item] index]
-                                                            {:text (:label item)
-                                                             :id   id}))
-                              :templateResult    formatter*
-                              :templateSelection formatter*})
-               (.on "change" (fn [e]
-                               (let [v (->> e
-                                            .-currentTarget
-                                            .-value
-                                            (get index)
-                                            :value)]
-                                 #_(.log js/console "changed" v)
-                                 (reset! value v))))
-               (.val (lookup @value))
-               (.trigger "change")))))))
+          #(do
+             #_(-> js/jQuery .-fn .-select2 .-defaults (.set "width" "auto"))
+             (-> elem
+                js/jQuery
+                (hint-> js/jQuery)
+                (.select2 #js {:data              (clj->js (for [[id item] @index]
+                                                             {:text (:label item)
+                                                              :id   id}))
+                               :templateResult    formatter*
+                               :templateSelection formatter*})
+                (.on "change" (fn [e]
+                                (let [v (->> e
+                                             .-currentTarget
+                                             .-value
+                                             (get @index)
+                                             :value)]
+                                  #_(.log js/console "changed" v)
+                                  (reset! value v))))
+                (.val (lookup @value))
+                (.trigger "change"))))))))
 
 (defn image-cache-path
   "Returns a path to where we should cache an image."

@@ -481,12 +481,16 @@
    mission
    {:map-viewbox                 map-viewbox
     :map-zoom                    map-zoom
+    :map-text-scale              map-text-scale
+    :map-icon-scale              map-icon-scale
     :suppress-bullseye-info-box? suppress-bullseye-info-box?}))
 
 (def acmi-layer
   (weathergen.ui.layers.acmi/create
    mission
    {:map-zoom                    map-zoom
+    :map-text-scale              map-text-scale
+    :map-icon-scale              map-icon-scale
     :suppress-bullseye-info-box? suppress-bullseye-info-box?}))
 
 ;;; Formulas

@@ -9,6 +9,14 @@
              (when (int? n)
                (long n)))))
 
+(defn str->float
+  "Convert a string to a floating point number. Returns nil when it can't be parsed."
+  [s]
+  #?(:clj (try (Double. s) (catch NumberFormatException _ nil))
+     :cljs (let [n (-> s js/Number. .valueOf)]
+             (when-not (js/isNaN n)
+               n))))
+
 (defn concatv
   "Concatenates `colls` into a vector. Order of elements is preserved."
   [& colls]
