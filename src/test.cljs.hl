@@ -82,6 +82,16 @@
                   (load-mission mission))
         "Load")
        (hr)
+       (let [s (cell {:from {:day 1 :hour 2 :minute 3}})]
+         (div
+          (ui/time-entry :source s
+                         :path [:from])
+          (comm/time-edit :source s
+                          :path [:from])
+          (comm/validating-edit
+           :fmt comm/format-time
+           :conform (comm/time-conformer nil))))
+       (hr)
        (let [choices (cell [{:value "a"
                              :label "A"}
                             {:value "b"

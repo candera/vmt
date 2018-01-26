@@ -764,6 +764,37 @@
                  "Must be a number greater or equal to zero.")
       :value parsed})))
 
+(defn time-conformer
+  [max-time]
+  (fn [val]
+    (formula-of
+      [val]
+      (let [[all dd hh mm] (re-matches #"(\d+)/(\d\d):(\d\d)" (or val ""))
+            day             (->> dd js/Number. long)
+            hour            (->> hh js/Number. long)
+            min             (->> mm js/Number. long)
+            valid?          (and dd hh mm
+                                 (int? day)
+                                 (int? hour)
+                                 (int? min)
+                                 (<= 0 hour 23)
+                                 (<= 0 min 59))
+            val             {:day    day
+                             :hour   hour
+                             :minute min}
+            over-max?       (and valid?
+                                 max-time
+                                 (< (time/campaign-time->minutes max-time)
+                                    (time/campaign-time->minutes val)))]
+        {:valid?  (and valid? (not over-max?))
+         :message (cond
+                    (not valid?) "Time must be in the format 'dd/hh:mm'"
+                    over-max?    (str "Time cannot be set later than "
+                                      (format-time max-time)))
+         :value   {:day    day
+                   :hour   hour
+                   :minute min}}))))
+
 (defn compose-conformers
   "Given two conformers, returns a conformer that will validate only
   if both of them do. Checks c1 first."
@@ -1105,40 +1136,13 @@
 ;; source and update
 (defelem time-edit
   [attrs _]
-  (with-attr-bindings attrs [source update max-time]
+  (with-attr-bindings attrs [max-time]
    (validating-edit
     attrs
     :width 65
     :fmt format-time
     :placeholder "dd/hhmm"
-    :conform (fn [val]
-               (formula-of
-                 [val]
-                 (let [[all dd hh mm] (re-matches #"(\d+)/(\d\d):(\d\d)" (or val ""))
-                       day             (->> dd js/Number. long)
-                       hour            (->> hh js/Number. long)
-                       min             (->> mm js/Number. long)
-                       valid?          (and dd hh mm
-                                            (int? day)
-                                            (int? hour)
-                                            (int? min)
-                                            (<= 0 hour 23)
-                                            (<= 0 min 59))
-                       val             {:day    day
-                                        :hour   hour
-                                        :minute min}
-                       over-max?       (and valid?
-                                            max-time
-                                            (< (time/campaign-time->minutes max-time)
-                                               (time/campaign-time->minutes val)))]
-                   {:valid?  (and valid? (not over-max?))
-                    :message (cond
-                               (not valid?) "Time must be in the format 'dd/hh:mm'"
-                               over-max?    (str "Time cannot be set later than "
-                                                 (format-time max-time)))
-                    :value   {:day    day
-                              :hour   hour
-                              :minute min}}))))))
+    :conform (time-conformer max-time))))
 
 ;; Note that if we ever go back to a default we've used before, we'll
 ;; pick up whatever the old saved value is. That's a little weird but
