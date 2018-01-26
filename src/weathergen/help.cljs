@@ -94,6 +94,17 @@
                   (gdom/appendChild frag (hoplonify item))))
       :react data)))
 
+(defn- content-para
+  "Returns `(content [:div [:p contents]])`."
+  [contents]
+  (content
+   [:div
+    [:p contents]]))
+
+(def color-text "Use either the color dropdown or the text box. Color names entered into the text box can be color names like \"red\" or \"blue\" or HTML color codes like \"#FF123456\". Note also the transparency slider at the bottom of the color dropdown. Use this to make colors partially for fully transparent.")
+
+(def slider-text "Use the slider to adjust or enter a number between 1 and 100 directly.")
+
 ;; These are functions because we need to be able to show the same
 ;; help in more than one place, and if we simply return a node, it
 ;; will get moved rather than cloned when we attach it to a new place
@@ -112,7 +123,8 @@
    :serialization-controls
    {:save-single-files
     (content
-     [:p "This section allows saving and loading of the various
+     [:p
+      "This section allows saving and loading of the various
       files that WeatherGen can use. Files should be saved with the
       same name as the mission (.cam or .tac) file, but with the
       extension changed as appropriate. For instance, if you're making
@@ -165,28 +177,28 @@
         "A folder containing the timestamped FMAP files."]])
 
      :from
-     (content
-      [:p "The FMAP files in the generated weather package will start from this time."])
+     (content-para
+      "The FMAP files in the generated weather package will start from this time.")
 
      :to
-     (content
-      [:p "The FMAP files in the generated weather package will end at this time."])
+     (content-para
+      "The FMAP files in the generated weather package will end at this time.")
 
      :step
-     (content
-      [:p "The FMAP files in the generated weather package will
-     be this many minutes apart."])
+     (content-para
+      "The FMAP files in the generated weather package will
+     be this many minutes apart.")
 
      :mission-name
-     (content
-      [:p "The name of the mission file (.cam or .tac) for which
+     (content-para
+      "The name of the mission file (.cam or .tac) for which
      weather is being generated. This value will be used to name the
-     generated .twx and .fmap files."])}}
+     generated .twx and .fmap files.")}}
 
    :weather-display-controls
    {:map
-    (content
-     [:p "Chooses the map image displayed in the background."])
+    (content-para
+     "Chooses the map image displayed in the background.")
 
     :display
     (content
@@ -224,53 +236,55 @@
      data from the forecast section."])
 
     :pressure
-    (content
-     [:p "Units for pressure measurements - inches Mercury (InHg) or millibars."])
+    (content-para
+     "Units for pressure measurements - inches Mercury (InHg) or millibars.")
 
     :opacity
-    (content
-     [:p "Controls how opaque or transparent the display layer will be.
-    Slide the slider to the left to more easily see the map."])}
+    (content-para
+     "Controls how opaque or transparent the display layer will be.
+    Slide the slider to the left to more easily see the map.")}
 
    :weather-params
    {:seed
-    (content
-     [:p "The seed selects a weather system. Changing this will change
+    (content-para
+     "The seed selects a weather system. Changing this will change
     the weather pattern entirely. Use any whole number. Click the
-    'Random' button to have the system choose a seed randomly."])
+    'Random' button to have the system choose a seed randomly.")
 
     :crossfade
-    (content
-     [:p "The degree to which adjacent weather types will be blended
+    (content-para
+     "The degree to which adjacent weather types will be blended
     together. Zero means that winds, etc. will shift abruptly at
     weather type boundaries. A good value to use is 0.1. Values above
-    about 0.3 will give strange results."])
+    about 0.3 will give strange results.")
 
     :origin
     {:x
-     (content
-      [:p "The x location in 'weather space' that is displayed
+     (content-para
+      "The x location in 'weather space' that is displayed
    on the grid. You will not normally edit this field, but you can
-   change it to see different parts of the weather pattern."])
+   change it to see different parts of the weather pattern.")
 
      :y
-     (content
-      [:p "The y location in 'weather space' that is displayed
+     (content-para
+      "The y location in 'weather space' that is displayed
 on the grid. You will not normally edit this field, but you can change
-it to see different parts of the weather pattern."])}
+it to see different parts of the weather pattern.")}
 
     :time
     {:offset
-     (content
-      [:p "The time in 'weather space' that is displayed on the grid.
+     (content-para
+      "The time in 'weather space' that is displayed on the grid.
 You will not normally edit this field, but you can change it to move
-forward and backward in time. "])
+forward and backward in time. ")
+
      :falcon-time
      (content
       [:p "The current time in the Falcon world. Time cannot be advanced
      past this point, as that would be peeking into the future."]
       [:p "Click the 'Jump to' button to set the displayed weather to
      this time."])
+
      :browse-time
      (content
       [:p "Enter a time here to view the weather at that time. Use the
@@ -283,37 +297,37 @@ forward and backward in time. "])
       inaccurate) forecast instead."])}
 
     :feature-size
-    (content
-     [:p "How 'zoomed in' the weather will be on the underlying weather
+    (content-para
+     "How 'zoomed in' the weather will be on the underlying weather
     pattern. Make this number bigger to get larger storm cells and
     larger areas of fair weather. Make it smaller to get weather that
-    changes more frequently."])
+    changes more frequently.")
 
     :pressure
-    {:max (content [:p "The maximum barometric pressure that will be generated."])
-     :min (content [:p "The minimum barometric pressure that will be generated."])}
+    {:max (content-para "The maximum barometric pressure that will be generated.")
+     :min (content-para "The minimum barometric pressure that will be generated.")}
 
     :prevailing-wind
-    {:heading (content [:p "The direction of the prevailing
+    {:heading (content-para "The direction of the prevailing
     wind. Although wind direction varies, especially around high- and
     low-pressure areas, more wind will be generated in this direction
-    than in any other."])}
+    than in any other.")}
 
     :wind-uniformity
-    (content
-     [:p "Controls how much the wind speed will vary between the bounds
+    (content-para
+     "Controls how much the wind speed will vary between the bounds
     set under 'Weather type configuration'. Should be between zero and
     one. Lower values produce more winds near the mean for that
     weather type. Higher values produce more wind speeds near the min
-    and max for that weather type."])
+    and max for that weather type.")
 
     :temp-uniformity
-    (content
-     [:p "Controls how much the temperature will vary between the bounds
+    (content-para
+     "Controls how much the temperature will vary between the bounds
     set under 'Weather type configuration'. Should be between zero and
     one. Lower values produce more temperatures near the mean for that
     weather type. Higher values produce more temperatures near the min
-    and max for that weather type."])
+    and max for that weather type.")
 
     :turbulence
     {:power
@@ -322,30 +336,30 @@ forward and backward in time. "])
       [:p "As warp strength increases, you will probably have to set a higher zoom to get good results."])}
 
     :evolution
-    (content
-     [:p "The number of minutes it takes for the weather to completely
-     change, even if not moving."])}
+    (content-para
+     "The number of minutes it takes for the weather to completely
+     change, even if not moving.")}
 
    :weather-type-config
    {:pressure
-    (content
-     [:p "Weather types (sunny, fair, poor, and inclement) are
+    (content-para
+     "Weather types (sunny, fair, poor, and inclement) are
     determined by the barometric pressure. Set the thresholds for
-    which pressures determine which weather types here. "])
+    which pressures determine which weather types here. ")
 
     :wind
-    (content
-     [:p "The minimum, maximum, and mean wind speeds for each weather
+    (content-para
+     "The minimum, maximum, and mean wind speeds for each weather
      type. Due to crossfading, these values are not strict - wind can
      be higher than the maximum or lower than the minimum near the
-     edges of other weather types."])
+     edges of other weather types.")
 
     :temp
-    (content
-     [:p "The minimum, maximum, and mean temperatures for each weather
+    (content-para
+     "The minimum, maximum, and mean temperatures for each weather
      type. Due to crossfading, these values are not strict -
      temperature can be higher than the maximum or lower than the
-     minimum near the edges of other weather types."])}
+     minimum near the edges of other weather types.")}
 
    :displayed-time
    (content
@@ -364,52 +378,56 @@ forward and backward in time. "])
 
    :movement-params
    {:direction
-    {:heading (content [:p "The direction the weather pattern will move in."])
-     :speed   (content [:p "The speed at which the weather pattern will move."])}}
+    {:heading (content-para "The direction the weather pattern will move in.")
+     :speed   (content-para "The speed at which the weather pattern will move.")}}
 
    :step
-   (content
-    [:p "The number of minutes each click of the 'Step forward' or 'Step
+   (content-para
+    "The number of minutes each click of the 'Step forward' or 'Step
    backward' buttons will move in time. Also influences how many rows
-   there are in the weather forecast."])
+   there are in the weather forecast.")
 
    :forecast
    {:overview
-    (content
-     [:p "Displays the weather forecast for the selected location in
-   the weather grid."])
+    (content-para
+     "Displays the weather forecast for the selected location in
+   the weather grid.")
+
     :share
-    (content
-     [:p "The 'shareable forecast' link goes to a view of the weather
+    (content-para
+     "The 'shareable forecast' link goes to a view of the weather
    that can be handed out to other pilots. It does not allow editing,
    nor advancing the weather past the current time, but does include
    the (potentially inaccurate) forecast, any loaded DTC files, wind
-   stability regions, etc. etc."])
+   stability regions, etc. etc.")
+
     :time
-    (content
-     [:p "The date and time of the forecast conditions. Forecasts
-     are (as in the real world) not perfectly accurate."])
+    (content-para
+     "The date and time of the forecast conditions. Forecasts
+     are (as in the real world) not perfectly accurate.")
+
     :type
-    (content
-     [:p "The forecast Falcon weather type at the selected location."])
+    (content-para
+     "The forecast Falcon weather type at the selected location.")
+
     :pressure
-    (content
-     [:p "The forecast barometric pressure at the selected location."])
+    (content-para
+     "The forecast barometric pressure at the selected location.")
     :temperature
-    (content
-     [:p "The forecast temperature (in degrees C) at the selected location."])
+    (content-para
+     "The forecast temperature (in degrees C) at the selected location.")
     :wind
-    (content
-     [:p "The forecast wind strength and direction at the selected
+    (content-para
+     "The forecast wind strength and direction at the selected
      location. E.g. '05kts@270' is a 5-knot wind from the west. Note
      that wind directions indicate the direction the wind is coming
-     from, not the direction it is blowing towards."])
+     from, not the direction it is blowing towards.")
     :visibility
-    (content
-     [:p "The forecast visibility (in nm) at the selected location."])
+    (content-para
+     "The forecast visibility (in nm) at the selected location.")
     :precipitation
-    (content
-     [:p "The forecast precipitation at the selected location."])
+    (content-para
+     "The forecast precipitation at the selected location.")
     :cloud
     (content
      [:p "The forecast cloud cover at the selected location."]
@@ -435,80 +453,80 @@ forward and backward in time. "])
 
    :weather-overrides
    {:overview
-    (content
-     [:p "Weather type is determined from air pressure - lower pressure
+    (content-para
+     "Weather type is determined from air pressure - lower pressure
    yields inclement or poor weather, and higher pressure fair and
    sunny weather. By default, pressure is generated randomly, but it
    can be overridden for certain locations and times using the
-   controls in this section."])
+   controls in this section.")
 
     :center
-    (content
-     [:p "The X and Y coordinates of the center of the override region."])
+    (content-para
+     "The X and Y coordinates of the center of the override region.")
 
     :radius
-    (content
-     [:p "The radius of the override region, measured in cells."])
+    (content-para
+     "The radius of the override region, measured in cells.")
 
     :falloff
-    (content
-     [:p "The distance from the center of the region at which the
+    (content-para
+     "The distance from the center of the region at which the
     override pressure begins to be blended into the surrounding
     pressure. Set this to zero to have a very gradual transition. Set
     it to the radius to have an abrupt edge to the region. Note that
     abrupt changes may result in odd weather effects in the sim. A
-    falloff of at least four less than the radius is recommended."])
+    falloff of at least four less than the radius is recommended.")
 
     :pressure
-    (content
-     [:p "The override pressure for the region. Use the values from the
+    (content-para
+     "The override pressure for the region. Use the values from the
     Weather Type Configuration section to select an appropriate value
-    for the type of weather you are trying to enforce."])
+    for the type of weather you are trying to enforce.")
 
     :strength
-    (content
-     [:p "Controls to what degree the underlying pressure pattern will
+    (content-para
+     "Controls to what degree the underlying pressure pattern will
     be overridden. This value should be between zero and one. A value
     of one completely replaces the underlying pressure with the value
     from the 'pressure' field above. A value of 0.5 would produce a
     value halfway between the value from the 'pressure' field and the
-    underlying pattern."])
+    underlying pattern.")
 
     :show-outline?
-    (content
-     [:p "Controls whether the outline of the override region will be
+    (content-para
+     "Controls whether the outline of the override region will be
     shown. Note that this setting also affects the shareable
-    forecast."])
+    forecast.")
 
     :animate?
-    (content
-     [:p "If checked, the weather override will appear and disappear at
+    (content-para
+     "If checked, the weather override will appear and disappear at
     the times specified below. If unchecked, the weather override will
-    always be in effect."])
+    always be in effect.")
 
     :begin
-    (content
-     [:p "The time at which the weather override will begin to take
+    (content-para
+     "The time at which the weather override will begin to take
     effect. The pressure (and therefore the weather type) will
     gradually change from the unmodified value to the overridden value
-    between this time and the peak time."])
+    between this time and the peak time.")
 
     :peak
-    (content
-     [:p "The time at which the weather override will reach full
+    (content-para
+     "The time at which the weather override will reach full
     strength. It will continue at full strength from this time until
-    the taper time."])
+    the taper time.")
 
     :taper
-    (content
-     [:p "The time at which the weather override will begin to fade out.
+    (content-para
+     "The time at which the weather override will begin to fade out.
     The pressure (and therefore the weather time) will gradually
     change from the overriden value to the unmodified value between
-    this time and the end time."])
+    this time and the end time.")
 
     :end
-    (content
-     [:p "The time at which this override will no longer be in effect."])
+    (content-para
+     "The time at which this override will no longer be in effect.")
 
     :exclude-from-forecast?
     (content
@@ -523,49 +541,49 @@ forward and backward in time. "])
    :flight-paths
    {
     :section
-    (content
-     [:p "Load flight plans from a mission .ini/DTC file so they can be
-     shown on the map."])
+    (content-para
+     "Load flight plans from a mission .ini/DTC file so they can be
+     shown on the map.")
     :name
-    (content
-     [:p "An arbitrary label for this flight path, usually the flight
+    (content-para
+     "An arbitrary label for this flight path, usually the flight
     callsign. Click the pencil icon to edit it. The name is not shown
-    on the map."])
+    on the map.")
     :show?
-    (content
-     [:p "If checked, flight path will be shown. If unchecked,
-    flight path will be hidden."])
+    (content-para
+     "If checked, flight path will be shown. If unchecked,
+    flight path will be hidden.")
     :show-lines?
-    (content
-     [:p "If checked, steerpoint lines from the DTC (if any) will be
-    shown. If unchecked, steerpoint lines will be hidden."])
+    (content-para
+     "If checked, steerpoint lines from the DTC (if any) will be
+    shown. If unchecked, steerpoint lines will be hidden.")
     :show-numbers?
-    (content
-     [:p "If checked, steerpoints not otherwise labeled will be labeled
-     with their numbers."])
+    (content-para
+     "If checked, steerpoints not otherwise labeled will be labeled
+     with their numbers.")
     :show-labels?
-    (content
-     [:p "If checked, alternate field and tanker steerpoints will be
-     labeled as such."])
+    (content-para
+     "If checked, alternate field and tanker steerpoints will be
+     labeled as such.")
     :color
-    (content
-     [:p "Change the color in which the flight path and labels will be
-    drawn on the map."])
+    (content-para
+     "Change the color in which the flight path and labels will be
+    drawn on the map.")
     :scale
-    (content
-     [:p "Drag the slider left and right to decrease or increase the
-    size of the text and flight path lines."])
+    (content-para
+     "Drag the slider left and right to decrease or increase the
+    size of the text and flight path lines.")
     :remove
-    (content
-     [:p "Click to permanently remove this flight path from the
-    list."])}
+    (content-para
+     "Click to permanently remove this flight path from the
+    list.")}
 
    :clouds
    {:overview
-    (content
-     [:p "Edit the cloud, visibility, and contrail settings. These
+    (content-para
+     "Edit the cloud, visibility, and contrail settings. These
     settings are the same everywhere on the map - they do not vary by
-    location."])
+    location.")
 
     :buttons
     (content
@@ -583,40 +601,40 @@ forward and backward in time. "])
      coverage if you encounter frame rate issues."])
 
     :cumulus-size
-    (content
-     [:p "Affects the appearance of the cumulus clouds. Positions
+    (content-para
+     "Affects the appearance of the cumulus clouds. Positions
     further to the right will result in more, smaller clouds. Positions
-    to the left will result in fewer, larger clouds."])
+    to the left will result in fewer, larger clouds.")
 
     :visibility
-    (content
-     [:p "The visibility (in nm) for each weather type."])
+    (content-para
+     "The visibility (in nm) for each weather type.")
 
     :stratus-base
-    (content
-     [:p "The altitude (in feet) of the base stratus
+    (content-para
+     "The altitude (in feet) of the base stratus
     layer. The top of the stratus layer must be at least 1000 feet
-    above the cumulus layer."])
+    above the cumulus layer.")
 
     :stratus-top
-    (content
-     [:p "The altitude (in feet) of the top of the stratus layer. The
+    (content-para
+     "The altitude (in feet) of the top of the stratus layer. The
     top of the stratus layer must be at least 1000 feet above the
     cumulus layer. The top of the stratus layer must be the same for
     poor and inclement weather, and sunny and fair weather must have a
     zero-thickness stratus layer - i.e. the top and base must be the
-    same."])
+    same.")
 
     :cumulus-base
-    (content
-     [:p "The altitude (in feet) of the cumulus layer. Set to zero for
+    (content-para
+     "The altitude (in feet) of the cumulus layer. Set to zero for
     no cumulus clouds. The cumulus base for a given weather category
     must be at least 1000 feet below the top of the corresponding
-    stratus base."])
+    stratus base.")
 
     :contrails
-    (content
-     [:p "The altitude at which condensation trails will form."])}
+    (content-para
+     "The altitude at which condensation trails will form.")}
 
    :map
    {:legend
@@ -687,13 +705,13 @@ forward and backward in time. "])
              (wind-barb speed heading)]
             description]))]))
     :mission-time
-    (content
-     [:p "Shows the time in the Falcon world in the format Day/Hour:Minute."])
+    (content-para
+     "Shows the time in the Falcon world in the format Day/Hour:Minute.")
     :weather-time
-    (content
-     [:p "Shows for what time the weather is being displayed (if
+    (content-para
+     "Shows for what time the weather is being displayed (if
      weather is being shown). Time is displayed in the format
-     Day/Hour:Minute."])}
+     Day/Hour:Minute.")}
 
    :mission-info
    {:save-briefing
@@ -719,47 +737,45 @@ forward and backward in time. "])
 
     :briefing-notes
     {:edit
-     (content
-      [:div
-       [:p "Textual notes that will appear in the briefing file.
+     (content-para
+      "Textual notes that will appear in the briefing file.
       Currently, no formatting is supported - at some point VMT will
-      permit links, highlighting, etc."]])
+      permit links, highlighting, etc.")
 
      :briefing
-     (content
-      [:div
-       [:p "Notes provided by the mission creator. Not editable."]])}}
+     (content-para
+      "Notes provided by the mission creator. Not editable.")}}
 
    :air-forces
    {:airbase-filtering
-    (content
-     [:p "Controls whether airbases will be shown on the map and in
+    (content-para
+     "Controls whether airbases will be shown on the map and in
       the list below based on their status and whether or not they
-      have any aircraft stationed there."])
+      have any aircraft stationed there.")
 
     :hide-no-squadron-airbases
-    (content
-     [:p "If checked, airbases that have no airbases stationed at them
+    (content-para
+     "If checked, airbases that have no airbases stationed at them
     will hidden. Note that only squadrons of selected types will be
     considered - a base that has only fighters will be hidden if
-    'Fighter' is unchecked under 'Squadron Types'."])
+    'Fighter' is unchecked under 'Squadron Types'.")
 
     :hide-zero-status-airbases
-    (content
-     [:p "If checked, airbases that are unable to sortie (i.e. that are
-     at 0% status), will not be shown."])
+    (content-para
+     "If checked, airbases that are unable to sortie (i.e. that are
+     at 0% status), will not be shown.")
 
     :squadron-types
-    (content
-     [:p "Selects which squadron types will be displayed. If a box is
+    (content-para
+     "Selects which squadron types will be displayed. If a box is
      not checked, it will be as if squadrons consisting of aircraft of
      that type do not exist - they will not be displayed on the map or
-     in the list below."])
+     in the list below.")
 
     :squadron-type-buttons
-    (content
-     [:p "Use these buttons to quickly check or uncheck all the
-    squadron types."])
+    (content-para
+     "Use these buttons to quickly check or uncheck all the
+    squadron types.")
 
     :display-options
     {:overview
@@ -816,16 +832,14 @@ forward and backward in time. "])
         [:dd "No label will be displayed below the airbase"]]])
 
      :show-airbase-status?
-     (content
-      [:div
-       [:p "If checked, the status of each airbase will be displayed
-      above the airbase icon on the map."]])
+     (content-para
+      "If checked, the status of each airbase will be displayed
+      above the airbase icon on the map.")
 
      :show-airbase-squadrons?
-     (content
-      [:div
-       [:p "If checked, squadron icons will be shown to the right of the
-      airbase icon on the map."]])}
+     (content-para
+      "If checked, squadron icons will be shown to the right of the
+      airbase icon on the map.")}
 
     :airbases-and-squadrons
     (content
@@ -873,16 +887,15 @@ forward and backward in time. "])
        show their detailed status. This is the default view."]]])
 
     :airbase-selection-buttons
-    (content
-     [:div
-      [:p "Use these buttons to quickly hide or show all airbases on
+    (content-para
+     "Use these buttons to quickly hide or show all airbases on
       the map. Has the same effect as checking or unchecking each of
-      the airbases in the list below."]])}
+      the airbases in the list below.")}
 
    :map-controls
    {:general
-    (content
-     [:p "Use the controls in this section to affect the overall appearance of the map."])
+    (content-para
+     "Use the controls in this section to affect the overall appearance of the map.")
 
     :brightness
     (content
@@ -896,62 +909,53 @@ forward and backward in time. "])
       paths, etc."]])
 
     :text-size
-    (content
-     [:div
-      [:p "Use this slider to make the text used in labels larger or
-    smaller. Smaller is to the left, larger to the right."]])
+    (content-para
+     "Use this slider to make the text used in labels larger or
+    smaller. Smaller is to the left, larger to the right.")
 
     :icon-size
-    (content
-     [:div
-      [:p "Use this slider to make the icons on the map larger or
-      smaller. Smaller is to the left, larger to the right."]])
+    (content-para
+     "Use this slider to make the icons on the map larger or
+      smaller. Smaller is to the left, larger to the right.")
 
     :flight-path-size
-    (content
-     [:div
-      [:p "Use this slider to make flight paths wider or narrower.
-      Narrower is to the left, wider to the right."]])
+    (content-para
+     "Use this slider to make flight paths wider or narrower.
+      Narrower is to the left, wider to the right.")
 
     :show-text-background?
-    (content
-     [:div
-      [:p "When checked, labels will be shown against a semitransparent
-      background of a contrasting color."]])
+    (content-para
+     "When checked, labels will be shown against a semitransparent
+      background of a contrasting color.")
 
     :show-bullseye?
-    (content
-     [:div
-      [:p "When checked, the bullseye \"spiderweb\" will be shown on
+    (content-para
+     "When checked, the bullseye \"spiderweb\" will be shown on
       the map, with range rings every 30nm up to 180nm and bearing
-      lines every 30 degrees."]])
+      lines every 30 degrees.")
 
     :show-wind-stability?
-    (content
-     [:div
-      [:p "When checked, the outline of any wind stability regions
-      will be shown as a white and black dashed line."]])
+    (content-para
+     "When checked, the outline of any wind stability regions
+      will be shown as a white and black dashed line.")
 
     :reset-brightness
-    (content
-     [:div
-      [:p "Click this button to reset the brightness to its default value."]])
+    (content-para
+     "Click this button to reset the brightness to its default value.")
 
     :reset-text-size
-    (content
-     [:div
-      [:p "Click this button to reset the text size to its default value."]])
+    (content-para
+     "Click this button to reset the text size to its default value.")
 
     :reset-icon-size
-    (content
-     [:div
-      [:p "Click this button to reset the icon sizing to its default value."]])
+    (content-para
+     "Click this button to reset the icon sizing to its default value.")
 
     :annotations
     {:overview
      (content
       [:div
-       [:p "Use this section to add annotations - bits of text, arrows, borders, images, etc. - to the map. Annotations are saved in the briefing file so they can be shared with partipating pilots. Use the Add New button to create annotations, the "
+       [:p "Use this section to add annotations - bits of text, arrows, borders, images, etc. - to the map. Annotations are saved in the briefing file so they can be shared with partipating pilots. Use the \"Add ...\" buttons to create annotations, the "
         [:img {:src   "images/edit.svg"
                :width (px 16)}]
         " button to edit existing annotations, the "
@@ -993,47 +997,36 @@ forward and backward in time. "])
      :type
      (content
       [:div
-       [:p "Sets the type of the annotation. One of:"]
+       [:p "The type of the annotation. One of:"]
        [:dl
-        [:dt "Text"]
-        [:dd "A block of text."]
-
-        [:dt "Rectangle"]
-        [:dd "A rectangle with or without a border, and with or without a filled interior region."]
+        [:dt "Shape"]
+        [:dd "A rectangle or oval, with or without a border, with or without text inside, and with or without a filled interior region."]
 
         [:dt "Arrow"]
         [:dd "An arrow shape."]
 
-        [:dt "Oval"]
-        [:dd "An oval with or without a border, and with or without a filled interior region."]
-
-        [:dt "Image"]
-        [:dd "An image from your hard drive or from a URL."]]])
+        [:dt "PPT"]
+        [:dd "A pre-planned threat with optional range ring, label, and filled interior."]]])
 
      :font-size
-     (content
-      [:div
-       [:p "The size of the font in a text annotation. A number between 1.0 and 100.0."]])
+     (content-para
+      "The size of the font in a text annotation. A number between 1.0 and 100.0.")
 
      :font
-     (content
-      [:div
-       [:p "The font used for drawing a text annotation."]])
+     (content-para
+      "The font used for drawing a text annotation.")
 
      :color
-     (content
-      [:div
-       [:p "Use this dropdown to control the color in which the text will be drawn. The slider at the bottom controls transparency."]])
+     (content-para
+      "Use this dropdown to control the color in which the text will be drawn. The slider at the bottom controls transparency.")
 
      :background
-     (content
-      [:div
-       [:p "Use this dropdown to control the background drawn behind the text. The slider at the bottom controls transparency: move it all the way to the left to have no background drawn."]])
+     (content-para
+      "Use this dropdown to control the background drawn behind the text. The slider at the bottom controls transparency: move it all the way to the left to have no background drawn.")
 
      :text
-     (content
-      [:div
-       [:p "Changes the text that will appear. You can also click on the text on the map while editing to change the text directly."]])
+     (content-para
+      "Changes the text that will appear. You can also click on the text on the map while editing to change the text directly.")
 
      :location
      (content
@@ -1053,75 +1046,181 @@ forward and backward in time. "])
         " button."]])
 
      :rotation
-     (content
-      [:div
-       [:p "The rotation of the selected annotation, in degrees."]])
+     (content-para
+      "The rotation of the selected annotation, in degrees.")
 
      :border-style
-     (content
-      [:div
-       [:p "What type of border, if any, to draw around the annotation."]])
+     (content-para
+      "What type of border, if any, to draw around the annotation.")
 
      :border-color
-     (content
-      [:div
-       [:p "Sets the color and transparency of the border."]])
+     (content-para
+      "Sets the color and transparency of the border.")
 
      :border-width
-     (content
-      [:div
-       [:p "Sets the width or thickness of the border."]])
+     (content-para
+      "Sets the width or thickness of the border.")
 
      :border-dash-length
-     (content
-      [:div
-       [:p "When drawing a dashed border, controls how long the dashes are."]])
+     (content-para
+      "When drawing a dashed border, controls how long the dashes are.")
 
      :border-dash-spacing
+     (content-para
+      "When drawing a dashed border, controls how much space there is between the dashes.")
+
+     :threat
+     (content-para
+      "The PPT type. These are drawn from the theater's PPT.INI file.")
+
+     :label
+     (content-para
+      "An alternate label for the PPT. Reset or leave alone to use the default.")
+
+     :reset-label
+     (content-para
+      "Reset the PPT label to the default.")
+
+     :edge-style
+     (content-para
+      "Sets the style of any edges that are drawn.")
+
+     :edge-color
+     (content-para
+      (str  "Sets the color of any edges that are drawn. " color-text))
+
+     :edge-width
+     (content-para
+      "Sets the width of any edges that are drawn. Use either the
+       slider or the text box to set a value from 1 to 100.")
+
+     :filled?
+     (content-para
+      "If checked, the annotation will have its interior filled by the
+     specified color. If unchecked, the annotation will not be
+     filled.")
+
+     :fill-color
+     (content-para
+      (str "The color used to fill the interior of an annotation. " color-text))
+
+     :halign
+     (content-para
+      "Controls whether the text will be horizontally aligned to the left, center, or right of the annotation.")
+
+     :valign
+     (content-para
+      "Controls whether the text will be vertically aligned to the top, middle, or bottom of the annotation.")
+
+     :font-bold?
      (content
       [:div
-       [:p "When drawing a dashed border, controls how much space there is between the dashes."]])}}
+       [:p
+        "When checked, the text will be rendered in a "
+        [:span {:css {:font-weight "bold"}} "bold"]
+        " font."]])
+
+     :font-italic?
+     (content
+      [:div
+       [:p
+        "When checked, the text will be rendered in a "
+        [:span {:css {:font-style "italic"}} "italic"]
+        " font."]])
+
+     :points
+     (content
+      [:div
+       [:p "The X and Y location of each labeled point of the annotation. It is generally easier to move things with the mouse by clicking and dragging the "
+        [:img {:src    "images/move.svg"
+               :width  (px 16)
+               :height (px 16)}]
+        " button."]])
+
+     :heft
+     (content-para
+      (str "Controls the overall thickness of the arrow annotation. " slider-text))
+
+     :shaft
+     (content-para
+      (str "Controls the width of the straight part of the arrow that excludes the arrowhead. " slider-text))
+
+     :arrowhead-width
+     (content-para
+      (str "Controls the width of the arrowhead portion of the arrow. " slider-text))
+
+     :arrowhead-length
+     (content-para
+      (str "Controls the length of the arrowhead portion of the arrow. " slider-text))
+
+     :closed?
+     (content-para
+      "When checked, the shape formed by the points will be closed - an
+    edge will be drawn between the first and last points, and the
+    annotation will be able to be filled. When unchecked, there will
+    be no line drawn between the first and last points, and the
+    annotation will not be able to be filled in.")
+
+     :edit-buttons
+     (content
+      [:div
+       [:p "Use these buttons to perform various operations on this annotation."]
+       [:p "Click "
+        [:img {:src "images/edit.svg"
+               :width (px 16)
+               :height (px 16)}]
+        " to enable interactive editing of the annotation on the map."]
+       [:p "Click "
+        [:img {:src "images/hide-eye.svg"
+               :width (px 16)
+               :height (px 16)}]
+        " to hide or show the annotation on the map."]
+       [:p "Click "
+        [:img {:src "images/copy.svg"
+               :width (px 16)
+               :height (px 16)}]
+        " to make an exact copy of this annotation. Note that the copy will appear on top of the original - you will have to move it."]
+       [:p "Click "
+        [:img {:src "images/trash.png"
+               :width (px 16)
+               :height (px 16)}]
+        " to delete this annotation. This operation cannot be undone, so be careful."]])}
+    }
 
    :flights
    {:mission-key
-    (content
-     [:div
-      [:p "Displays the default colors for flights by mission type.
+    (content-para
+     "Displays the default colors for flights by mission type.
     Click the colored box to make changes. Changes will be remembered
-    from session to session."]])
+    from session to session.")
 
     :mission-key-reset
-    (content
-     [:div
-      [:p "Click this button to restore all mission type colors to
-      their defaults."]])
+    (content-para
+     "Click this button to restore all mission type colors to
+      their defaults.")
 
     :team-visibility
-    (content
-     [:div
-      [:p "Filters the flight list by country. Check the boxes below
+    (content-para
+     "Filters the flight list by country. Check the boxes below
       each flag to list flights for that country in the flights
-      list. Uncheck the box to hide flights from that country."]])
+      list. Uncheck the box to hide flights from that country.")
 
     :display-options
     {:overview
-     (content
-      [:div
-       [:p "Use this section to control the way flight paths are shown
-       on the map."]])
+     (content-para
+      "Use this section to control the way flight paths are shown
+       on the map.")
 
      :map-flight-path-size
-     (content
-      [:div
-       [:p "Slide this control to the left to render flight paths and
+     (content-para
+      "Slide this control to the left to render flight paths and
        steerpoint markers with narrower lines. Slide it to the right
-       to render them with wider lines."]])
+       to render them with wider lines.")
 
      :reset-map-flight-path-size
-     (content
-      [:div
-       [:p "Click this button to restore flight paths to their default
-       width."]])}
+     (content-para
+      "Click this button to restore flight paths to their default
+       width.")}
 
     :flight-info
     (fn [mode]
@@ -1137,12 +1236,11 @@ forward and backward in time. "])
 
     :columns
     {:show?
-     (content
-      [:div
-       [:p "Check the box to display the flight path for this flight on
+     (content-para
+      "Check the box to display the flight path for this flight on
        the map. Click the colored square to change the color in which
        the flight path is displayed from the default (as determined by
-       mission type)."]])
+       mission type).")
 
      :info
      (fn [mode]
@@ -1164,100 +1262,90 @@ forward and backward in time. "])
           including munitions and detailed flight plan info."))))
 
      :combatant
-     (content
-      [:div
-       [:p "The 'owner' of this flight."]])
+     (content-para
+      "The 'owner' of this flight.")
 
      :package
-     (content
-      [:div
-       [:p "The package number (if any) to which this flight belongs.
+     (content-para
+      "The package number (if any) to which this flight belongs.
        Sort by this column to see package flights listed near each
-       other."]])
+       other.")
 
      :squadron
-     (content
-      [:div
-       [:p "The squadron to which this flight belongs."]])
+     (content-para
+      "The squadron to which this flight belongs.")
 
      :airbase
-     (content
-      [:div
-       [:p "The airbase that is home to this flight's squadron."]])
+     (content-para
+      "The airbase that is home to this flight's squadron.")
 
      :airframe
-     (content
-      [:div
-       [:p "The type and quantity of the aircraft in this flight."]])
+     (content-para
+      "The type and quantity of the aircraft in this flight.")
 
      :callsign
-     (content
-      [:div
-       [:p "The callsign of this flight."]])
+     (content-para
+      "The callsign of this flight.")
 
      :mission
-     (content
-      [:div
-       [:p "The type of mission this flight is performing. Color coded
-       according to the mission key above."]])
+     (content-para
+      "The type of mission this flight is performing. Color coded
+       according to the mission key above.")
 
      :takeoff
-     (content
-      [:div
-       [:p "The takeoff time for this flight in DAY/HH:MM format."]])
+     (content-para
+      "The takeoff time for this flight in DAY/HH:MM format.")
 
      :tot
-     (content
-      [:div
-       [:p "The Time-On-Target for this flight in DAY/HH:MM format."]])
+     (content-para
+      "The Time-On-Target for this flight in DAY/HH:MM format.")
 
      :egress
-     (content
-      [:div
-       [:p "The mission end time for this fligth in DAY/HH:MM format."]])}
+     (content-para
+      "The mission end time for this fligth in DAY/HH:MM format.")}
 
     :waypoint-columns
     {:number
-     (content [:div [:p "The steerpoint number."]])
+     (content-para "The steerpoint number.")
 
      :description
-     (content [:div [:p "A brief description of the steerpoint."]])
+     (content-para "A brief description of the steerpoint.")
 
      :action
-     (content [:div [:p "The action to be taken at the steerpoint, if any."]])
+     (content-para "The action to be taken at the steerpoint, if any.")
 
      :enroute
-     (content [:div [:p "The action to be taken enroute to the steerpoint, if any."]])
+     (content-para "The action to be taken enroute to the steerpoint, if any.")
 
      :arrive
-     (content [:div [:p "The scheduled arrival time at the steerpoint, in DAY/HH:MM:SS format."]])
+     (content-para "The scheduled arrival time at the steerpoint, in DAY/HH:MM:SS format.")
 
      :depart
-     (content [:div [:p "The scheduled departure time at the steerpoint, in DAY/HH:MM:SS format."]])
+     (content-para "The scheduled departure time at the steerpoint, in DAY/HH:MM:SS format.")
 
      :remain
-     (content [:div [:p "The scheduled duration to remain at the steerpoint, if any, in HH:MM:SS format"]])
+     (content-para "The scheduled duration to remain at the steerpoint, if any, in HH:MM:SS format")
 
      :distance
-     (content [:div [:p "The distance to this steerpoint from the previous, in nm."]])
+     (content-para "The distance to this steerpoint from the previous, in nm.")
 
      :heading
-     (content [:div [:p "The heading to this steerpoint from the previous."]])
+     (content-para "The heading to this steerpoint from the previous.")
 
      :speed-cas
-     (content [:div [:p "The calibrated airspeed to fly en route to this steerpoint."]])
+     (content-para "The calibrated airspeed to fly en route to this steerpoint.")
 
      :speed-tas
-     (content [:div [:p "The true airspeed to fly en route to this steerpoint."]])
+     (content-para "The true airspeed to fly en route to this steerpoint.")
 
      :speed-gnd
-     (content [:div [:p "The ground speed to fly en route to this steerpoint"]])
+     (content-para "The ground speed to fly en route to this steerpoint")
 
      :speed-mach
-     (content [:div [:p "The speed in mach to fly en route to this steerpoint."]])
+     (content-para "The speed in mach to fly en route to this steerpoint.")
 
      :altitude
-     (content [:div [:p "The altitude to fly en route to this steerpoint."]])
+     (content-para "The altitude to fly en route to this steerpoint.")
 
      :comments
      #(div (p "Miscellaneous comments, if any."))}}
@@ -1268,92 +1356,11 @@ forward and backward in time. "])
    :table-grid
    {:settings
     (fn [mode]
-      (condp = mode
-        :hoplon
-        (div
-         (p "Press this button to toggle column configuration. When the
-      button is depressed, columns can be added, hidden, and
-      rearranged.")
-         (p "To hide a column, click the checkbox next to the column name
-      until it shows a red "
-            (span :css {:color "red"}
-                  "✗")
-            "."
-            "To show a column, click the checkbox next to the column name
-      until it shows a green "
-            (span :css {:color "green"}
-                  "✓")
-            ".")
-         (p "To move a column to the right, click the > button next to
-      the column name. To move a column to the left, click the <
-      button next to the column name.")
-         (p "To sort a column, click the "
-            (inl
-             :class "sorters"
-             (svg/svg
-              :width (px 20)
-              :viewBox "-100 -100 200 200"
-              (comm/triangle :transform "rotate(180) translate(0 -50)"
-                             :r 50
-                             :stroke "black"
-                             :stroke-width "2"
-                             :fill "none")
-              (comm/triangle :transform "translate(0 -50)"
-                             :r 50
-                             :stroke "black"
-                             :stroke-width "2"
-                             :fill "none")))
-            " icon next to the column name. Clicking will cycle between
-         sorting in ascending and descending order.")
-         (p "Note that some columns may not permit hiding, moving, or
-      sorting.")
-         (p "When you are happy with the column configuration, click the
-      settings button again."))
-
-        :react
-        [:div
-         [:p "Press this button to toggle column configuration. When the
-      button is depressed, columns can be added, hidden, and
-      rearranged."]
-         [:p "To hide a column, click the checkbox next to the column name
-      until it shows a red "
-          [:span {:style {:color "red"}}
-           "✗"]
-          "."
-          "To show a column, click the checkbox next to the column name
-      until it shows a green "
-          [:span {:style {:color "green"}}
-           "✓"]
-          "."]
-         [:p "To move a column to the right, click the > button next to
-      the column name. To move a column to the left, click the <
-      button next to the column name."]
-         [:div "To sort a column, click the "
-          (comm/rinl
-           {:class "sorters"}
-           [:svg
-            {:width   (px 20)
-             :viewBox "-100 -100 200 200"}
-            (comm/rtriangle {:transform    "rotate(180) translate(0 -50)"
-                             :r            50
-                             :stroke       "black"
-                             :stroke-width "2"
-                             :fill         "none"})
-            (comm/rtriangle {:transform    "translate(0 -50)"
-                             :r            50
-                             :stroke       "black"
-                             :stroke-width "2"
-                             :fill         "none"})])
-          " icon next to the column name. Clicking will cycle between
-         sorting in ascending and descending order."]
-         [:p "Note that some columns may not permit hiding, moving, or
-      sorting."]
-         [:p "When you are happy with the column configuration, click the
-      settings button again."]]))}
+      :hoplon)}
 
    :settings
    {:updates
-    (content [:div [:p "Set up whether VMT will automatically check for updates, or check for updates manually."]])}})
+    (content-para [:p "Set up whether VMT will automatically check for updates, or check for updates manually."])}})
 
 (let [open-instance (cell nil)]
   (with-timeout 0
