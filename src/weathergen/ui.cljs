@@ -34,6 +34,7 @@
             [goog.style :as gstyle]
             [octet.core :as buf]
             [weathergen.canvas :as canvas]
+            [weathergen.compression :refer [compress decompress]]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
             [weathergen.dtc :as dtc]
@@ -135,8 +136,6 @@
                            (.openExternal (-> event .-target .-href))))))
 
 (def ^js/EventEmitter ipcRenderer (.-ipcRenderer electron))
-
-(def ^js/zlib zlib (js/require "zlib"))
 
 ;;; State
 
@@ -483,7 +482,8 @@
     :map-zoom                    map-zoom
     :map-text-scale              map-text-scale
     :map-icon-scale              map-icon-scale
-    :suppress-bullseye-info-box? suppress-bullseye-info-box?}))
+    :suppress-bullseye-info-box? suppress-bullseye-info-box?
+    :build-info                  build-info}))
 
 (def acmi-layer
   (weathergen.ui.layers.acmi/create
@@ -754,30 +754,6 @@
   [mission-name]
   (str (mission-name-base mission-name) ".twx"))
 
-(defn save-data
-  "Prompts the user for a path and saves a file.
-
-  `:title` - the title of the dialog that will be shown.
-  `:data`  - a string, Blob, or Buffer of data to save.
-
-  `:filters` - A seq of maps containing `:name` (string) and
-  `:extension` - (vector of strings) to populate the dialog's filter
-                 dropdown with.
-  `:filename` - The default filename - user can change this. Default
-                directory is the campaign directory for the mission."
-  [{:keys [data title filters filename]}]
-  (when-let [path (-> electron
-                      .-remote
-                      .-dialog
-                      (.showSaveDialog
-                       (clj->js {:title       title
-                                 :defaultPath (fs/path-combine (mission/campaign-dir @mission)
-                                                               filename)
-                                 :filters     [filters]})))]
-    (if (instance? js/Blob data)
-      (comm/save-blob-async data path)
-      (fs/save-data path data))))
-
 (defn save-fmap
   [weather-params weather-data]
   (let [t                 (get-in weather-params [:time :current])
@@ -794,12 +770,12 @@
         blob              (fmap/get-blob data
                                          x-cells
                                          y-cells)]
-    (save-data
+    (comm/save-data
      {:data     (safari-safe-binary blob)
       :title    "Save FMAP"
       :filters  {:name      "FMAP Files"
                  :extension ["fmap"]}
-      :filename (-> @mission :mission-name mission-name-base (str "-" (fmap-filename t)))})))
+      :default-path (-> @mission :mission-name mission-name-base (str "-" (fmap-filename t)))})))
 
 ;; TODO: make these functional instead of relying on the global state?
 (defn settings-blob
@@ -817,16 +793,16 @@
 
 (defn save-weather-settings
   [_]
-  (save-data
-   {:data     (pr-str {:weather-params  @weather-params
-                       :movement-params @movement-params
-                       :display-params  @display-params
-                       :cloud-params    @cloud-params
-                       :revision        revision})
-    :title    "Save weather settings"
-    :filename (-> @mission :mission-name settings-filename)
-    :filters  [{:name      "VMT Weather Settings"
-                :extension ["vmtw"]}]}))
+  (comm/save-data
+   {:data         (pr-str {:weather-params  @weather-params
+                           :movement-params @movement-params
+                           :display-params  @display-params
+                           :cloud-params    @cloud-params
+                           :revision        revision})
+    :title        "Save weather settings"
+    :default-path (-> @mission :mission-name settings-filename)
+    :filters      [{:name      "VMT Weather Settings"
+                    :extension ["vmtw"]}]}))
 
 (defn twx-blob
   "Returns a JS blob containing TWX file data."
@@ -836,12 +812,12 @@
 (defn save-twx
   "Initiates a download of a TWX file."
   [cloud-params direction mission-name]
-  (save-data
-   {:data     (safari-safe-binary (twx-blob cloud-params direction))
-    :title    "Save TWX"
-    :filters  [{:name      "TWX Files"
-                :extension ["twx"]}]
-    :filename (twx-filename mission-name)}))
+  (comm/save-data
+   {:data         (safari-safe-binary (twx-blob cloud-params direction))
+    :title        "Save TWX"
+    :filters      [{:name      "TWX Files"
+                    :extension ["twx"]}]
+    :default-path (twx-filename mission-name)}))
 
 (defn load-weather-settings
   [_]
@@ -951,18 +927,6 @@
                          (hint->> cljs.core/Hashable)
                          hash-set))))))))
 
-(defn compress
-  "Compresses a buffer, returing a new buffer with the compressed
-  data."
-  [buf]
-  (.gzipSync zlib buf))
-
-(defn decompress
-  "Decompresses a buffer, returning a new buffer with the expanded
-  data."
-  [buf]
-  (.gunzipSync zlib buf))
-
 (def ^js/StringDecoder StringDecoder (aget (js/require "string_decoder") "StringDecoder"))
 
 (defn- buf->string
@@ -1028,22 +992,23 @@
 (defn save-briefing
   "Prompts the user for a path and saves a briefing file to it."
   [install-id visible-sides]
-  (save-data
-   {:data     (->> {:revision       revision
-                    :briefing       (mission/mission->briefing @mission install-id build-info)
-                    :weather        {:weather-params  @weather-params
-                                     :cloud-params    @cloud-params
-                                     :movement-params @movement-params
-                                     :display-params  @display-params}
-                    :visible-sides  visible-sides
-                    :briefing-notes @briefing-notes
-                    :annotations    (weathergen.ui.layers.annotations/briefing-data annotations-layer)}
-                   encode
-                   compress)
-    :title    "Save a briefing file"
-    :filename (-> @mission :mission-name mission-name-base (str ".vmtb"))
-    :filters  [{:name      "VMT Briefing"
-                :extension ["vmtb"]}]}))
+  (comm/save-data
+   {:data         (->> {:revision       revision
+                        :vmt-version    (get build-info "VERSION")
+                        :briefing       (mission/mission->briefing @mission install-id build-info)
+                        :weather        {:weather-params  @weather-params
+                                         :cloud-params    @cloud-params
+                                         :movement-params @movement-params
+                                         :display-params  @display-params}
+                        :visible-sides  visible-sides
+                        :briefing-notes @briefing-notes
+                        :annotations    (weathergen.ui.layers.annotations/briefing-data annotations-layer)}
+                       encode
+                       compress)
+    :title        "Save a briefing file"
+    :default-path (-> @mission :mission-name mission-name-base (str ".vmtb"))
+    :filters      [{:name      "VMT Briefing"
+                    :extension ["vmtb"]}]}))
 
 (def weather-worker
   (let [^js/Worker worker (js/Worker. "worker.js")

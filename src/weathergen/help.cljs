@@ -178,15 +178,15 @@
 
      :from
      (content-para
-      "The FMAP files in the generated weather package will start from this time.")
+      "The generated FMAP files in the WeatherMapsUpdates folder will start from this time.")
 
      :to
      (content-para
-      "The FMAP files in the generated weather package will end at this time.")
+      "The generated FMAP files in the WeatherMapsUpdates folder will end at this time.")
 
      :step
      (content-para
-      "The FMAP files in the generated weather package will
+      "The generated FMAP files in the WeatherMapsUpdates folder will
      be this many minutes apart.")
 
      :mission-name
@@ -1184,8 +1184,26 @@ forward and backward in time. ")
         [:img {:src "images/trash.png"
                :width (px 16)
                :height (px 16)}]
-        " to delete this annotation. This operation cannot be undone, so be careful."]])}
-    }
+        " to delete this annotation. This operation cannot be undone, so be careful."]])
+
+     :serialization
+     (content-para
+      "Load and save annotations to VMT Annotation files, or import annotations from existing VMT Briefing files.")
+
+     :serialization-buttons
+     (content
+      [:div
+       [:dl
+        [:dt "Save"]
+        [:dd "Save all annotations to a VMT Annotations (.vmta) file."]
+
+        [:dt "Load"]
+        [:dd "Load all annotations from a VMT Annotations (.vmta) file onto the current map."]
+
+        [:dt "Import From Briefing"]
+        [:dd "Load all the annoations from a VMT Briefing (.vmtb) file onto the current map."]]])
+     } ;; :annotations
+    } ;; :map-controls
 
    :flights
    {:mission-key
@@ -1343,6 +1361,9 @@ forward and backward in time. ")
 
      :speed-mach
      (content-para "The speed in mach to fly en route to this steerpoint.")
+
+     :speed-ias
+     (content-para "The indicated airspeed to fly en route to this steerpoint.")
 
      :altitude
      (content-para "The altitude to fly en route to this steerpoint.")

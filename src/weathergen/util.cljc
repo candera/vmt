@@ -1,5 +1,6 @@
 (ns weathergen.util
-  "The inevitable namespace.")
+  "The inevitable namespace."
+  (:require [clojure.string :as str]))
 
 (defn str->long
   "Convert a string to a long. Returns nil when it can't be parsed."
@@ -58,3 +59,23 @@
   "Returns true if all of the bits set in `mask` are also set in `x`."
   [x mask]
   (-> x (bit-and mask) (= mask)))
+
+(defn format-list
+  "Given a collection of strings, concatenate them together inserting
+  commas and the word \"and\" as appropirate."
+  ([items] (format-list {:conjunction "and" :separator ","} items))
+  ([{:keys [separator conjunction] :as opts} items]
+   (let [n (count items)
+         separator (or separator ",")]
+     (if (< (count items) 2)
+       (first items)
+       (str (->> items
+                 butlast
+                 (str/join (str separator " ")))
+            (when (< 2 (count items))
+              separator)
+            " "
+            conjunction
+            " "
+            (last items))))))
+

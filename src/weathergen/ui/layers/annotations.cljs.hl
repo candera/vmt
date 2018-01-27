@@ -7,7 +7,11 @@
             [goog.string :as gstring]
             [goog.string.format]
             [hoplon.svg :as svg]
+            [weathergen.compression :refer [decompress]]
             [weathergen.coordinates :as coords]
+            [weathergen.encoding :refer [decode encode]]
+            [weathergen.falcon.files.mission :as mission]
+            [weathergen.filesystem :as fs]
             [weathergen.help :as help :refer [help-icon with-help]]
             [weathergen.math :as math]
             [weathergen.ui.buttons :as buttons]
@@ -20,7 +24,8 @@
                                                    path-lens pct pre-cell px
                                                    styled team-color triangle
                                                    validating-edit]]
-            [weathergen.ui.tabs :as tabs])
+            [weathergen.ui.tabs :as tabs]
+            [weathergen.util :as util])
   (:require-macros
    [weathergen.cljs.macros :refer [hint->
                                    hint->>
@@ -1339,8 +1344,7 @@
            "Reset")
           (help-icon [:map-controls :annotations :reset-label]))))))
 
-(defn- controls
-  "Returns UI for the map annotation controls."
+(defn- annotation-edit-section
   [{:keys [annotations map-viewbox map-zoom mission] :as state}]
   (control-section
    :title (helped :overview "Annotations")
@@ -1421,10 +1425,10 @@
            :flex-wrap "wrap"}
      #_(div
         :css {:display "pre-wrap"}
-      (cell= (pr-str annotations)))
+        (cell= (pr-str annotations)))
      (keyed-for-tpl key
          [[k _] annotations]
-       (let [annotation (map-lens annotations k)]
+         (let [annotation (map-lens annotations k)]
            (with-key-lenses annotation [type shape-type editing? hidden? fill-color filled? open?]
              (div
               :css (formula-of [hidden? editing?]
@@ -1568,6 +1572,162 @@
                               dissoc
                               @k))))))))))
 
+(defn- save-annotations
+  [{:keys [mission annotations build-info]}]
+  (comm/save-data
+   {:data         (encode {:vmt-version (get build-info "VERSION")
+                           :annotations (vals @annotations)})
+    :title        "Save VMT Annoations"
+    :filters      [{:name "VMT Annotations"
+                    :extension ["vmta"]}]
+    :default-path (-> @mission
+                      :mission-name
+                      (fs/basename {:omit-extension? true})
+                      (str ".vmta"))}))
+
+(defn- load-annotations
+  [{:keys [annotations build-info serialization-messages]}]
+  (when-let [path (comm/get-path-for-load
+                   {:title        "Load VMT Annotations"
+                    :filters      [{:name      "VMT Annotations"
+                                    :extensions ["vmta"]}]
+                    :default-path nil})]
+    (let [decoded                           (-> path fs/file-text decode)
+          this-version                      (get build-info "VERSION")
+          {loaded-version     :vmt-version
+           loaded-annotations :annotations} decoded]
+      (swap! annotations
+             merge
+             (zipmap
+              (repeatedly unique-id)
+              loaded-annotations))
+      (when (not= loaded-version (get build-info "VERSION"))
+        (swap! serialization-messages
+               assoc
+               (unique-id)
+               (str "You are running version "
+                    (or this-version "(no version)")
+                    "of VMT, but the loaded annotation file was saved with version "
+                    (or loaded-version "(no version)")
+                    ". Using different versions of VMT does not usually cause a problem, but if you see anything unusal in the loaded annotations, this may be the reason."))))))
+
+(defn- import-annotations
+  [{:keys [annotations mission build-info serialization-messages]}]
+  (when-let [path (comm/get-path-for-load
+                   {:title        "Choose VMT Briefing"
+                    :filters      [{:name       "VMT Briefing"
+                                    :extensions ["vmtb"]}]
+                    :default-path nil})]
+    (let [decoded                        (->> path
+                                              fs/file-buffer
+                                              decompress
+                                              decode)
+          {loaded-version  :vmt-version
+           briefing-data   :briefing
+           annotation-data :annotations} decoded
+          loaded-install                 (:install-id briefing-data)
+          loaded-theater                 (:theaterdef-name briefing-data)
+          loaded-annotations             (:annotations annotation-data)
+          this-installs                  (if-let [install-id (:install-id @mission)]
+                                           #{install-id}
+                                           (-> @mission :installs keys set))
+          this-version                   (get build-info "VERSION")
+          this-theater                   (mission/theaterdef-name @mission)]
+      (.log js/console "briefing" (pr-str (keys briefing-data)))
+      (.log js/console "annotation-data" (pr-str annotation-data))
+      (.log js/console "annotations" (count loaded-annotations))
+      (cond
+
+        (zero? (count loaded-annotations))
+        (swap! serialization-messages
+               assoc
+               (unique-id)
+               "No annotations were found in the briefing.")
+
+        :else
+        (do
+          (when-not (= this-theater loaded-theater)
+            (swap! serialization-messages
+                   assoc
+                   (unique-id)
+                   (str "The selected briefing is for theater "
+                        loaded-theater
+                        " but this mission is for theater "
+                        this-theater
+                        ". The locations of the loaded annotations may therefore be incorrect.")))
+
+          (when-not (this-installs loaded-install)
+            (swap! serialization-messages
+                   assoc
+                   (unique-id)
+                   (str "The imported briefing was saved for installation "
+                        loaded-install
+                        " but this mission targets "
+                        (util/format-list {:conjuction "or"} this-installs)
+                        ". Unexpected results may occur.")))
+          (when (not= loaded-version (get build-info "VERSION"))
+            (swap! serialization-messages
+                   assoc
+                   (unique-id)
+                   (str "You are running version "
+                        (or this-version "(no version)")
+                        "of VMT, but the loaded annotation file was saved with version "
+                        (or loaded-version "(no version)")
+                        ". Using different versions of VMT does not usually cause a problem, but if you see anything unusal in the loaded annotations, this may be the reason.")))
+          (swap! annotations
+                 merge
+                 (zipmap (repeatedly unique-id)
+                         loaded-annotations)))))))
+
+(defn- annotation-serialization-section
+  [{:keys [annotations mission] :as state}]
+  (let [messages (cell (sorted-map))
+        state (assoc state :serialization-messages messages)]
+    (control-section
+     :title (helped :serialization "Save/load")
+     (buttons/a-button
+      :click #(save-annotations state)
+      :disabled? (cell= (empty? annotations))
+      "Save")
+     (buttons/a-button
+      :click #(load-annotations state)
+      "Load")
+     (buttons/a-button
+      :click #(import-annotations state)
+      "Import From Briefing")
+     (help-icon [:map-controls :annotations :serialization-buttons])
+     (map-lens-tpl messages [id message]
+       (div
+        :css {:border        "double"
+              :border-color  "black"
+              :background    "#945594"
+              :color         "white"
+              :position      "relative"
+              :margin-bottom (px 3)
+              :padding       (px 0 3)}
+        (styled
+         :garden [:a {:color "#ebff00"}]
+         :css {:display       "inline-block"
+               :padding-right (px 10)}
+         message)
+        (div
+         :css {:position    "absolute"
+               :color       "#ff6b6b"
+               :font-size   (pct 150)
+               :font-weight "bold"
+               :top         (px -8)
+               :right       (px 5)
+               :cursor      "pointer"}
+         :click #(swap! messages dissoc @id)
+         "×"))))))
+
+(defn- controls
+  "Returns UI for the map annotation controls."
+  [state]
+  (div
+   (annotation-serialization-section state)
+   (annotation-edit-section state)))
+
 (defn create
   "Creates the annotations layer."
   [mission {:keys [map-viewbox map-zoom] :as state}]
@@ -1586,12 +1746,15 @@
                      :state
                      :annotations
                      deref
-                     (reduce-kv (fn [annotations k annotation]
-                                  (assoc annotations k (assoc annotation :editing? false)))
-                                (sorted-map)))})
+                     vals
+                     (map #(assoc % :editing? false)))})
 
 (defn load-briefing-data
   "Given briefing data, update the layer with the state from it."
-  [this data]
-  (reset! (get-in this [:state :annotations])
-          (or (:annotations data) (sorted-map))))
+  [layer data]
+  (reset! (get-in layer [:state :annotations])
+          (into (sorted-map)
+                (some->>
+                 data
+                 :annotations
+                 (zipmap (repeatedly unique-id))))))

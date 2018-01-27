@@ -16,7 +16,7 @@
             [weathergen.math :as math]
             [weathergen.progress :as progress]
             [weathergen.time :as time]
-            [weathergen.util :as util :refer [has-flag?]]))
+            [weathergen.util :as util :refer [format-list has-flag?]]))
 
 ;;; Database accessors
 
@@ -1523,23 +1523,6 @@
                            ::image (objective-image mission %)
                            ::name (objective-name mission %))))))))
 
-(defn- format-list
-  "Given a collection of strings, concatenate them together inserting
-  commas and the word \"and\" as appropirate."
-  ([items] (format-list {} items))
-  ([{:keys [separator] :as opts} items]
-   (let [n (count items)
-         separator (or separator ",")]
-     (if (< (count items) 2)
-       (first items)
-       (str (->> items
-                 butlast
-                 (str/join (str separator " ")))
-            (when (< 2 (count items))
-              separator)
-            " and "
-            (last items))))))
-
 (defn- report-airbases-with-invalid-owner
   "Throw an error if an airbase has an invalid owner."
   [mission]
@@ -1697,7 +1680,7 @@
           :extension       (-> mission :path extension)
           :install-id      install-id
           :build-info      build-info}
-         (select-keys mission (concat (vals file-types) [:mission-name]))))
+         (select-keys mission (concat (vals file-types) [:mission-name :ppt-data]))))
 
 (defn briefing->mission
   "Loads a mission given a briefing (see `mission->briefing`)."
@@ -1754,6 +1737,10 @@
                                      :names          names
                                      :installation   installation
                                      :theater        theater
+                                     ;; We re-read the PPT data from the theater, even
+                                     ;; though it should be present in the briefing.. We
+                                     ;; should probably compare it and figure out what to do
+                                     ;; if they're different.
                                      :ppt-data       (read-ppt-data installation theater)})]
     (postprocess-mission mission)))
 

@@ -26,6 +26,10 @@
   (:require-macros
    [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of hint-> hint]]))
 
+(def ^js/electron electron (js/require "electron")
+  #_(when (= "nodejs" cljs.core/*target*)
+      (js/require "electron")))
+
 (defn parse-int
   "Parses an int from a string, returning the int, or nil if it cannot
   be parsed as an int."
@@ -651,6 +655,51 @@
                 ;;   deferred.resolve();
                 )))
     (.readAsArrayBuffer reader blob)))
+
+(defn save-data
+  "Prompts the user for a path and saves a file.
+
+  `:title` - the title of the dialog that will be shown.
+  `:data`  - a string, Blob, or Buffer of data to save.
+  `:filters` - A seq of maps containing `:name` (string) and
+               `:extension` (vector of strings) to populate the
+               dialog's filter dropdown with.
+  `:default-path` - Absolute directory path, absolute file path,
+                    or file name to use by default."
+  [{:keys [data title filters default-path] :as params}]
+  (when-let [path (-> electron
+                      .-remote
+                      .-dialog
+                      (.showSaveDialog
+                       (clj->js (cond-> {:title       title
+                                         :filters     [filters]}
+                                  default-path (assoc :defaultPath default-path)))))]
+    (if (instance? js/Blob data)
+      (save-blob-async data path)
+      (fs/save-data path data))))
+
+(defn get-path-for-load
+  "Prompts the user for a path from which to load a a file. Returns nil
+  if no path was selected.
+
+  `:title` - the title of the dialog that will be shown.
+  `:filters` - A seq of maps containing `:name` (string) and
+               `:extensions` (vector of strings) to populate the
+               dialog's filter dropdown with.
+  `:default-path` - Absolute directory path, absolute file path,
+                    or file name to use by default."
+  [{:keys [title filters default-path]}]
+  (when-let [[path] (-> electron
+                        .-remote
+                        .-dialog
+                        (.showOpenDialog
+                         (clj->js
+                          (cond->
+                              {:title       title
+                               :properties  ["openFile"]
+                               :filters     filters}
+                            default-path (assoc :defaultPath default-path)))))]
+    path))
 
 (defn get-image
   "Return a URL for the image identified by `image-descriptor`."
