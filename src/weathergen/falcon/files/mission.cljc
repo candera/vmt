@@ -1753,7 +1753,8 @@
                                      :scenario-files scenario-files
                                      :names          names
                                      :installation   installation
-                                     :theater        theater})]
+                                     :theater        theater
+                                     :ppt-data       (read-ppt-data installation theater)})]
     (postprocess-mission mission)))
 
 
