@@ -3050,3 +3050,10 @@ type: 0x64 -> image
 (pprint (macroexpand-1 '(weathergen.cljs.macros/map-lens-tpl k v m (+ m k v))))
 
 (def b (-> "/tmp/Ronchi_OCA_lone_wolf.txt.acmi" slurp acmi/read-acmi time))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(def b (read-briefing "/tmp/FNPU3.vmtb"))
+
+(-> b keys)
+
+(keys @smpu)

@@ -42,6 +42,7 @@
                  [org.clojure/tools.namespace "0.2.11" :scope "test"]
                  [quil "2.6.0"]
 
+                 [binaryage/devtools "0.9.9" :scope "test"]
                  ;;[io.nervous/cljs-nodejs-externs "0.2.0"]
                  ;;[cljsjs/nodejs-externs "1.0.4-1"]
                  ]
@@ -92,7 +93,21 @@
              ;; :only-by-re [#"^((?!worker).)*$"]
              )
    ;;(cljs-repl :ids #{"index.html"})
-   (cljs :ids #{"worker" "index.html" "mission.html" "test.html"}
+   (cljs :ids #{"index.html" "mission.html" "test.html"}
+         :optimizations :none
+         ;; :optimizations :whitespace
+         :compiler-options {;;:target :nodejs
+                            :hashbang false
+                            :parallel-build false
+                            ;;:externs ["js/slickgrid/slickgrid.ext.js"]
+                            :infer-externs false
+                            :pretty-print true
+                            :pseudo-names true
+                            :preloads '[devtools.preload]
+                            }
+         :source-map (boolean source-maps))
+   (cljs :ids #{"worker"}
+         ;; :optimizations :none
          :optimizations :whitespace
          :compiler-options {;;:target :nodejs
                             :hashbang false
@@ -101,9 +116,11 @@
                             :infer-externs false
                             :pretty-print true
                             :pseudo-names true
+                            ;; :preloads '[devtools.preload]
                             }
-         :source-map source-maps)
+         :source-map (boolean source-maps))
    (cljs :ids #{"main"}
+         :optimizations :none
          ;; :optimizations :simple
          :compiler-options {:asset-path "target/main.out"
                             :closure-defines {'app.main/dev? true}
@@ -112,7 +129,8 @@
                             :parallel-build true
                             :infer-externs false
                             :pretty-print true
-                            :pseudo-names true})
+                            :pseudo-names true}
+         :source-map (boolean source-maps))
    (target)))
 
 (deftask electron
