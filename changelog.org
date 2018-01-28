@@ -4,23 +4,12 @@
 #+TITLE:
 
 * Change Log
-** v055-28 (dev-only)
-- Add copy button to annotations
-- Arrow annotations
-- Lines annotations
+** v056 [2018-01-28 Sun]
+- Annotations!
+  - Add arrows, text, shapes, and lines to a map and save them with a
+    briefing
+- Can now save modified briefing when viewing a briefing
 - Fix bug where dragging off the map makes things jump around
-** v055-12 (dev-only)
-- Remove text annotations in favor of allow text on any shape
-- Add oval/elliptical annotations
-- Add support for left/right/center and top/middle/bottom aligned text
-- Reorganize annotation controls
-** v055-11 (dev-only)
-- Different (better?) rotation controls.
-** v055-9 (dev-only)
-- Rectangle annotations
-** v055-8 (dev-only)
-- Text annotations
-** v055-5 (dev-only)
 - Reverse use of triangles/circles in waypoints to match BMS
 - Include download link in update notifications.
 ** v055 [2017-12-26 Tue]
