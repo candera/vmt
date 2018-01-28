@@ -20,6 +20,13 @@
   "
   [attrs _]
   (let [{:keys [selected tabs]} attrs]
+    (doseq [{:keys [id hidden?]} tabs]
+      (when hidden?
+        (add-watch hidden?
+                   (gensym)
+                   (fn [_ _ _ n]
+                     (when (and n (= id @selected))
+                       (reset! selected (-> tabs first :id)))))))
     (div
      (div
       :css {:margin-bottom "7px"
