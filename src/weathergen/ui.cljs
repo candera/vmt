@@ -465,6 +465,19 @@
            fs/file-text
            parse-build-info))))
 
+(def tools-visible?
+  "Whether or not the tools tab is visible"
+  (cell false))
+
+(.addEventListener js/document
+                   "keydown"
+                   (fn [event]
+                     (when (and (= (.-code event) "KeyT")
+                                (or (.-altKey event)
+                                    (.-metaKey event))
+                                (.-ctrlKey event))
+                       (swap! tools-visible? not))))
+
 ;;; Components
 
 (def flight-paths-layer
@@ -4669,14 +4682,19 @@
                             :height   "auto"})))
            (tabs/tabs
             :selected (cell (-> section-infos first :id))
-            :tabs (for [{:keys [title id sections]} section-infos]
-                    {:title title
-                     :id    id
-                     :ui    (for [[section opts] (partition 2 sections)
-                                  :let           [ctor (section-ctor section)]]
-                              (with-time
-                                (str "Rendering " section)
-                                (ctor (assoc opts ::scroll-container right-column))))})))))))
+            :tabs (concat
+                   (for [{:keys [title id sections]} section-infos]
+                     {:title title
+                      :id    id
+                      :ui    (for [[section opts] (partition 2 sections)
+                                   :let           [ctor (section-ctor section)]]
+                               (with-time
+                                 (str "Rendering " section)
+                                 (ctor (assoc opts ::scroll-container right-column))))})
+                   [{:title "Tools"
+                     :id :tools-tab
+                     :ui (div "TODO")
+                     :hidden? (cell= (not tools-visible?))}])))))))
     (debug-info))))
 
 #_(with-init!
