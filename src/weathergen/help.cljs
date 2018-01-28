@@ -735,6 +735,11 @@ forward and backward in time. ")
       [:p "Briefing files must be opened on a machine with the
       indicated version of Falcon BMS and theater installed."]])
 
+    :save-briefing-from-briefing
+    (content-para "Click this button to save a copy of the briefing.
+    The copy will contain any changes you have made, including
+    briefing notes and map annotations.")
+
     :briefing-notes
     {:edit
      (content-para
@@ -744,7 +749,7 @@ forward and backward in time. ")
 
      :briefing
      (content-para
-      "Notes provided by the mission creator. Not editable.")}}
+      "Optional notes for mission participants.")}}
 
    :air-forces
    {:airbase-filtering

@@ -1,5 +1,6 @@
 (ns weathergen.falcon.files.mission
-  (:require [clojure.set :as set]
+  (:require [clojure.pprint]
+            [clojure.set :as set]
             [clojure.string :as str]
             [octet.core :as buf]
             [taoensso.timbre :as log
@@ -1677,7 +1678,8 @@
   mission later."
   [mission install-id build-info]
   (merge {:theaterdef-name (theaterdef-name mission)
-          :extension       (-> mission :path extension)
+          :extension       (or (some-> mission :original-briefing :extension)
+                               (-> mission :path extension))
           :install-id      install-id
           :build-info      build-info}
          (select-keys mission (concat (vals file-types) [:mission-name :ppt-data]))))
@@ -1730,18 +1732,19 @@
         mission              (merge database
                                     briefing
                                     ;; TODO: Figure out if we need to merge persistent objects
-                                    {:objectives     (merge-objective-deltas
-                                                      (:objectives scenario-files)
-                                                      (:objective-deltas briefing))
-                                     :scenario-files scenario-files
-                                     :names          names
-                                     :installation   installation
-                                     :theater        theater
+                                    {:objectives        (merge-objective-deltas
+                                                         (:objectives scenario-files)
+                                                         (:objective-deltas briefing))
+                                     :scenario-files    scenario-files
+                                     :names             names
+                                     :installation      installation
+                                     :theater           theater
                                      ;; We re-read the PPT data from the theater, even
                                      ;; though it should be present in the briefing.. We
                                      ;; should probably compare it and figure out what to do
                                      ;; if they're different.
-                                     :ppt-data       (read-ppt-data installation theater)})]
+                                     :ppt-data          (read-ppt-data installation theater)
+                                     :original-briefing briefing})]
     (postprocess-mission mission)))
 
 

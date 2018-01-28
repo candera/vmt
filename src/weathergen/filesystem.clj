@@ -92,6 +92,13 @@
       java.nio.file.Files/readAllBytes
       java.nio.ByteBuffer/wrap))
 
+(defn file-buffer
+  "Returns a byte array wrapping the cntents of the file at `path`"
+  [path]
+  (-> path
+      ->path
+      java.nio.file.Files/readAllBytes))
+
 (defn file-text
   "Returns a string with the contents of the file at `path`."
   [path]

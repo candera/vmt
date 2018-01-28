@@ -4257,62 +4257,69 @@
   (control-section
    :title (with-help [:mission-info :save-briefing]
             "Save Mission Briefing")
-   :toggle (cell= (= display-mode :edit))
-   (let [only-install     (formula-of [mission]
-                            (when (-> mission :candidate-installs count (= 1))
-                              (-> mission :candidate-installs keys first)))
-         selected-install (cell nil)
-         install-to-save  (formula-of [only-install selected-install]
-                            (or only-install selected-install))]
+   (case-tpl display-mode
+     :briefing
      (div
-      :css {:padding "5px"}
-      (div
-       (cond-tpl
-         only-install
-         (div (span "Briefing will be saved for installation: ")
-              (span :css {:font-family "monospace"
-                          :font-size   "120%"}
-                    (cell= (-> mission :candidate-installs first key))))
-
-         (-> mission :candidate-installs count zero? cell=)
-         "Cannot find a matching installation of Falcon BMS for this mission."
-
-         :else
-         (div
-          (div
-           (span "Multiple installed copies of Falcon BMS point at the mission directory, ")
-           (span
-            :css {:font-family "monospace"
-                  :font-size "110%"}
-            (formula-of [mission]
-              (-> mission :candidate-installs first val)))
-           (span ". Select which installation this mission is for. (If unsure, choose 'Falcon BMS 4.33 U1'.)"))
-          (comm/radio-group
-           :value selected-install
-           :choices (formula-of [mission]
-                      (for [[install-name install-path] (:candidate-installs mission)]
-                        {:value install-name
-                         :label (inl install-name)}))))
-         #_""))
-      (div
-       :css {:border        "1px solid black"
-             :margin-top    "10px"
-             :margin-bottom "10px"}
-       (div
-        :css {:color         "white"
-              :background    "black"
-              :margin-bottom "5px"
-              :padding       "2px"}
-        "Visibility")
-       (comm/side-selector
-        :css {:padding "0 0 5px 5px"}
-        :mission mission
-        :selected-sides visible-sides))
       (buttons/a-button
-       :disabled? (cell= (not install-to-save))
-       :click #(save-briefing @install-to-save @visible-sides)
+       :click #(save-briefing (-> @mission :original-briefing :install-id)
+                              (-> @mission :original-briefing :visible-sides))
        "Save Briefing (.vmtb)")
-      (help-icon [:mission-info :save-briefing])))))
+      (help-icon [:mission-info :save-briefing-from-briefing]))
+     (let [only-install     (formula-of [mission]
+                              (when (-> mission :candidate-installs count (= 1))
+                                (-> mission :candidate-installs keys first)))
+           selected-install (cell nil)
+           install-to-save  (formula-of [only-install selected-install]
+                              (or only-install selected-install))]
+       (div
+        :css {:padding "5px"}
+        (div
+         (cond-tpl
+           only-install
+           (div (span "Briefing will be saved for installation: ")
+                (span :css {:font-family "monospace"
+                            :font-size   "120%"}
+                      (cell= (-> mission :candidate-installs first key))))
+
+           (-> mission :candidate-installs count zero? cell=)
+           "Cannot find a matching installation of Falcon BMS for this mission."
+
+           :else
+           (div
+            (div
+             (span "Multiple installed copies of Falcon BMS point at the mission directory, ")
+             (span
+              :css {:font-family "monospace"
+                    :font-size "110%"}
+              (formula-of [mission]
+                (-> mission :candidate-installs first val)))
+             (span ". Select which installation this mission is for. (If unsure, choose 'Falcon BMS 4.33 U1'.)"))
+            (comm/radio-group
+             :value selected-install
+             :choices (formula-of [mission]
+                        (for [[install-name install-path] (:candidate-installs mission)]
+                          {:value install-name
+                           :label (inl install-name)}))))
+           #_""))
+        (div
+         :css {:border        "1px solid black"
+               :margin-top    "10px"
+               :margin-bottom "10px"}
+         (div
+          :css {:color         "white"
+                :background    "black"
+                :margin-bottom "5px"
+                :padding       "2px"}
+          "Visibility")
+         (comm/side-selector
+          :css {:padding "0 0 5px 5px"}
+          :mission mission
+          :selected-sides visible-sides))
+        (buttons/a-button
+         :disabled? (cell= (not install-to-save))
+         :click #(save-briefing @install-to-save @visible-sides)
+         "Save Briefing (.vmtb)")
+        (help-icon [:mission-info :save-briefing]))))))
 
 ;; TODO: Make this into something other than straight text at some point
 (defn briefing-notes-section
@@ -4323,31 +4330,14 @@
             (with-help [:mission-info :briefing-notes display-mode]
               "Briefing Notes"))
    (div
-    (if-tpl (cell= (= display-mode :edit))
-      (textarea
-       :css {:font-family "monospace"
-             :font-size   (pct 110)
-             :width       (pct 100)}
-       :rows 10
-       :value briefing-notes
-       :placeholder "Enter briefing notes here"
-       :change #(reset! briefing-notes @%))
-      (div
-       :css {:font-family  "monospace"
-             :font-size    (pct 110)
-             :white-space  "pre-wrap"
-             :padding      (px 10)
-             :background   "white"
-             :border-width (px 1)
-             :border-color "lightgray"
-             :border-style "solid"}
-       (formula-of [briefing-notes]
-         (if (str/blank? briefing-notes)
-           (span
-            :css {:font-style "italic"
-                  :color      "darkgrey"}
-            "No briefing notes were included.")
-           briefing-notes)))))))
+    (textarea
+     :css {:font-family "monospace"
+           :font-size   (pct 110)
+           :width       (pct 100)}
+     :rows 10
+     :value briefing-notes
+     :placeholder "Enter briefing notes here"
+     :change #(reset! briefing-notes @%)))))
 
 (defn map-controls-section
   "Controls for how the map is displayed."
