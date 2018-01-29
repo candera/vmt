@@ -596,14 +596,14 @@
         (add-watch index
                    (gensym)
                    (fn [_ _ _ n]
-                     (.log js/console "select2: add-watch running " (pr-str n))
+                     #_(.log js/console "select2: add-watch running " (pr-str n))
                      (let [s (-> elem
                                  js/jQuery
                                  (hint-> js/jQuery)
                                  .empty
                                  #_(.trigger "change"))]
                        (-> (reduce (fn [s {:keys [value label]}]
-                                     (.log js/console "Adding"
+                                     #_(.log js/console "Adding"
                                            ":label" label
                                            ":id" (lookup value))
                                      (.append s (js/Option. label (lookup value) false false)))
@@ -613,7 +613,7 @@
                            (.trigger "change")))))
         (when-dom3 elem
           #(do
-             #_(-> js/jQuery .-fn .-select2 .-defaults (.set "width" "auto"))
+             (-> js/jQuery .-fn .-select2 .-defaults (.set "width" "resolve"))
              (-> elem
                 js/jQuery
                 (hint-> js/jQuery)
