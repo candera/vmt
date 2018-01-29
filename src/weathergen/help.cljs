@@ -1099,6 +1099,14 @@ forward and backward in time. ")
       "Sets the width of any edges that are drawn. Use either the
        slider or the text box to set a value from 1 to 100.")
 
+     :edge-dash-length
+     (content-para
+      "For a dashed edge, sets how long the dashes are.")
+
+     :edge-dash-spacing
+     (content-para
+      "For a dashed edge, sets how large the gaps between the dashes are.")
+
      :filled?
      (content-para
       "If checked, the annotation will have its interior filled by the
