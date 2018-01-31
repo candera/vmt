@@ -1390,7 +1390,47 @@ forward and backward in time. ")
    :table-grid
    {:settings
     (fn [mode]
-      :hoplon)}
+      (condp = mode
+        :hoplon ; Ignore React for now
+        (div
+         (p "Press this button to toggle column configuration. When the
+  button is depressed, columns can be added, hidden, and
+  rearranged.")
+         (p "To hide a column, click the checkbox next to the column name
+  until it shows a red "
+            (span :css {:color "red"}
+                  "✗")
+            "."
+            "To show a column, click the checkbox next to the column name
+  until it shows a green "
+            (span :css {:color "green"}
+                  "✓")
+            ".")
+         (p "To move a column to the right, click the > button next to
+  the column name. To move a column to the left, click the <
+  button next to the column name.")
+         (p "To sort a column, click the "
+            (inl
+             :class "sorters"
+             (svg/svg
+              :width (px 20)
+              :viewBox "-100 -100 200 200"
+              (comm/triangle :transform "rotate(180) translate(0 -50)"
+                             :r 50
+                             :stroke "black"
+                             :stroke-width "2"
+                             :fill "none")
+              (comm/triangle :transform "translate(0 -50)"
+                             :r 50
+                             :stroke "black"
+                             :stroke-width "2"
+                             :fill "none")))
+            " icon next to the column name. Clicking will cycle between
+     sorting in ascending and descending order.")
+         (p "Note that some columns may not permit hiding, moving, or
+  sorting.")
+         (p "When you are happy with the column configuration, click the
+  settings button again."))))}
 
    :settings
    {:updates
