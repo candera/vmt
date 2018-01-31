@@ -36,6 +36,7 @@
             [weathergen.canvas :as canvas]
             [weathergen.compression :refer [compress decompress]]
             [weathergen.coordinates :as coords]
+            [weathergen.damage :as damage]
             [weathergen.database :as db]
             [weathergen.dtc :as dtc]
             [weathergen.encoding :refer [encode decode] :as encoding]
@@ -86,7 +87,14 @@
                                 spy get-env log-env)])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-key-lenses with-attr-bindings with-bbox with-time formula-of hint-> hint->>]])
+   [weathergen.cljs.macros :refer [with-key-lenses
+                                   with-attr-bindings
+                                   with-bbox
+                                   with-time
+                                   formula-of
+                                   hint->
+                                   hint->>
+                                   keyed-for-tpl]])
   (:refer-clojure :exclude [load-file]))
 
 ;; (set! *warn-on-infer* true)
@@ -4416,6 +4424,194 @@
    (let [flight-path-display-controls (:map-display-controls-fn flight-paths-layer)]
      (flight-path-display-controls "Flight Path Display Options"))))
 
+(defn damage-computer-section
+  [_]
+  (control-section
+   :title "Damage computer"
+   (let [selected-objective (cell nil)
+         selected-weapon    (cell nil)]
+     (div
+      :css {:margin (px 0 5)}
+      (inl (inl
+            {:css {:margin-right (px 3)}}
+            "Objective:")
+           (comm/select2
+            :css {:width (px 150)}
+            :value selected-objective
+            :choices (formula-of [mission]
+                       (for [objective (->> mission
+                                            ::mission/objectives
+                                            (sort-by ::mission/name))]
+                         {:value objective
+                          :label (::mission/name objective)}))))
+      (inl (inl
+            {:css {:margin-left  (px 7)
+                   :margin-right (px 3)}}
+            "Weapon:")
+           (comm/select2
+            :css {:width (px 150)}
+            :value selected-weapon
+            :choices (formula-of [mission]
+                       (for [weapon (->> mission
+                                         ::mission/weapons
+                                         (sort-by ::mission/name))]
+                         {:value weapon
+                          :label (::mission/name weapon)}))))
+      (when-tpl selected-weapon
+        (div
+         (div
+          (inl
+           :css {:font-weight  "bold"
+                 :margin-right (px 5)}
+           "Damage Type:")
+          (inl (formula-of [selected-weapon]
+                 (get {c/NoDamage         "None"
+                       c/PenetrationDam   "Penetration"
+                       c/HighExplosiveDam "HE"
+                       c/HeaveDam         "Heave"
+                       c/IncendairyDam    "Incendiary"
+                       c/ProximityDam     "Proximity"
+                       c/KineticDam       "Kinetic"
+                       c/HydrostaticDam   "Hydrostatic"
+                       c/ChemicalDam      "Chemical"
+                       c/NuclearDam       "Nuclear"
+                       c/OtherDam         "Other"}
+                      (:damage-type selected-weapon)
+                      "Unknown"))))
+         (div
+          (inl
+           :css {:font-weight  "bold"
+                 :margin-right (px 5)}
+           "Damage Strength:")
+          (inl (cell= (:strength selected-weapon))))))
+      (let [hit-data (formula-of [mission selected-objective selected-weapon]
+                       (when (and selected-objective selected-weapon)
+                         (damage/required-hits mission selected-objective selected-weapon)))
+            col      (fn [title key]
+                       {:title     title
+                        :sort-key  key
+                        :formatter (fn [item _]
+                                     (cell= (get item key)))})]
+        (when-tpl hit-data
+          (grids/table-grid
+           :data hit-data
+           :key-fn identity
+           :row-attrs (fn [_] {})
+           :when-empty "No results available"
+           :fixed-columns []
+           :movable-columns (cell [:index :feature-name :hit-points :resistance :hits-required])
+           :hidden-columns (cell #{})
+           :columns
+           {:index         (col "Feature #" :index)
+            ;; :virtual?      (col "Virtual?" :virtual?)
+            :feature-name  (col "Name" :feature-name)
+            :hit-points    (col "Hit Points" :hit-points)
+            :resistance    {:title "Susceptibility"
+                            :sort-key :resistance
+                            :formatter (fn [item _]
+                                         (formula-of [item]
+                                           (str (:resistance item) "%")))}
+            :hits-required {:title     "Hits Required"
+                            :sort-key  :hits-required
+                            :formatter (fn [item _]
+                                         (formula-of [item]
+                                           (let [req (:hits-required item)]
+                                             (cond
+                                               (nil? req)              ""
+                                               (js/isNaN req)          ""
+                                               (not (js/isFinite req)) "∞"
+                                               :else                   (.toFixed req 1)))))}})))))))
+
+(declare make-friendly-export-key)
+
+(defn- make-friendly-export-key
+  "Given a key like comes back from `csv-ize`, turn it into something a
+  little less Clojure-centric."
+  [k]
+  (cond
+    (string? k)
+    k
+
+    (vector? k)
+    (->> k
+         (mapv make-friendly-export-key)
+         (interpose ".")
+         (apply str))
+
+    (keyword? k)
+    (let [ns (namespace k)]
+      (str
+       (if (= ns (namespace ::mission/foo))
+         "vmt"
+         ns)
+       (when ns "/")
+       (name k)))))
+
+(defn- export-database
+  [mission]
+  (let [basename (str (-> mission :theater :name)
+                      "-"
+                      (-> mission :mission-name))]
+    (when-let [dir (comm/get-path-for-load
+                    {:title "Select directory for export"
+                     :mode :directory})]
+      (doseq [[k type] [[:campaign-info :map]
+                        ;; :candidate-installs
+                        [:class-table :vector]
+                        [:events :not-yet-implemented]
+                        [:feature-class-data :vector]
+                        [:feature-entry-data :vector]
+                        ;; :image-ids
+                        ;; :installation
+                        ;; :installs
+                        ;; :map-image
+                        ;; :mission-name
+                        ;; :names
+                        [:objective-class-data :vector]
+                        [:objective-deltas :vector]
+                        [:objectives :vector]
+                        ;; :path
+                        [:persistent-objects :not-yet-implemented]
+                        [:pilots :not-yet-implemented]
+                        [:point-header-data :vector]
+                        [:ppt-data :vector]
+                        [:primary-objectives :not-yet-implemented]
+                        ;; :scenario-files
+                        ;; :strings
+                        [:teams :vector]
+                        ;; :theater
+                        [:unit-class-data :vector]
+                        [:units :vector]
+                        ;; :user-ids
+                        [:vehicle-class-data :vector]
+                        ;; :version
+                        [:weapon-class-data :vector]]]
+        (let [raw (get mission k)
+              data (condp = type
+                     :map [raw]
+                     :vector raw
+                     :not-yet-implemented [{:todo "Not yet implemented"}])]
+          (-> data
+              (util/csv-ize {:key-remap make-friendly-export-key})
+              (->> (fs/save-data (fs/path-combine dir (str basename "-" (name k) ".csv"))))))))))
+
+(defn database-export-section
+  [_]
+  (control-section
+   :title (with-help [:tools :database-export]
+            "Mission Database Export")
+   (div
+    :css {:margin (px 0 5)}
+    (buttons/a-button
+     :click #(export-database @mission)
+     "Export"))))
+
+(defn hidden-tools-tab
+  []
+  (div
+   (when-tpl (cell= (= :edit display-mode))
+     (database-export-section {}))
+   (damage-computer-section {})))
 
 ;;; General layout
 
@@ -4693,7 +4889,7 @@
                                  (ctor (assoc opts ::scroll-container right-column))))})
                    [{:title "Tools"
                      :id :tools-tab
-                     :ui (div "TODO")
+                     :ui (hidden-tools-tab)
                      :hidden? (cell= (not tools-visible?))}])))))))
     (debug-info))))
 

@@ -209,7 +209,8 @@
 (defelem table-grid
   "Returns a table grid control. Attributes
 
-:data - A cell containing a seq of maps. Must contain an `:id` entry.
+:data - A cell containing a seq of maps.
+:key-fn - Function from item in data to unique value for it
 :row-attrs - A function from a cell containing a row to an Hoplon
              attrs map
 :when-empty - UI to show when there are no rows in the data

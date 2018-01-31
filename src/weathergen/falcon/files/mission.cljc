@@ -474,7 +474,20 @@
             :repair-time buf/int16 ; How long it takes to repair
             :priority buf/byte    ; Display priority
             :padding1 buf/byte
-            :flags buf/uint16     ; See FEAT_ flags in feature.h
+            ;; See FEAT_ flags in feature.h
+            :flags (bitflags buf/uint16
+                             {:repairable?         c/FEAT_EREPAIR
+                              :virtual?            c/FEAT_VIRTUAL
+                              :has-light-switch?   c/FEAT_HAS_LIGHT_SWITCH
+                              :has-smoke-stack?    c/FEAT_HAS_SMOKE_STACK
+                              :flat-container?     c/FEAT_FLAT_CONTAINER
+                              :elevated-container? c/FEAT_ELEV_CONTAINER
+                              :can-explode?        c/FEAT_CAN_EXPLODE
+                              :can-burn?           c/FEAT_CAN_BURN
+                              :can-collapse?       c/FEAT_CAN_COLAPSE
+                              :container-top?      c/FEAT_CONTAINER_TOP
+                              :next-is-top?        c/FEAT_NEXT_IS_TOP
+                              :no-hiteval?         c/FEAT_NO_HITEVAL})
             :name (fixed-string 20)    ; 'Control Tower'
             :hit-points buf/int16      ; Damage this thing can take
             :height buf/int16       ; Height of vehicle ramp, if any
@@ -1432,6 +1445,69 @@
                          ::image (squadron-image mission squadron))))
            (group-by :airbase-id)))))
 
+(defn- objective-features
+  [mission objective]
+  (let [{:keys [class-table
+                objective-class-data
+                feature-class-data
+                feature-entry-data
+                point-header-data
+                objectives]}    mission
+        oce                     (objective-class-entry mission objective)
+        {:keys [features
+                first-feature]} oce
+        feature-info            (map #(nth feature-entry-data %)
+                                     (range first-feature (+ first-feature features)))
+        feature-class-info      (map (fn [feature]
+                                       (let [ci (-> feature
+                                                    :index
+                                                    (->> (nth class-table)))]
+                                         (assoc ci
+                                                ::feature-class-info
+                                                (-> ci
+                                                    :data-pointer
+                                                    (->> (nth feature-class-data))))))
+                                     feature-info)
+        feature-status          (for [f (range features)]
+                                  (let [i  (-> f (/ 4) long)
+                                        f* (- f (* i 4))]
+                                    (if (or (neg? f*)
+                                            (< 255 f*)
+                                            ;; For some weird
+                                            ;; reason (objectiv.cpp[259]), there
+                                            ;; can be more features than status
+                                            ;; slots in the objective, in which
+                                            ;; case they zero.
+                                            (<= (count (:f-status objective)) i))
+                                      0
+                                      (-> objective
+                                          :f-status
+                                          (nth i 0)
+                                          (bit-shift-right (* f* 2))
+                                          (bit-and 0x03)))))]
+    (mapv (fn [fi fs fci]
+           (assoc fi
+                  ::status fs
+                  ::class-info fci
+                  ))
+         feature-info
+         feature-status
+         feature-class-info)))
+
+(defn- objectives
+  "Returns all the objectives."
+  [mission]
+  (progress/with-step "Processing objectives"
+    (fn []
+      (->> mission
+           :objectives
+           (mapv #(assoc %
+                         ::location (select-keys % [:x :y])
+                         ::status (objective-status mission %)
+                         ::image (objective-image mission %)
+                         ::name (objective-name mission %)
+                         ::features (objective-features mission %)))))))
+
 ;; Note that the below will also return carriers, which might be what
 ;; we want, but might not be.
 ;;
@@ -1458,15 +1534,11 @@
                                  (map ::index)
                                  set)]
         (->> mission
-             :objectives
+             ::objectives
              (filterv (fn [objective]
                         (airbase-classes (- (:entity-type objective) 100))))
              (mapv #(assoc %
-                           ::location (select-keys % [:x :y])
-                           ::status (airbase-status mission %)
-                           ::squadrons (get (::squadrons mission) (:id %))
-                           ::image (objective-image mission %)
-                           ::name (objective-name mission %))))))))
+                           ::squadrons (get (::squadrons mission) (:id %)))))))))
 
 (defn- carriers
   "Returns all the carrier task force units in the mission."
@@ -1514,15 +1586,22 @@
                                   (map ::index)
                                   set)]
         (->> mission
-             :objectives
+             ::objectives
              (filterv (fn [objective]
                         (armybase-classes (- (:entity-type objective) 100))))
              (mapv #(assoc %
-                           ::location (select-keys % [:x :y])
-                           ::status (objective-status mission %)
-                           ::squadrons (get (::squadrons mission) (:id %))
-                           ::image (objective-image mission %)
-                           ::name (objective-name mission %))))))))
+                           ::squadrons (get (::squadrons mission) (:id %)))))))))
+
+(defn- weapons
+  "Returns all the weapons."
+  [mission]
+  (progress/with-step "Processing weapons"
+    (fn []
+      (->> mission
+           :weapon-class-data
+           (mapv #(assoc %
+                         ::name (:name %)))))))
+
 
 (defn- report-airbases-with-invalid-owner
   "Throw an error if an airbase has an invalid owner."
@@ -1590,11 +1669,13 @@
         (assoc :map-image (im/make-descriptor mission
                                               "resource/campmap"
                                               "BIG_MAP_ID"))
+        (calc ::objectives objectives)
         (calc ::squadrons squadrons)
         (calc ::airbases airbases)
         (calc ::flights flights)
         (calc ::carriers carriers)
         (calc ::army-bases army-bases)
+        (calc ::weapons weapons)
         fixup-mission)))
 
 (defn- read-ppt-data

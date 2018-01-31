@@ -1,6 +1,7 @@
 (ns weathergen.util
   "The inevitable namespace."
-  (:require [clojure.string :as str]))
+  (:require [clojure.set :as set]
+            [clojure.string :as str]))
 
 (defn str->long
   "Convert a string to a long. Returns nil when it can't be parsed."
@@ -78,4 +79,73 @@
             conjunction
             " "
             (last items))))))
+
+(defn enquote
+  [v]
+  ;; Lame, but there doesn't seem to be a way to get double-quotes
+  ;; into a CSV file - escaping doesn't work. For our purposes, we can
+  ;; just use a similar symbol.
+ (str "\"" (str/replace (str v) "\"" "''") "\""))
+
+(defn vectorize
+  "Turn x into a vector if it isn't already."
+  [x]
+  (if (vector? x) x [x]))
+
+(defn flatten-map
+  "Given a nested map, flatten it so all keys are top-level."
+  [m]
+  ;; This is pretty cheezy, but works well enough for what I'm using
+  ;; it for.
+  (reduce-kv (fn [m k v]
+               (if-not (map? v)
+                 (assoc m (vectorize k) v)
+                 (merge m
+                        (flatten-map
+                         (->> v
+                              (map (fn [[ki vi]]
+                                     [(conj (vectorize k) ki)
+                                      vi]))
+                              (into {}))))))
+             {}
+             m))
+
+(defn csv-ize
+  "Given a collection of maps, return out a CSV string. Options can
+  include :initial-columns, an ordering of columns to appear first. Remaining
+  columns will be lexically sorted."
+  ([maps] (csv-ize maps {}))
+  ([maps {:keys [initial-columns key-remap]
+          :or   {initial-columns []
+                 key-remap       identity}
+          :as   options}]
+   (let [flattened-initial (mapv vectorize initial-columns)
+         flattened         (mapv flatten-map maps)
+         cols              (as-> flattened ?
+                               (mapcat keys ?)
+                             (set ?)
+                             (set/difference ? (set flattened-initial))
+                             (sort ?)
+                             (vec ?)
+                             (into flattened-initial ?))
+         get-vals          (fn [item]
+                             (for [col cols]
+                               (get item col)))
+         header            (->> cols
+                                (map key-remap)
+                                (map str)
+                                (interpose ",")
+                                (apply str "index,"))
+         row               (fn [index item]
+                             #_(log/debug "row" :index index :item (class item))
+                             (->> item
+                                  get-vals
+                                  (map enquote)
+                                  (interpose ",")
+                                  (apply str index ",")))]
+     (->> flattened
+          (map-indexed row)
+          (into [header])
+          (interpose "\n")
+          (apply str)))))
 

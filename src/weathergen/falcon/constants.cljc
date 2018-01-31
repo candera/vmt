@@ -2916,7 +2916,7 @@
   (def WP_NAVSTRIKE 15)    ;; Engage enemy shits at target
   (def WP_SAD 16)          ;; Engage any enemy at target
   (def WP_STRIKE 17)       ;; Destroy enemy installation at target
-  (def WP_BOMB 18)   ;; Strategic bomb enemy installation at target 
+  (def WP_BOMB 18)   ;; Strategic bomb enemy installation at target
   (def WP_SEAD 19)   ;; Suppress enemy air defense at target
   (def WP_ELINT 20)  ;; Electronic intellicence (AWACS, JSTAR, ECM)
   (def WP_RECON 21)  ;; Photograph target location
@@ -3062,3 +3062,30 @@
   (def PASL 2116.22) ;; Standard pressure at sea level
   (def AASLK 661.48) ;; Speed of sound at sea level
   )
+
+(with-file "feature.h"
+  (def FEAT_EREPAIR 0x01) ; Set if enemy can repair this building
+  (def FEAT_VIRTUAL 0x02) ; Don't deaggregate as an entity
+
+  (def FEAT_HAS_LIGHT_SWITCH 0x04) ; Tells sim to turn on the lights at night
+  (def FEAT_HAS_SMOKE_STACK 0x08) ; Tells sim to add smoke
+
+  (def FEAT_FLAT_CONTAINER 0x100) ; Vehicles typically sit on this
+  (def FEAT_ELEV_CONTAINER 0x200)
+
+  (def FEAT_CAN_EXPLODE 0x400)
+  (def FEAT_CAN_BURN 0x800)
+  (def FEAT_CAN_SMOKE 0x1000)
+  (def FEAT_CAN_COLAPSE 0x2000)
+
+  (def FEAT_CONTAINER_TOP 0x4000)
+  (def FEAT_NEXT_IS_TOP 0x8000)
+
+  ;; 2002-02-06 MN this feature is not to be added to mission evaluation (trees...)
+  (def FEAT_NO_HITEVAL 0x10)
+
+  ;; Feature Entry flags
+  (def FEAT_PREV_CRIT 0x01) ; Feature associations
+  (def FEAT_NEXT_CRIT 0x02)
+  (def FEAT_PREV_NORM 0x04)
+  (def FEAT_NEXT_NORM 0x08))
