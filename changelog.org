@@ -4,7 +4,7 @@
 #+TITLE:
 
 * Change Log
-** v056-6 [2018-01-31 Wed]
+** v056-7 [2018-01-31 Wed]
 - Hidden tools feature: Hit Control-Alt-T to reveal tools tab
 - Tool: damage computer
 - Tool: export database

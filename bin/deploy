@@ -4,7 +4,12 @@
 set -e
 
 source $(dirname $0)/common.sh
-source ~/wangdera-candera-aws-creds.sh
+
+if [[ -z $AWS_ACCESS_KEY_ID || -z $AWS_SECRET_ACCESS_KEY ]]
+then
+    echo "AWS credentials not set."
+    exit 1
+fi
 
 # PROJECT_VERSION=$(head -1 project.clj | grep -oE '\d+\.\d+(\.\d+)?(-SNAPSHOT)?')
 GIT_VERSION=$(git describe --tags)
