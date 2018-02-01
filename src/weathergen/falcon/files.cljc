@@ -139,7 +139,8 @@
 
 (defn bitflags
   "Returns a spec that decodes from a read value into a set of bits
-  based on the mapping in m."
+  based on the mapping in m. Resulting set will also include the raw
+  value being decoded."
   [item-spec m]
   (reify
     octet.spec/ISpec
@@ -151,7 +152,7 @@
                          (when (has-flag? val mask)
                            flag))
                        (remove nil?)
-                       set)]))))
+                       (into #{val}))]))))
 
 (defn constant
   "Returns a spec that consumes and produces no data, but reads a

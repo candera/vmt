@@ -167,17 +167,19 @@
         rsc-stats         (fs/stat rsc-path)
         data-dir          (-> mission :installation :data-dir)
         index             (read-index idx-path)
-        image-data        (->> index (filter #(= image-id (:id %))) first)
-        _                 (assert image-data (with-out-str
-                                               (print "Couldn't find an image with that ID"
-                                                      :resource resource
-                                                      :image-id image-id)))]
-    {:image-data    image-data
-     :resource      resource
-     :image-id      image-id
-     :art-dir       resource-art-dir
-     :base          base
-     :idx-size      (:size idx-stats)
-     :idx-modified  (:modified idx-stats)
-     :rsc-size      (:size rsc-stats)
-     :rsc-modified  (:modified rsc-stats)}))
+        image-data        (->> index (filter #(= image-id (:id %))) first)]
+    (if-not image-data
+      (do
+        (log/warn "Couldn't find an image with that ID"
+                  :resource resource
+                  :image-id image-id)
+        nil)
+      {:image-data    image-data
+       :resource      resource
+       :image-id      image-id
+       :art-dir       resource-art-dir
+       :base          base
+       :idx-size      (:size idx-stats)
+       :idx-modified  (:modified idx-stats)
+       :rsc-size      (:size rsc-stats)
+       :rsc-modified  (:modified rsc-stats)})))

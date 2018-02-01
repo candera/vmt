@@ -110,7 +110,11 @@
 ;; will get moved rather than cloned when we attach it to a new place
 ;; in the DOM.
 (def help-content-ctors
-  {:wind-stability-areas
+  {:tools
+    {:database-export
+     (content-para "Exports the mission database to a series of CSV files. Use the dialog box to select a directory. Files will be written here with names in the pattern \"THEATER-MISSION-CATEGORY.csv\".")}
+
+   :wind-stability-areas
    (content
     [:p "Wind stability areas define regions of the map where the wind
    will not be affected by the weather. Although cloud cover,

@@ -3057,3 +3057,79 @@ type: 0x64 -> image
 (-> b keys)
 
 (keys @smpu)
+
+(->> @smpu
+     ::mission/objectives
+     (filter #(some-> %
+                      ::mission/name
+                      (str/index-of "Kimpo Airbase")
+                      neg?
+                      not))
+     (mapcat ::mission/features)
+     ;; (map #(-> %
+     ;;           ::mission/class-info
+     ;;           ::mission/feature-class-info))
+     ;; rand-nth
+     ;; keys
+     csv-ize
+     (spit "/tmp/features.csv")
+     )
+
+(->> @smpu
+     ::mission/objectives
+     (filter #(some-> %
+                      ::mission/name
+                      (str/index-of "Kimpo Airbase")
+                      neg?
+                      not))
+     second
+     (mission/objective-class-entry @smpu)
+     :pt-data-index
+     )
+
+(->> @smpu
+     ::mission/objectives
+     (filter #(some-> %
+                      ::mission/name
+                      (str/index-of "Kimpo Airbase")
+                      neg?
+                      not))
+     second
+     ::mission/features
+     ;; (mission/objective-class-entry @smpu)
+     ;; :pt-data-index
+     csv-ize
+     (spit "/tmp/features.csv")
+     )
+
+(->> @smpu
+     ::mission/objectives
+     (filter #(some-> %
+                      ::mission/name
+                      (str/index-of "Kimpo Airbase")
+                      neg?
+                      not))
+     second
+     ::mission/features
+     ;; (mission/objective-class-entry @smpu)
+     ;; :pt-data-index
+     csv-ize
+     (spit "/tmp/features.csv")
+     )
+
+;; pt-data-index: 78
+(-> @smpu
+    :point-header-data
+    (nth 86)
+    )
+
+(->> [1 7 6 5 8 2 3 4 2 3 4 5 15 14 13 12 9 10 11 12]
+     ;;distinct
+     count)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(pprint (util/csv-ize [{:a 1 :b 2 :d {:e 1 :f 2}} {:a 2 :c 3}]
+                      {:key-remap make-friendly-export-key}))
+
+(make-friendly-export-key [:a ::mission/c :foo/bar])

@@ -1,6 +1,10 @@
 (ns weathergen.progress
   "A library for communicating progress between the various processes
-  that make up the application.")
+  that make up the application."
+  (:require [taoensso.timbre :as log
+             :refer-macros (log trace debug info warn error fatal report
+                                logf tracef debugf infof warnf errorf fatalf reportf
+                                spy get-env log-env)]))
 
 (def ^:dynamic *reporter* nil)
 
@@ -31,25 +35,35 @@
   "Reports that `step-name` has started. Returns a `Step` instance."
   [step-name parent]
   (when *reporter*
+    (log/info "Starting " step-name)
     (-start-step *reporter* step-name parent)))
 
 (defn step-succeeded
   "Reports that step has succeeded. If no step is provided, uses
   `*current-step*`."
   ([] (step-succeeded *current-step*))
-  ([step] (when step (-succeeded step))))
+  ([step]
+   (when step
+     (log/info "Step Succeeded")
+     (-succeeded step))))
 
 (defn step-warn
   "Reports a warning against `step`, or `*current-step*` if one is not
   provided."
   ([message] (step-warn *current-step* message))
-  ([step message] (when step (-warn step message))))
+  ([step message]
+   (when step
+     (log/warn "Step warning" message)
+     (-warn step message))))
 
 (defn step-failed
   "Reports that `step` has failed. Uses `*current-step*` if one is not
   provided."
   ([message] (step-failed *current-step* message))
-  ([step message] (when step (-failed step message))))
+  ([step message]
+   (when step
+     (log/error "Step error" message)
+     (-failed step message))))
 
 (defn with-step
   "Binds `*current-step*` to a new step calls `f`, a function of no
