@@ -218,6 +218,9 @@
 :fixed-columns - A seq of IDs of unmovable columns
 :movable-columns - [cell] A seq of IDs of movable columns
 :hidden-columns - [cell] A set of IDs of hidden columns
+:initial-sort - [non-cell] An initial sort criteria in the form
+                `[sort-key sort-direction]`, where `sort-direction` is
+                either `:ascending` or `:descending`
 
 Column description:
 :title - Shows up in the header row
@@ -227,9 +230,9 @@ Column description:
          map of css values."
   [attrs _]
   (register-table-grid-styles!)
-  (with-attr-bindings attrs [data key-fn columns row-attrs when-empty fixed-columns movable-columns hidden-columns]
+  (with-attr-bindings attrs [data key-fn columns row-attrs when-empty fixed-columns movable-columns hidden-columns initial-sort]
     (assert key-fn "key-fn is required")
-    (let [sort-criteria    (cell nil)
+    (let [sort-criteria    (cell initial-sort)
           sorted-items     (formula-of [data sort-criteria]
                              (if-not sort-criteria
                                data

@@ -11,6 +11,7 @@
   (for [[index feature] (->> objective ::mission/features (map-indexed vector))]
     (let [fci             (-> feature ::mission/class-info ::mission/feature-class-info)
           feature-name    (-> fci :name)
+          feature-value   (-> feature :value)
           virtual?        (-> fci :flags :virtual?)
           hit-points      (-> fci :hit-points)
           damage-mods     (-> fci :damage-mod)
@@ -24,6 +25,7 @@
       ;; FEAT_VIRTUAL, but that doesn't seem to be it. So for now we
       ;; return all of them.
       {:index         (inc index)
+       :feature-value feature-value
        :feature-name  feature-name
        :hit-points    hit-points
        :resistance    damage-mod

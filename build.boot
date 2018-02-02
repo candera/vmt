@@ -105,6 +105,9 @@
                             :pseudo-names true
                             :preloads '[devtools.preload]
                             }
+         ;; The problem here is that the .map files have bogus paths
+         ;; in them. They're just JSON, though, so it might be worth
+         ;; figuring out how to fix them up.
          :source-map (boolean source-maps))
    (cljs :ids #{"worker"}
          ;; :optimizations :none

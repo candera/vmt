@@ -111,7 +111,18 @@
 ;; in the DOM.
 (def help-content-ctors
   {:tools
-    {:database-export
+   {:damage-computer
+    (content
+     [:div
+      [:p "Displays an esimtate of how many weapon hits it
+     will required to destroy a target. Choose an objective from the
+     left dropdown and a weapon from the right to see an estimate for
+     all the features at that objective."]
+      [:p "The grid shows all features at an objective. Features with
+      a value listed are the ones that are target assignable in BMS
+      and will be displayed in the Recon list.."]])
+
+    :database-export
      (content-para "Exports the mission database to a series of CSV files. Use the dialog box to select a directory. Files will be written here with names in the pattern \"THEATER-MISSION-CATEGORY.csv\".")}
 
    :wind-stability-areas

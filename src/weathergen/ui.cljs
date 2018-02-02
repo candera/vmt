@@ -4426,10 +4426,14 @@
 
 (defn damage-computer-section
   [_]
+  ;; TODO: Make it possible to add a column for each weapon of
+  ;; interest, so it's easy to compare.
   (control-section
-   :title "Damage computer"
+   :title (with-help [:tools :damage-computer]
+            "Damage computer")
    (let [selected-objective (cell nil)
-         selected-weapon    (cell nil)]
+         selected-weapon    (cell nil)
+         selection-mode     (cell :by-weapon)]
      (div
       :css {:margin (px 0 5)}
       (inl (inl
@@ -4454,6 +4458,10 @@
             :choices (formula-of [mission]
                        (for [weapon (->> mission
                                          ::mission/weapons
+                                         (remove #(-> %
+                                                      :hit-chance
+                                                      (get c/NoMove)
+                                                      zero?))
                                          (sort-by ::mission/name))]
                          {:value weapon
                           :label (::mission/name weapon)}))))
@@ -4477,13 +4485,7 @@
                        c/NuclearDam       "Nuclear"
                        c/OtherDam         "Other"}
                       (:damage-type selected-weapon)
-                      "Unknown"))))
-         (div
-          (inl
-           :css {:font-weight  "bold"
-                 :margin-right (px 5)}
-           "Damage Strength:")
-          (inl (cell= (:strength selected-weapon))))))
+                      "Unknown"))))))
       (let [hit-data (formula-of [mission selected-objective selected-weapon]
                        (when (and selected-objective selected-weapon)
                          (damage/required-hits mission selected-objective selected-weapon)))
@@ -4495,22 +4497,33 @@
         (when-tpl hit-data
           (grids/table-grid
            :data hit-data
+           :initial-sort [:feature-value :descending]
            :key-fn identity
            :row-attrs (fn [_] {})
            :when-empty "No results available"
            :fixed-columns []
-           :movable-columns (cell [:index :feature-name :hit-points :resistance :hits-required])
+           :movable-columns (cell [:index :feature-name :feature-value :hits-required])
            :hidden-columns (cell #{})
            :columns
-           {:index         (col "Feature #" :index)
-            ;; :virtual?      (col "Virtual?" :virtual?)
+           {:index         (col "#" :index)
             :feature-name  (col "Name" :feature-name)
-            :hit-points    (col "Hit Points" :hit-points)
-            :resistance    {:title "Susceptibility"
-                            :sort-key :resistance
+            :feature-value {:title "Value"
+                            ;; Disambiguate ties through the index
+                            :sort-key (fn [item]
+                                        [(:feature-value item)
+                                         (- (:index item))])
+                            #_(juxt :feature-value :index)
                             :formatter (fn [item _]
-                                         (formula-of [item]
-                                           (str (:resistance item) "%")))}
+                                         (formula-of [item _]
+                                           (let [value (:feature-value item)]
+                                             (if (zero? value)
+                                               ""
+                                               (condp > value
+                                                 10 "Very Low"
+                                                 25 "Low"
+                                                 40 "Medium"
+                                                 50 "High"
+                                                 "Very High")))))}
             :hits-required {:title     "Hits Required"
                             :sort-key  :hits-required
                             :formatter (fn [item _]
@@ -4520,7 +4533,14 @@
                                                (nil? req)              ""
                                                (js/isNaN req)          ""
                                                (not (js/isFinite req)) "∞"
-                                               :else                   (.toFixed req 1)))))}})))))))
+                                               :else
+                                               (let [fuzz 0.25
+                                                     lower (Math/ceil (max 1 (* req (- 1.0 fuzz))))
+                                                     upper (Math/ceil (max 1 (* req (+ 1.0 fuzz))))]
+                                                 (if (= lower upper)
+                                                   (str lower)
+                                                   (str lower "-" upper)))))))}})))))))
+
 
 (declare make-friendly-export-key)
 

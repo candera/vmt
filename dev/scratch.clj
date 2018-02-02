@@ -3133,3 +3133,17 @@ type: 0x64 -> image
                       {:key-remap make-friendly-export-key}))
 
 (make-friendly-export-key [:a ::mission/c :foo/bar])
+
+(->> @smpu
+     ::mission/weapons
+     rand-nth
+     keys
+     pprint)
+
+(->> @smpu
+     ::mission/objectives
+     (sort-by ::mission/name)
+     first
+     ::mission/features
+     (map #(select-keys % [:value ::mission/index :name]))
+     pprint)
