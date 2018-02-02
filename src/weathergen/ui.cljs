@@ -477,15 +477,6 @@
   "Whether or not the tools tab is visible"
   (cell false))
 
-(.addEventListener js/document
-                   "keydown"
-                   (fn [event]
-                     (when (and (= (.-code event) "KeyT")
-                                (or (.-altKey event)
-                                    (.-metaKey event))
-                                (.-ctrlKey event))
-                       (swap! tools-visible? not))))
-
 ;;; Components
 
 (def flight-paths-layer
@@ -4842,7 +4833,7 @@
      :id "app"
      (titlebar)
      (message-display)
-     (let [right-width 575              ; Min width of controls column
+     (let [right-width 575 ; Min width of controls column
            portrait?   (formula-of
                          [map-size window-size]
                          (let [[grid-width grid-height]     map-size
@@ -4896,21 +4887,36 @@
                          (when-not portrait?
                            {:overflow "auto"
                             :height   "auto"})))
-           (tabs/tabs
-            :selected (cell (-> section-infos first :id))
-            :tabs (concat
-                   (for [{:keys [title id sections]} section-infos]
-                     {:title title
-                      :id    id
-                      :ui    (for [[section opts] (partition 2 sections)
-                                   :let           [ctor (section-ctor section)]]
-                               (with-time
-                                 (str "Rendering " section)
-                                 (ctor (assoc opts ::scroll-container right-column))))})
-                   [{:title "Tools"
-                     :id :tools-tab
-                     :ui (hidden-tools-tab)
-                     :hidden? (cell= (not tools-visible?))}])))))))
+           (let [first-tab    (-> section-infos first :id)
+                 selected-tab (cell first-tab)]
+             (.addEventListener js/document
+                                "keydown"
+                                (fn [event]
+                                  (when (and (= (.-code event) "KeyT")
+                                             (or (.-altKey event)
+                                                 (.-metaKey event))
+                                             (.-ctrlKey event))
+                                    (dosync
+                                     (swap! tools-visible? not)
+                                     (reset! selected-tab
+                                             (if @tools-visible?
+                                               :tools-tab
+                                               first-tab))))))
+             (tabs/tabs
+              :selected selected-tab
+              :tabs (concat
+                     (for [{:keys [title id sections]} section-infos]
+                       {:title title
+                        :id    id
+                        :ui    (for [[section opts] (partition 2 sections)
+                                     :let           [ctor (section-ctor section)]]
+                                 (with-time
+                                   (str "Rendering " section)
+                                   (ctor (assoc opts ::scroll-container right-column))))})
+                     [{:title   "Tools"
+                       :id      :tools-tab
+                       :ui      (hidden-tools-tab)
+                       :hidden? (cell= (not tools-visible?))}]))))))))
     (debug-info))))
 
 #_(with-init!
