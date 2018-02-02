@@ -4,6 +4,12 @@
 #+TITLE:
 
 * Change Log
+** v057-9 (dev-only) [2018-02-02 Fri]
+- Focus Tools tab when it is activated
+- Improvements to damage computer
+  - Remove game mechanics, add uncertainty to estimate
+  - Sort to match Recon order
+  - Don't list weapons that can't damage target
 ** v057 [2018-02-01 Thu]
 - Add missing help text
 ** v056 [2018-01-28 Sun]
