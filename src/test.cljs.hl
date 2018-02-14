@@ -18,6 +18,7 @@
             [weathergen.ui.common :as comm :refer [px]]
             [weathergen.ui.grids :as grids]
             [weathergen.ui.layers.flights :as flights]
+            [weathergen.ui.select :refer [select3]]
             [weathergen.ui.tabs :as tabs])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
@@ -82,7 +83,68 @@
                   (load-mission mission))
         "Load")
        (hr)
-       (let [s (cell {:from {:day 1 :hour 2 :minute 3}})]
+       (let [data (cell (range 100))
+             value (cell nil)
+             highlighted (cell nil)]
+         (div
+          (div "Value: " (cell= (pr-str value)))
+          (div "Highlighted: "(cell= (pr-str highlighted)))
+          (select3
+           :data data
+           :width (px 390)
+           :value value
+           :key-fn identity
+           :search-fn str
+           :placeholder "Enter a search term"
+           :formatter (fn [v]
+                        (span (cell= (str v))))
+           :highlight (fn [v]
+                        (reset! highlighted v)))
+          (buttons/a-button
+           :click (fn [_] (reset! value nil))
+           "Reset")))
+       (hr)
+       (let [value (cell nil)
+             choices [{:value :apple1
+                       :label "Apple1"}
+                      {:value :apple2
+                       :label "Apple2"}
+                      {:value :apple3
+                       :label "Apple3"}
+                      {:value :bear
+                       :label "Bear"}
+                      {:value :charlie
+                       :label "Charlie"}
+                      {:value :dapper
+                       :label "Dapper"}
+                      {:value :echo
+                       :label "Echo"}
+                      {:value :family
+                       :label "Family"}
+                      {:value :gopher
+                       :label "Gopher"}
+                      {:value :hotel
+                       :label "Hotel"}
+                      {:value :injury
+                       :label "Injury"}]]
+         (div
+          (div (cell= (pr-str value)))
+          (comm/select2
+           :css {:width (px 200)}
+           :value value
+           :choices choices
+           :placeholder "Pick something")
+          (buttons/a-button :click #(reset! value nil) "Reset")))
+       (hr)
+       #_(let [val (cell false)]
+         (div
+          (comm/checkbox
+           :value val)
+          (buttons/a-button
+           :click #(reset! val ::comm/indeterminate)
+           "Indeterminate")))
+       (hr)
+       #_(let [s (cell {:from {:day 1 :hour 2 :minute 3}})]
          (div
           (ui/time-entry :source s
                          :path [:from])
@@ -92,7 +154,7 @@
            :fmt comm/format-time
            :conform (comm/time-conformer nil))))
        (hr)
-       (let [choices (cell [{:value "a"
+       #_(let [choices (cell [{:value "a"
                              :label "A"}
                             {:value "b"
                              :label "B"}])
@@ -113,7 +175,7 @@
            :choices choices
            :value value)))
        (hr)
-       (let [hidden? (cell false)
+       #_(let [hidden? (cell false)
              tabs    [{:id    :a
                        :title "A"
                        :ui    (div "A")}
@@ -129,7 +191,7 @@
            :selected (cell :a)
            :tabs tabs)))
        (hr)
-       (let [items (cell (for [n (range 20)]
+       #_(let [items (cell (for [n (range 20)]
                            {:key  n
                             :text (gstring/format "%02d" n)}))]
          (div
@@ -176,7 +238,7 @@
                   (tr (td (cell= (:key item)))
                       (td (cell= (:text item)))))))))
        (hr)
-       (let [v (cell "No Such")]
+       #_(let [v (cell "No Such")]
          (div
           (div v
                (buttons/a-button
@@ -203,7 +265,7 @@
                         (span :css {:font-family label}
                               label)))))
        (hr)
-       (let [c  (cell "#abcdef")
+       #_(let [c  (cell "#abcdef")
              c2 (cell "#123456")]
          (div
           (div c)
@@ -217,7 +279,7 @@
                       :value c
                       :alpha? true))))))
        (hr)
-       (let [c  (cell "#abcdef")
+       #_(let [c  (cell "#abcdef")
              id (str (gensym))]
          (div
           (cell= (pr-str c))
@@ -226,7 +288,7 @@
            "Reset")
           (comm/color-picker2 :value c :alpha? true)))
        (hr)
-       (let [filter? (cell false)
+       #_(let [filter? (cell false)
              data    (cell (->> (for [n (range 10)]
                                   {:id n
                                    :a  n
