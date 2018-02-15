@@ -83,7 +83,7 @@
                   (load-mission mission))
         "Load")
        (hr)
-       (let [data (cell (range 100))
+       (let [data (cell (range 4000))
              value (cell nil)
              highlighted (cell nil)]
          (div
@@ -103,6 +103,19 @@
           (buttons/a-button
            :click (fn [_] (reset! value nil))
            "Reset")))
+       (hr)
+       (let [value (cell nil)
+             choices (for [n (range 10000)]
+                       {:value n
+                        :label (str n)})]
+         (div
+          (div (cell= (pr-str value)))
+          (comm/select2
+           :css {:width (px 200)}
+           :value value
+           :choices choices
+           :placeholder "Pick something")
+          (buttons/a-button :click #(reset! value nil) "Reset")))
        (hr)
        (let [value (cell nil)
              choices [{:value :apple1

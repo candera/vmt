@@ -14,6 +14,15 @@
   (:require-macros
    [weathergen.cljs.macros :refer [with-time formula-of with-attr-bindings keyed-for-tpl]]))
 
+(comm/register-class!
+ ::hidden
+ [{:display "none"}])
+
+#_(comm/register-class!
+ ::highlighted
+ [{:background "#5897fb"
+   :color      "white"}])
+
 (defelem select3
   "Like select2, but artisinal and bespoke.
 
@@ -22,9 +31,10 @@
 :key-fn - Function of choice value returning immutable unique ID.
 :search-fn - Function from value to text it should match when searching.
 :formatter - Function from cell of value to UI for that item.
-:highlight - Function called with highlighted value when value changes."
+:highlight - Function called with highlighted value when value changes.
+:max-dropdown-height - (Optional) Max height of dropdown"
   [attrs _]
-  (with-attr-bindings attrs [data width value key-fn search-fn formatter highlight placeholder]
+  (with-attr-bindings attrs [data width value key-fn search-fn formatter highlight max-dropdown-height placeholder]
     (assert search-fn "search-fn is required")
     (assert key-fn "key-fn is required")
     (assert formatter "formatter is required")
@@ -42,19 +52,28 @@
 
                             :else
                             (->> data
-                                 (filter #(str/index-of (search-fn %) search-text)))))]
+                                 (filter #(str/index-of (str/lower-case (search-fn %))
+                                                        (str/lower-case search-text))))))
+          ;; A map from index to items
+          matching-items (formula-of [filtered-data]
+                           {:index-to-item (zipmap (range) filtered-data)
+                            :key-to-index  (zipmap (map key-fn filtered-data) (range))})
+          ids            (formula-of [data]
+                           (zipmap (map key-fn data)
+                                   (repeatedly #(str (gensym)))))]
       (add-watch highlighted
                  (keyword (gensym))
                  (fn [_ _ _ n]
                    (when highlight
-                     (highlight n))))
+                     (highlight (get-in @matching-items [:index-to-item n])))))
       (do-watch open?
         (fn [_ n]
           (when-not n
-            (reset! search-text nil))))
+            (reset! search-text nil)
+            (reset! highlighted nil))))
       (do-watch filtered-data
         (fn [_ n]
-          (reset! highlighted (first n))))
+          (reset! highlighted 0)))
       (with-let [elem (div)]
         ;; Handling Blur isn't a good solution because clicking on one
         ;; of the list elements also causes a blur, and it happens
@@ -155,25 +174,30 @@
                                         (when-not (empty? @filtered-data)
                                           (dosync
                                            (reset! open? false)
-                                           (reset! value @highlighted)))
+                                           (reset! value (get-in @matching-items [:index-to-item @highlighted]))))
 
                                         comm/DOWN_ARROW
-                                        (let [next (->> (map vector @filtered-data (drop 1 @filtered-data))
-                                                        (filter (fn [[item next-item]]
-                                                                  (= item @highlighted)))
-                                                        first
-                                                        second)]
-                                          (when next
-                                            (reset! highlighted next)))
+                                        (swap! highlighted
+                                               #(min (inc %)
+                                                     (dec (count @filtered-data))))
+                                        #_ (let [next (->> (map vector @filtered-data (drop 1 @filtered-data))
+                                                           (filter (fn [[item next-item]]
+                                                                     (= item @highlighted)))
+                                                           first
+                                                           second)]
+                                             (when next
+                                               (reset! highlighted next)))
 
                                         comm/UP_ARROW
-                                        (let [prev (->> (map vector @filtered-data (drop 1 @filtered-data))
-                                                        (filter (fn [[prev-item item]]
-                                                                  (= item @highlighted)))
-                                                        first
-                                                        first)]
-                                          (when prev
-                                            (reset! highlighted prev)))
+                                        (swap! highlighted
+                                               #(max 0 (dec %)))
+                                        #_ (let [prev (->> (map vector @filtered-data (drop 1 @filtered-data))
+                                                           (filter (fn [[prev-item item]]
+                                                                     (= item @highlighted)))
+                                                           first
+                                                           first)]
+                                             (when prev
+                                               (reset! highlighted prev)))
 
                                         nil)))]
                (do-watch open?
@@ -181,48 +205,71 @@
                    (when n
                      (with-timeout 0
                        (.focus i))))))))
-          (if-tpl (cell= (empty? filtered-data))
-            (div :css {:padding-left (px 5)
-                       :user-select  "none"}
-                 "No results found")
-            (with-let [elem (ul)]
-              (do-watch filtered-data
-                (fn [_ _]
-                  (-> elem .-scrollTop (set! 0))))
-              (elem
-               :debug "item list area"
-               :css {:overflow-y  "scroll"
-                     :max-height  (px 100)
-                     :padding     0
-                     :margin      0
-                     :user-select "none"}
-               (keyed-for-tpl key-fn [item filtered-data]
-                 (with-let [elem (li)]
-                   (do-watch highlighted
-                     (fn [_ n]
-                       (when (= @item n)
-                         (with-timeout 0
-                           (.scrollIntoViewIfNeeded elem)))))
-                   (elem
-                    :mouseenter #(reset! highlighted @item)
-                    ;; :mouseleave #(reset! highlighted nil)
-                    :css (formula-of [item highlighted]
-                           (merge
-                            {:list-style "none"
-                             :padding    0
-                             :margin     0}
-                            (if (= highlighted item)
-                              {:background "#5897fb"
-                               :color      "white"}
-                              {:background "inherit"
-                               :color      "inherit"})))
-                    (div
-                     :css {:padding-left (px 5)}
-                     :click #(dosync
-                              (reset! value @item)
-                              (reset! open? false))
-                     (formatter item)))))))))
+          (let [has-matches? (cell= (not (empty? filtered-data)))]
+            (comm/styled
+             :garden (formula-of [highlighted matching-items ids]
+                       [(css-sel/selector (str "#" (get ids (key-fn (get-in matching-items [:index-to-item highlighted])))))
+                        {:background "#5897fb"
+                         :color      "white"}])
+             (div :css {:padding-left (px 5)
+                        :user-select  "none"}
+                  :toggle (cell= (not has-matches?))
+                  "No results found")
+             (with-let [elem (ul)]
+               (do-watch filtered-data
+                 (fn [_ _]
+                   (-> elem .-scrollTop (set! 0))))
+               (elem
+                :toggle has-matches?
+                :debug "item list area"
+                :css {:overflow-y  "scroll"
+                      :max-height  (or max-dropdown-height (px 150))
+                      :padding     0
+                      :margin      0
+                      :user-select "none"
+                      :list-style "none"}
+                (keyed-for-tpl key-fn [item data]
+                  (with-let [elem (li)]
+                    (do-watch highlighted
+                      (fn [_ n]
+                        (when (= @item (get-in @matching-items [:index-to-item n]))
+                          ;; with-timeout 0
+                          (.scrollIntoViewIfNeeded elem))))
+                    (elem
+                     :id (-> item key-fn ids cell=)
+                     :mouseenter #(reset! highlighted (get-in @matching-items [:key-to-index (key-fn @item)]))
+                     ;; :mouseleave #(reset! highlighted nil)
+                     :class (formula-of [item matching-items #_highlighted]
+                              {(comm/class-for ::hidden)
+                               (not (contains? (:key-to-index matching-items)
+                                               (key-fn item)))
+                               #_(comm/class-for ::highlighted)
+                               #_(= highlighted (get-in matching-items
+                                                          [:key-to-index (key-fn item)]))})
+                     #_:css #_(formula-of [item matching-items highlighted]
+                            (merge
+                             {:display    (if (contains? (:key-to-index matching-items)
+                                                         (key-fn item))
+                                            "block"
+                                            "none")
+                              :list-style "none"
+                              :padding    0
+                              :margin     0}
+                             (if (= highlighted (get-in matching-items
+                                                        [:key-to-index (key-fn item)]))
+                               {:background "#5897fb"
+                                :color      "white"}
+                               {:background "inherit"
+                                :color      "inherit"})))
+                     (div
+                      :css {:padding-left (px 5)}
+                      :click #(dosync
+                               (reset! value @item)
+                               (reset! open? false))
+                      (formatter item))))))))))
          #_(div
-          (pre-cell "open?" open?)
-          (pre-cell "search-text" search-text)
-          (pre-cell "highlighted" highlighted)))))))
+            (pre-cell "open?" open?)
+            (pre-cell "search-text" search-text)
+            (pre-cell "highlighted" highlighted)
+            (pre-cell "index-to-item" (cell= (:index-to-item matching-items)))
+            (pre-cell "key-to-index" (cell= (:key-to-index matching-items)))))))))
