@@ -54,26 +54,25 @@
                             (->> data
                                  (filter #(str/index-of (str/lower-case (search-fn %))
                                                         (str/lower-case search-text))))))
-          ;; A map from index to items
           matching-items (formula-of [filtered-data]
                            {:index-to-item (zipmap (range) filtered-data)
                             :key-to-index  (zipmap (map key-fn filtered-data) (range))})
           ids            (formula-of [data]
                            (zipmap (map key-fn data)
-                                   (repeatedly #(str (gensym)))))]
-      (add-watch highlighted
-                 (keyword (gensym))
-                 (fn [_ _ _ n]
-                   (when highlight
-                     (highlight (get-in @matching-items [:index-to-item n])))))
+                                   (repeatedly #(str (gensym)))))
+          highlighted-item (formula-of [matching-items highlighted]
+                             (get-in matching-items [:index-to-item highlighted]))]
+      (when highlight
+        (do-watch highlighted-item
+          (fn [_ n]
+            (highlight n))))
       (do-watch open?
         (fn [_ n]
           (when-not n
-            (reset! search-text nil)
-            (reset! highlighted nil))))
+            (reset! search-text nil))))
       (do-watch filtered-data
         (fn [_ n]
-          (reset! highlighted 0)))
+          (reset! highlighted (if @open? 0 nil))))
       (with-let [elem (div)]
         ;; Handling Blur isn't a good solution because clicking on one
         ;; of the list elements also causes a blur, and it happens
@@ -117,7 +116,6 @@
             (div
              :debug "arrow container"
              :css {:display  "inline-block"
-                   ;; :padding (px 0 5)
                    :position "absolute"
                    :right    (px 7)
                    :top      (px (/ arrow-size 2))}
@@ -180,24 +178,10 @@
                                         (swap! highlighted
                                                #(min (inc %)
                                                      (dec (count @filtered-data))))
-                                        #_ (let [next (->> (map vector @filtered-data (drop 1 @filtered-data))
-                                                           (filter (fn [[item next-item]]
-                                                                     (= item @highlighted)))
-                                                           first
-                                                           second)]
-                                             (when next
-                                               (reset! highlighted next)))
 
                                         comm/UP_ARROW
                                         (swap! highlighted
                                                #(max 0 (dec %)))
-                                        #_ (let [prev (->> (map vector @filtered-data (drop 1 @filtered-data))
-                                                           (filter (fn [[prev-item item]]
-                                                                     (= item @highlighted)))
-                                                           first
-                                                           first)]
-                                             (when prev
-                                               (reset! highlighted prev)))
 
                                         nil)))]
                (do-watch open?
@@ -238,29 +222,10 @@
                     (elem
                      :id (-> item key-fn ids cell=)
                      :mouseenter #(reset! highlighted (get-in @matching-items [:key-to-index (key-fn @item)]))
-                     ;; :mouseleave #(reset! highlighted nil)
-                     :class (formula-of [item matching-items #_highlighted]
+                     :class (formula-of [item matching-items]
                               {(comm/class-for ::hidden)
                                (not (contains? (:key-to-index matching-items)
-                                               (key-fn item)))
-                               #_(comm/class-for ::highlighted)
-                               #_(= highlighted (get-in matching-items
-                                                          [:key-to-index (key-fn item)]))})
-                     #_:css #_(formula-of [item matching-items highlighted]
-                            (merge
-                             {:display    (if (contains? (:key-to-index matching-items)
-                                                         (key-fn item))
-                                            "block"
-                                            "none")
-                              :list-style "none"
-                              :padding    0
-                              :margin     0}
-                             (if (= highlighted (get-in matching-items
-                                                        [:key-to-index (key-fn item)]))
-                               {:background "#5897fb"
-                                :color      "white"}
-                               {:background "inherit"
-                                :color      "inherit"})))
+                                               (key-fn item)))})
                      (div
                       :css {:padding-left (px 5)}
                       :click #(dosync
@@ -268,8 +233,8 @@
                                (reset! open? false))
                       (formatter item))))))))))
          #_(div
-            (pre-cell "open?" open?)
-            (pre-cell "search-text" search-text)
-            (pre-cell "highlighted" highlighted)
-            (pre-cell "index-to-item" (cell= (:index-to-item matching-items)))
-            (pre-cell "key-to-index" (cell= (:key-to-index matching-items)))))))))
+          (pre-cell "open?" open?)
+          (pre-cell "search-text" search-text)
+          (pre-cell "highlighted" highlighted)
+          #_(pre-cell "index-to-item" (cell= (:index-to-item matching-items)))
+          #_(pre-cell "key-to-index" (cell= (:key-to-index matching-items)))))))))
