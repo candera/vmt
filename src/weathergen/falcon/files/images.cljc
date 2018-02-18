@@ -140,7 +140,7 @@
          "-"
          rsc-size "-" rsc-modified)))
 
-(defn make-descriptor
+(defn- make-descriptor*
   "Creates an image descriptor."
   [mission resource image-id]
   (let [data-dir          (-> mission :installation :data-dir)
@@ -183,3 +183,5 @@
        :idx-modified  (:modified idx-stats)
        :rsc-size      (:size rsc-stats)
        :rsc-modified  (:modified rsc-stats)})))
+
+(def make-descriptor (memoize make-descriptor*))

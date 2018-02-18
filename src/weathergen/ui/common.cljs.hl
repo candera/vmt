@@ -155,7 +155,7 @@
       (swap! registered-styles conj key)
       (with-timeout 0
         (do
-           (log/debug "Registering style" (str key))
+           (log/debug "Registering style" (str key) (pr-str @styles))
            (.appendChild head (style :type "text/css" :debug (str key) styles)))))))
 
 (defn register-class!
@@ -561,20 +561,34 @@
 ;;       elem)))
 
 (defelem select2
-  "Renders a jQuery Select2 control. `:choices` is a (cell or non-cell)
-  sequence of maps, each of which must contain a `:value` key. These
-  values will be used to set the cell passed in for `:value`.
-  `:formatter` is a function which, when passed one of the items from
-  the `:choices` sequence, returns UI used to display it in the
-  dropdown.
+  "Renders a jQuery Select2 control. `:choices` is a (cell or
+  non-cell) sequence of maps, each of which must contain a `:value`
+  and `:label` key. These values will be used to set the cell passed
+  in for `:value`. The label will be used to match search text unless
+  a custom matcher is present.
+
+ `:formatter` is a function which, when passed one
+  of the items from the `:choices` sequence, returns UI used to
+  display it in the dropdown.
 
   Optional attributes:
 
   :formatter - defaults to `:label`.
   :placeholder - adds a choice with value nil when present
-  :allow-clear? - Adds the 'clear' button."
+  :allow-clear? - Adds the 'clear' button.
+  :match-pred - Custom matcher. Predicate function of search text and
+                an item. Return true if item matches. Custom matchers
+                are very slow for large lists.
+  :highlight - Called with a cell containing the highlighted choice
+               when it changes."
   [attrs kids]
-  (with-attr-bindings attrs [choices formatter value placeholder allow-clear?]
+  (with-attr-bindings attrs [choices
+                             formatter
+                             value
+                             placeholder
+                             allow-clear?
+                             match-pred
+                             highlight]
     (let [choices*   (formula-of [choices placeholder]
                        (into (if placeholder
                                [{:value nil ::placeholder? true}]
@@ -594,7 +608,16 @@
                                 (filter (fn [[id item]]
                                           (= (:value item) val)))
                                 first
-                                key))]
+                                key))
+          ;; Custom matchers are slow
+          match-fn   (when match-pred
+                       (fn [params data]
+                         (let [term (or (.-term params) "")
+                               id   (.-id data)
+                               item (get @index id)]
+                           (when item
+                             (when (match-pred term item)
+                               data)))))]
       (with-let [elem (select attrs kids)]
         (do-watch value
             (fn [_ n]
@@ -614,14 +637,14 @@
                                  (hint-> js/jQuery)
                                  .empty
                                  #_(.trigger "change"))]
-                       (-> (reduce (fn [s {:keys [value ::placeholder?]}]
+                       (-> (reduce (fn [s {:keys [value label ::placeholder?]}]
                                      #_(.log js/console "Adding"
                                              ":label" label
                                              ":id" (lookup value))
                                      (let [id (if placeholder?
                                                 ""
                                                 (lookup value))]
-                                       (.append s (js/Option. id id false false))))
+                                       (.append s (js/Option. label id false false))))
                                    s
                                    @choices*)
                            (.val (lookup @value))
@@ -633,17 +656,20 @@
                  js/jQuery
                  (hint-> js/jQuery)
                  (.select2 (clj->js
-                            (cond->
-                                {:data              (clj->js (for [[id item] @index]
-                                                               {:text (if (::placeholder? item)
-                                                                        ""
-                                                                        id)
-                                                                :id   (if (::placeholder? item)
-                                                                        ""
-                                                                        id)}))
-                                 :templateResult    formatter*
-                                 :templateSelection formatter*
-                                 :allowClear allow-clear?}
+                            (cond-> {:data              (clj->js (for [[id item] @index]
+                                                                   {:text (if (::placeholder? item)
+                                                                            ""
+                                                                            (:label item))
+                                                                    :id   (if (::placeholder? item)
+                                                                            ""
+                                                                            id)}))
+                                     :templateResult    formatter*
+                                     :templateSelection formatter*
+                                     :allowClear        allow-clear?}
+
+                              match-fn
+                              (merge {:matcher match-fn})
+
                               placeholder
                               (merge {:placeholder placeholder}))))
                  (.on "change" (fn [e]
@@ -654,6 +680,9 @@
                                               :value)]
                                    #_(.log js/console "changed" v)
                                    (reset! value v))))
+                 (.on "highlight" (fn [e]
+                                    (when highlight
+                                      (highlight e))))
                  (.val (lookup @value))
                  (.trigger "change"))))))))
 
@@ -730,36 +759,43 @@
                               default-path (assoc :defaultPath default-path)))))]
       path)))
 
-(defn get-image
+(defn- get-image*
   "Return a URL for the image identified by `image-descriptor`."
   [mission image-descriptor]
-  (let [path (image-cache-path image-descriptor)]
-    (if (fs/exists? path)
-      path
-      (let [^js/HTMLCanvasElement canvas (.createElement js/document "canvas")]
-        (with-time
-          (str "Loading image " (:image-id image-descriptor))
-          (im/read-image
-           mission
-           image-descriptor
-           (fn [width height]
-             (-> canvas .-width (set! width))
-             (-> canvas .-height (set! height))
-             (let [^js/CanvasRenderingContext2D context (.getContext canvas "2d")
-                   ^js/ImageData image-data (.getImageData context 0 0 width height)
-                   buf (-> image-data .-data .-length js/ArrayBuffer.)
-                   buf8 (js/Uint8ClampedArray. buf)
-                   data (js/Uint32Array. buf)]
-               {:set-pixel! (fn [^long x ^long y ^long argb]
-                              (aset data (+ x (* y width)) argb))
-                :finalize (fn []
-                            (-> image-data .-data (.set buf8))
-                            (-> context (.putImageData image-data 0 0)))}))))
-        ;; Async - cache for later use
-        (.toBlob canvas
-                 (fn [blob]
-                   (save-blob-async blob path)))
-        (.toDataURL canvas)))))
+  (and
+   mission
+   image-descriptor
+   (let [path (image-cache-path image-descriptor)]
+     (if (fs/exists? path)
+       path
+       (let [^js/HTMLCanvasElement canvas (.createElement js/document "canvas")]
+         (with-time
+           (str "Loading image " (:image-id image-descriptor))
+           (im/read-image
+            mission
+            image-descriptor
+            (fn [width height]
+              (-> canvas .-width (set! width))
+              (-> canvas .-height (set! height))
+              (let [^js/CanvasRenderingContext2D context (.getContext canvas "2d")
+                    ^js/ImageData image-data (.getImageData context 0 0 width height)
+                    buf (-> image-data .-data .-length js/ArrayBuffer.)
+                    buf8 (js/Uint8ClampedArray. buf)
+                    data (js/Uint32Array. buf)]
+                {:set-pixel! (fn [^long x ^long y ^long argb]
+                               (aset data (+ x (* y width)) argb))
+                 :finalize (fn []
+                             (-> image-data .-data (.set buf8))
+                             (-> context (.putImageData image-data 0 0)))}))))
+         ;; Async - cache for later use
+         (.toBlob canvas
+                  (fn [blob]
+                    (save-blob-async blob path)))
+         (.toDataURL canvas))))))
+
+(def get-image
+  "Return a URL for the image identified by `image-descriptor`."
+  (memoize get-image*))
 
 ;; Conformers are functions that take a cell containing a string value
 ;; to conform, and return a cell (presumably a formula of the input
@@ -1081,14 +1117,20 @@
   "Renders an HTML checkbox."
   [attrs _]
   (with-attr-bindings attrs [change value]
-    (let [change* (or change #(swap! value not))]
-      (input (assoc attrs
-                    :type "checkbox"
-                    :change change*
-                    :value value)))))
+    (let [change* (or change #(swap! value not))
+          i       (input)]
+      (do-watch value
+          (fn [_ n]
+            (-> i .-indeterminate (set! (= n ::indeterminate)))))
+      (i (assoc attrs
+                :type "checkbox"
+                :change change*
+                :value value)))))
 
 (def ESCAPE_KEY 27)
 (def ENTER_KEY 13)
+(def UP_ARROW 38)
+(def DOWN_ARROW 40)
 
 (defelem validating-edit
   "Renders a control that will provide feedback as to whether the
@@ -1389,3 +1431,17 @@
                                             (when-let [pos (get pos-map k)]
                                               (nth items* pos nil)))))}))
                        (gdom/appendChild frag (get-in @index [k :ui])))))))))))
+
+(defn compute-selected-teams
+  "Figure out which teams to select based on what side the player last
+  played and what sides they can see."
+  [mission visible-teams]
+  (let [last-allied (->> (mission/last-player-team mission)
+                         (mission/side mission)
+                         (mission/teams-for-side mission)
+                         set)]
+    (if (->> visible-teams
+             (set/intersection last-allied)
+             empty?)
+      visible-teams
+      last-allied)))

@@ -93,6 +93,12 @@
   {:title    "Flights"
    :id       :flights
    :sections [:flights-section {}]}
+  {:title    "Objectives"
+   :id       :objectives
+   :sections [:objectives-section {}]}
+  {:title    "Ground Forces"
+   :id       :ground-forces
+   :sections [:ground-forces-section {}]}
   {:title    "Weather"
    :id       :weather
    :sections [:serialization-controls {}
@@ -106,9 +112,9 @@
               :wind-stability-parameters {}
               :weather-override-parameters {}
               :advanced-controls {}]}
-  #_{:title  "ACMI"
+  #_{:title    "ACMI"
      :id       :acmi
      :sections [:acmi-controls {}]}
-  #_{:title  "Test and Debug"
+  #_{:title    "Test and Debug"
      :id       :test
      :sections [:test-section {}]}])

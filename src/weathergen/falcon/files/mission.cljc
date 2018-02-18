@@ -100,10 +100,16 @@
   [mission objective]
   (->> objective (class-table-entry mission) :vu-class-data :class-info :type))
 
+(defn objective-type-name-by-type
+  "Given an objective type code, returns the name of its type. E.g. 'Bridge'."
+  [mission type]
+  (get-in mission [:strings :objective-type-names type]))
+
 (defn objective-type-name
   "Given an objective, returns the name of its type. E.g. 'Bridge'."
   [mission objective]
-  (get-in mission [:strings :objective-type-names (objective-type mission objective)]))
+  (objective-type-name-by-type mission (objective-type mission objective)))
+
 
 (defn find-objective
   "Find an objective by the criteria given, or nil if the item can't be found."
@@ -1506,6 +1512,10 @@
                          ::status (objective-status mission %)
                          ::image (objective-image mission %)
                          ::name (objective-name mission %)
+                         ::type (objective-type mission %)
+                         ::type-name (objective-type-name mission %)
+                         ::class-data (class-table-entry mission %)
+                         ::objective-class-data (objective-class-entry mission %)
                          ::features (objective-features mission %)))))))
 
 ;; Note that the below will also return carriers, which might be what
@@ -1939,7 +1949,7 @@
 ;; Ref: objectiv.cpp
 ;; TODO: Combine this with the objective delta stuff
 (def objective-fields
-  (util/concatv [:objective-type buf/uint16]
+  (util/concatv [:objective-type buf/uint16]  ; Index into the objective class table?
                 camp-base-fields
                 [:last-repair  campaign-time
                  :obj-flags    buf/uint32

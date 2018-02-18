@@ -761,30 +761,24 @@
                                       :highlighted-flight    (cell nil)
                                       :display               (cell {})
                                       :all-flights           (cell= (::mission/flights mission))
-                                      :selected-teams        (cell #{})
+                                      :selected-teams        (cell (comm/compute-selected-teams
+                                                                    @mission
+                                                                    @visible-teams))
                                       :map-flight-path-size  map-flight-path-size
                                       :map-flight-path-scale map-flight-path-scale})
         watchable             (formula-of [mission visible-teams]
                                 [mission visible-teams])]
     (do-watch watchable
-              ::reset-on-mission-change
-              (fn [_ [mission visible-teams]]
-                (with-time
-                  "updating flights section"
-                  (dosync
-                   (reset! (:display state) {})
-                   (reset! (:highlighted-flight state) nil)
-                   (reset! (:checked-flights state) #{})
-                   (reset! (:selected-teams state)
-                           (let [last-allied (->> (mission/last-player-team mission)
-                                                  (mission/side mission)
-                                                  (mission/teams-for-side mission)
-                                                  set)]
-                             (if (->> visible-teams
-                                      (set/intersection last-allied)
-                                      empty?)
-                               visible-teams
-                               last-allied)))))))
+        ::reset-on-mission-change
+        (fn [_ [mission visible-teams]]
+          (with-time
+            "updating flights section"
+            (dosync
+             (reset! (:display state) {})
+             (reset! (:highlighted-flight state) nil)
+             (reset! (:checked-flights state) #{})
+             (reset! (:selected-teams state)
+                     (comm/compute-selected-teams mission visible-teams))))))
     (assoc state
            :controls-fn (fn [scroll-container]
                           (controls (assoc state :scroll-container scroll-container)))

@@ -69,6 +69,8 @@
             [weathergen.ui.layers.acmi]
             [weathergen.ui.layers.annotations]
             [weathergen.ui.layers.flights]
+            [weathergen.ui.layers.ground-forces]
+            [weathergen.ui.layers.objectives]
             [weathergen.ui.trees :as trees]
             [weathergen.ui.tabs :as tabs]
             [weathergen.util :as util]
@@ -504,6 +506,26 @@
     :map-text-scale              map-text-scale
     :map-icon-scale              map-icon-scale
     :suppress-bullseye-info-box? suppress-bullseye-info-box?}))
+
+(def objectives-layer
+  (weathergen.ui.layers.objectives/create
+   mission
+   {:map-viewbox                 map-viewbox
+    :map-zoom                    map-zoom
+    :map-text-scale              map-text-scale
+    :map-icon-scale              map-icon-scale
+    :suppress-bullseye-info-box? suppress-bullseye-info-box?
+    :visible-teams               visible-teams}))
+
+(def ground-forces-layer
+  (weathergen.ui.layers.ground-forces/create
+   mission
+   {:map-viewbox                 map-viewbox
+    :map-zoom                    map-zoom
+    :map-text-scale              map-text-scale
+    :map-icon-scale              map-icon-scale
+    :suppress-bullseye-info-box? suppress-bullseye-info-box?
+    :visible-teams               visible-teams}))
 
 ;;; Formulas
 
@@ -2598,6 +2620,8 @@
                       :height ny)
                      brightness-layer
                      primary-layer
+                     (layer-overlay objectives-layer)
+                     (layer-overlay ground-forces-layer)
                      (bullseye-overlay mission)
                      wind-overlay
                      text-overlay
@@ -4771,7 +4795,7 @@
                [:a:hover {:color "lightblue"} ]]
       (span
        "Help? Bug? Feature request? Click"
-       (a :href "https://www.bmsforum.org/forum/showthread.php?31611-Release-Tyrant-s-Virtual-Mission-Tools-(VMT)&p=441129#post441129"
+       (a :href "https://www.benchmarksims.org/forum/showthread.php?31611-Release-Tyrant-s-Virtual-Mission-Tools-(VMT)&p=441129#post441129"
           :target "_blank"
           "here")
        "."))
@@ -4811,6 +4835,10 @@
                                   (layer-controls flight-paths-layer
                                                   (::scroll-container opts)))
    :air-forces-section          air-forces-section
+   :ground-forces-section      (fn [opts]
+                                 (layer-controls ground-forces-layer))
+   :objectives-section         (fn [opts]
+                                 (layer-controls objectives-layer))
    :map-controls-section        map-controls-section
    :annotation-controls         (fn [opts]
                                   (layer-controls annotations-layer))

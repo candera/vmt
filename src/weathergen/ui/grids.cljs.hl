@@ -225,13 +225,23 @@
 Column description:
 :title - Shows up in the header row
 :sort-key - Function from a row value (not cell) to a sort value
+:disable-sort - True to make the column unsortable
 :formatter - Function from a row cell and row number cell to UI
 :css - Function from cell of row item and cell of row number to
          map of css values."
   [attrs _]
   (register-table-grid-styles!)
   (with-attr-bindings attrs [data key-fn columns row-attrs when-empty fixed-columns movable-columns hidden-columns initial-sort]
+    (assert (and data (cell? data)) "data must be a cell")
     (assert key-fn "key-fn is required")
+    (assert row-attrs "row-attrs is required")
+    (assert (and columns (map? columns)) "columns must be a map")
+    ;; (assert (and fixed-columns (seqable? fixed-columns)) "fixed-columns must be a sequence")
+    (assert (and movable-columns (cell? movable-columns)) "movable-columns must be a cell")
+    (assert (and hidden-columns
+                 (cell? hidden-columns)
+                 (set? @hidden-columns))
+            "hidden-columns must be a cell containing a set")
     (let [sort-criteria    (cell initial-sort)
           sorted-items     (formula-of [data sort-criteria]
                              (if-not sort-criteria

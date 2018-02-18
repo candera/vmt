@@ -1,0 +1,451 @@
+(ns weathergen.ui.layers.objectives
+  "Responsible for drawing the objectives on the map and the associated
+  controls."
+  (:require [clojure.pprint :refer [pprint]]
+            [clojure.string :as str]
+            [goog.string :as gstring]
+            [goog.string.format]
+            [hoplon.svg :as svg]
+            [weathergen.compression :refer [decompress]]
+            [weathergen.coordinates :as coords]
+            [weathergen.encoding :refer [decode encode]]
+            [weathergen.falcon.constants :as c]
+            [weathergen.falcon.files.mission :as mission]
+            [weathergen.filesystem :as fs]
+            [weathergen.help :as help :refer [help-icon with-help]]
+            [weathergen.math :as math]
+            [weathergen.ui.buttons :as buttons]
+            [weathergen.ui.common :as comm :refer [colors control-section
+                                                   dropdown
+                                                   ems
+                                                   format-time inl
+                                                   map-lens
+                                                   path-lens pct pre-cell px
+                                                   styled team-color triangle
+                                                   validating-edit]]
+            [weathergen.ui.grids :as grids]
+            [weathergen.ui.select :as select]
+            [weathergen.ui.tabs :as tabs]
+            [weathergen.util :as util])
+  (:require-macros
+   [weathergen.cljs.macros :refer [hint->
+                                   hint->>
+                                   keyed-for-tpl
+                                   map-lens-tpl
+                                   with-attr-bindings
+                                   with-bbox
+                                   with-default-lenses
+                                   with-key-lenses
+                                   with-time]]))
+
+;;; Utilities
+
+(let [counter (atom 0)]
+  (defn- unique-id
+    []
+    (swap! counter inc)))
+
+(defn- overlay
+  "Renders the UI for the display of the annotations."
+  [{:keys [map-icon-scale map-zoom mission visible-objectives highlighted] :as state}
+   register-drag-handler]
+  (let [objectives visible-objectives
+        antizoom-key (-> (gensym) str keyword)]
+    (comm/register-styles! antizoom-key
+                           (formula-of [map-zoom]
+                             [(comm/class-selector-for antizoom-key)
+                              {:transform (comm/svg-scale (/ 1.0 map-zoom))}]))
+    (svg/g
+     :debug "objectives overlay"
+     (keyed-for-tpl :id [objective objectives]
+       (with-key-lenses objective
+         [x y]
+         (with-default-lenses
+           {x 0
+            y 0}
+           (let [coords (formula-of [mission x y]
+                          (coords/fgrid->weather mission x y))
+                 info   (formula-of [objective]
+                          (when-let [image (::mission/image objective)]
+                            (let [image-data            (:image-data image)
+                                  {:keys [size center]} image-data
+                                  [w h]                 size
+                                  [cx cy]               center]
+                              {:src (comm/get-image mission image)
+                               :x     (- cx w)
+                               :y     (- cy h)
+                               :w     w
+                               :h     h
+                               :d     cy})))]
+             (with-key-lenses info
+               [src x y w h d]
+               (with-default-lenses
+                 {x 0
+                  y 0
+                  w 0
+                  h 0
+                  d 0})
+               (svg/g
+                :debug (cell= (str (::mission/name objective) " " (-> objective :id :name)))
+                :transform (formula-of [coords map-icon-scale]
+                             (let [{:keys [x y]} coords]
+                               (comm/svg-xform-combine
+                                (comm/svg-translate x y)
+                                (comm/svg-scale (/ map-icon-scale 20)))))
+                (svg/g
+                 :svg/class (comm/class-for antizoom-key)
+                 (if-tpl src
+                   (svg/image
+                    :xlink-href src
+                    :x x
+                    :y y
+                    :width w
+                    :height h)
+                   (svg/g :debug "No image available"))))))))))))
+
+;; Air Fields
+;; Air Defenses
+;; Army
+;; CCC
+;; Political
+;; Infrastructure
+;; Logistics
+;; War Production
+;; Other
+
+;; FILTER_TABLE ObjectiveFilters[] =
+;; {
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_RADAR, 0, _OBTV_AIR_DEFENSE, OOB_ARMY},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_SAM_SITE, 0, _OBTV_AIR_DEFENSE, OOB_ARMY},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_AIRBASE, 0, _OBTV_AIR_FIELDS, OOB_AIRFORCE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_AIRSTRIP, 0, _OBTV_AIR_FIELDS, OOB_AIRFORCE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_ARMYBASE, 0, _OBTV_ARMY, OOB_ARMY},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_FORTIFICATION, 0, _OBTV_ARMY, OOB_ARMY},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_HARTS, 0, _OBTV_ARMY, OOB_ARMY},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_COM_CONTROL, 0, _OBTV_CCC, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_RADIO_TOWER, 0, _OBTV_CCC, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_BRIDGE, 0, _OBTV_INFRASTRUCTURE, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_POWERPLANT, 0, _OBTV_WAR_PRODUCTION, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_RAIL_TERMINAL, 0, _OBTV_INFRASTRUCTURE, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_RAILROAD, 0, _OBTV_INFRASTRUCTURE, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_DEPOT, 0, _OBTV_LOGISTICS, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_PORT, 0, _OBTV_LOGISTICS, OOB_NAVY},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_BEACH, 0, _OBTV_OTHER, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_FORD, 0, _OBTV_OTHER, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_HILL_TOP, 0, _OBTV_OTHER, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_PASS, 0, _OBTV_OTHER, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_ROAD, 0, _OBTV_OTHER, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_SEA, 0, _OBTV_OTHER, OOB_NAVY},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_NAV_BEACON, 0, _OBTV_NAVIGATION, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_BORDER, 0, _OBTV_OTHER, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_CITY, 0, _OBTV_POLITICAL, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_TOWN, 0, _OBTV_POLITICAL, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_VILLAGE, 0, _OBTV_POLITICAL, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_CHEMICAL, 0, _OBTV_WAR_PRODUCTION, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_FACTORY, 0, _OBTV_WAR_PRODUCTION, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_NUCLEAR, 0, _OBTV_WAR_PRODUCTION, OOB_OBJECTIVE},
+;;     { DOMAIN_LAND, CLASS_OBJECTIVE, TYPE_REFINERY, 0, _OBTV_WAR_PRODUCTION, OOB_OBJECTIVE},
+;;     { DOMAIN_AIR, CLASS_UNIT,     TYPE_SQUADRON, 0, _UNIT_SQUADRON, 0},
+;;     { DOMAIN_AIR, CLASS_UNIT,     TYPE_PACKAGE, 0, _UNIT_PACKAGE, 0},
+;;     { 0, 0, 0, 0, 0, 0},
+;; };
+
+;; Ref: filters.cpp(19)
+(def objective-type-filters
+  {"Air Defenses"   #{c/TYPE_RADAR c/TYPE_SAM_SITE}
+   "Army"           #{c/TYPE_ARMYBASE c/TYPE_FORTIFICATION c/TYPE_HARTS}
+   "CCC"            #{c/TYPE_COM_CONTROL c/TYPE_RADIO_TOWER}
+   "Political"      #{c/TYPE_CITY c/TYPE_TOWN c/TYPE_VILLAGE}
+   "Infrastructure" #{c/TYPE_BRIDGE c/TYPE_RAIL_TERMINAL c/TYPE_RAILROAD}
+   "Logistics"      #{c/TYPE_DEPOT c/TYPE_PORT}
+   "War Production" #{c/TYPE_POWERPLANT c/TYPE_CHEMICAL c/TYPE_FACTORY c/TYPE_NUCLEAR c/TYPE_REFINERY}
+   "Other"          #{c/TYPE_BEACH c/TYPE_FORD c/TYPE_HILL_TOP c/TYPE_PASS c/TYPE_ROAD c/TYPE_SEA c/TYPE_BORDER}})
+
+(defn- centered-image
+  "Renders an objective image centered in width and height."
+  [mission objective width]
+  (let [image (cell= (::mission/image objective))]
+    (inl
+     :css {:width          (px width)
+           :height         (px width)
+           :margin-right   (px 3)
+           :vertical-align "middle"
+           :text-align     "center"
+           :position       "relative"}
+     (when-tpl image
+       (img
+        :css {:position "absolute"
+              :top      0
+              :bottom   0
+              :left     0
+              :right    0
+              :margin   "auto"}
+        :src (cell= (comm/get-image mission image)))))))
+
+(defn- team-flag
+  "Renders an img with the team flag."
+  [mission objective]
+  (img
+   :css {:border-width (px 1)
+         :border-style "solid"
+         :border-color "grey"
+         :margin-right (px 3)}
+   :title (cell= (mission/team-name mission (:owner objective)))
+   :src (formula-of [mission objective]
+          (comm/get-image
+           mission
+           (mission/team-flag mission (:owner objective) :small-horiz)))))
+
+
+(defn- controls
+  "Returns UI for the map annotation controls."
+  [{mission            :mission
+    visible-teams      :visible-teams
+    selected-teams     :selected-teams
+    points-of-interest :points-of-interest
+    highlighted        :highlighted
+    type-visibility    :objective-type-visibility
+    :as                state}]
+  (div
+   (span :css {:font-size (pct 150)}
+    "TODO: Incorporate objective deltas")
+   (control-section
+    :title (with-help [:objectives :team-visibility]
+             "Team Visibility")
+    (pre-cell "selectable-teams"
+              (->> mission
+                   mission/teams
+                   (mapv mission/team-number)
+                   set
+                   cell=))
+    (comm/team-selector
+     :mission mission
+     :selected-teams selected-teams
+     :selectable-teams (->> mission
+                            mission/teams
+                            (mapv mission/team-number)
+                            set
+                            cell=)))
+   (control-section
+    :title (with-help [:objectives :type-visibility]
+             "Type Visibility")
+    (div
+     :css {:display   "flex"
+           :flex-wrap "wrap"
+           :padding   (px 0 5)}
+     (for [[type-class types] objective-type-filters]
+       (div
+        :css {:margin-right (px 20)}
+        (comm/checkbox
+         :value (formula-of [type-visibility]
+                  (let [members (get objective-type-filters type-class)]
+                    (cond
+                      (every? #(get type-visibility %) members)
+                      true
+
+                      (not (some #(get type-visibility %) members))
+                      false
+
+                      :else
+                      ::comm/indeterminate)))
+         :change (fn [e]
+                   (let [state (-> e .-currentTarget .-checked)]
+                     (dosync
+                      (doseq [type (get objective-type-filters type-class)]
+                        (swap! type-visibility assoc type state))))))
+        (label type-class)
+        (div
+         :css {:margin-left (px 10)}
+         (let [types-and-names (formula-of [mission]
+                                 (sort-by second
+                                          (for [type types]
+                                            [type (mission/objective-type-name-by-type mission type)])))]
+           (keyed-for-tpl identity [[type type-name] types-and-names]
+             (div
+              (comm/checkbox
+               :value (map-lens type-visibility type))
+              (label type-name)))))))))
+   (control-section
+    :title (with-help [:objectives :points-of-interest]
+             "Points of Interest")
+    (div
+     :css {:padding (px 0 5)}
+     (let [obj               (cell nil)
+           ;; It's slow to make these every time the dropdown drops
+           #_choice-ui-cache #_ (formula-of [mission]
+                                  (into {}
+                                        (for [objective (::mission/objectives mission)]
+                                          [(:id objective)
+                                           (inl
+                                            (centered-image mission objective 25)
+                                            (span (::mission/name objective)))])))]
+       (inl
+        (inl
+         :css {:margin (px 0 5 5 0)}
+         (select/select3
+          :data (->> mission
+                     ::mission/objectives
+                     (sort-by ::mission/name)
+                     cell=)
+          :width (px 335)
+          :value obj
+          :key-fn :id
+          :search-fn ::mission/name
+          :placeholder "Click here to add points of interest"
+          :formatter (fn [objective]
+                       ;; (.log js/console :id (-> choice :value :id))
+                       (div
+                        :css {:position "relative"}
+                        (centered-image mission objective 25)
+                        (team-flag mission objective)
+                        (span (cell= (::mission/name objective)))
+                        (span
+                         :css {:font-weight  "bold"
+                               :font-variant "small-caps"
+                               :font-size    (pct 75)
+                               :display      "inline-block"
+                               :position     "absolute"
+                               :right        (px 5)}
+                         (cell= (::mission/type-name objective)))))
+          :max-dropdown-height (px 200)
+          :highlight (fn [objective]
+                       (reset! highlighted objective))
+          :change (fn [objective]
+                    (dosync
+                     (reset! obj nil)
+                     (swap! points-of-interest
+                            assoc
+                            (:id objective)
+                            (assoc objective
+                                   ::checked? true))))))
+        #_(pre-cell "highlighted"
+                  (cell= (pr-str (::mission/name highlighted))))
+        #_(buttons/a-button
+         :click (fn [_]
+                  (when @obj
+                    (swap! points-of-interest
+                           assoc
+                           (:id @obj)
+                           (assoc @obj
+                                  ::checked? true))))
+         :disabled? (cell= (nil? obj))
+         "Add")))
+     (grids/table-grid
+      :data points-of-interest
+      :key-fn key
+      :row-attrs (fn [objective rownum] {})
+      :when-empty (div "No points of interest selected. Use the dropdown above to add.")
+      :fixed-columns [:delete :checked]
+      :hidden-columns (cell #{})
+      :movable-columns (cell [:name :type :owner])
+      :initial-sort [:name :ascending]
+      :columns
+      {:delete
+       {:title        (img
+                       :width (px 16)
+                       :src "images/trash.png")
+        :disable-sort true
+        :formatter    (fn [item]
+                        (cell-let [[id objective] item]
+                          (buttons/image-button
+                           :width (px 16)
+                           :src "images/trash.png"
+                           :click #(swap! points-of-interest dissoc @id))))}
+       :checked
+       {:title     "Show?"
+        :sort-key  ::checked?
+        :formatter (fn [item]
+                     (cell-let [[id objective] item]
+                       (inl
+                        (comm/checkbox
+                         :change #(swap! points-of-interest update-in [@id ::checked?] not)
+                         :value (path-lens objective [::checked?]))
+                        (centered-image mission objective 25))))}
+       :name  {:title     "Name"
+               :sort-key  ::mission/name
+               :formatter (fn [item]
+                            (cell-let [[id objective] item]
+                              (cell= (::mission/name objective))))}
+       :owner {:title     "Who"
+               :sort-key  :owner
+               :formatter (fn [item]
+                            (cell-let [[id objective] item]
+                              (div
+                               (team-flag mission objective)
+                               (cell= (mission/team-name mission (:owner objective))))))}
+       :type  {:title     "Type"
+               :sort-key  ::mission/type-name
+               :formatter (fn [item]
+                            (cell-let [[id objective] item]
+                              (cell= (::mission/type-name objective))))}})))))
+
+(defn- visible-objectives
+  "Returns a seq of objectives to be drawn on the map."
+  [{:keys [mission team-visibility type-visibility points-of-interest highlighted]}]
+  (let [teams (set team-visibility)
+        types (set (for [[type visible?] type-visibility
+                         :when visible?]
+                     type))]
+    (->> mission
+         ::mission/objectives
+         (filterv (fn [objective]
+                    (let [id (:id objective)]
+                      (or (and (teams (:owner objective))
+                               (types (::mission/type objective)))
+                          (and (contains? points-of-interest id)
+                               (get-in points-of-interest [id ::checked?]))
+                          (= objective highlighted))))))))
+
+(defn create
+  "Creates the objectives layer."
+  [mission {:keys [map-viewbox map-zoom visible-teams] :as state}]
+  (let [type-visibility    (cell {})
+        team-visibility    (cell (->> @mission
+                                      mission/teams
+                                      (map mission/team-number)
+                                      set))
+        points-of-interest (cell {})
+        highlighted        (cell nil)
+        state              (assoc state
+                                  :objective-state (cell {})
+                                  :objective-type-visibility type-visibility
+                                  :points-of-interest points-of-interest
+                                  :mission mission
+                                  :highlighted highlighted
+                                  :visible-objectives (formula-of [mission
+                                                                   team-visibility
+                                                                   type-visibility
+                                                                   points-of-interest
+                                                                   highlighted]
+                                                        (visible-objectives
+                                                         {:mission            mission
+                                                          :team-visibility    team-visibility
+                                                          :type-visibility    type-visibility
+                                                          :points-of-interest points-of-interest
+                                                          :highlighted        highlighted}))
+                                  :selected-teams team-visibility)
+        watchable          (formula-of [mission visible-teams]
+                             [mission visible-teams])]
+    (do-watch watchable
+        (fn [_ [mission visible-teams]]
+          (reset! (:selected-teams state)
+                  visible-teams)))
+    {:controls-fn (fn [] (controls state))
+     :overlay-fn  (fn [register-drag-handler]
+                    (overlay state register-drag-handler))
+     :state       state}))
+
+(defn briefing-data
+  "Returns data for saving in a briefing file."
+  [layer]
+  {:objectives {}})
+
+(defn load-briefing-data
+  "Given briefing data, update the layer with the state from it."
+  [layer data]
+  (reset! (get-in layer [:state :objective-state])
+          (into (sorted-map)
+                (some->>
+                 data
+                 :objectives
+                 (zipmap (repeatedly unique-id))))))
