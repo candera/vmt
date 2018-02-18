@@ -307,10 +307,14 @@
                        :direction {:heading 135 :speed 20}
                        :looping? false})
 
+;; Min width of controls column
+(def controls-min-width 575)
+
+;; Size of the SVG map
 (def map-size (formula-of [window-size]
                 (let [[window-width window-height] window-size
-                      dim (max 250 (min window-width
-                                        (- window-height 140)))]
+                      dim (max 250 (min (- window-width controls-min-width)
+                                        (- window-height 121)))]
                   [dim dim])))
 
 ;; These are *weather* display options
@@ -2700,7 +2704,7 @@
 
 ;;; User Interface
 
-(defn two-column
+#_(defn two-column
   [left right]
   (div :class "two-column"
        (div :class "left-column" left)
@@ -2789,9 +2793,9 @@
               :title "Zoom Map Out"))))))
        ;; Time indicators
        (div
-        :css {:position "absolute"
-              :right    (px 27)
-              :bottom   0}
+        :css {:display "inline-block"
+              :float   "right"
+              :margin  (px 5 7 0 0)}
         (span
          (with-help [:map :mission-time]
            "Mission Time:")
@@ -4833,32 +4837,20 @@
      :id "app"
      (titlebar)
      (message-display)
-     (let [right-width 575 ; Min width of controls column
-           portrait?   (formula-of
-                         [map-size window-size]
-                         (let [[grid-width grid-height]     map-size
-                               [window-width window-height] window-size]
-                           (< window-width (+ grid-width right-width -10))))]
+     (let [right-width controls-min-width]
        (div
         :css (formula-of
-               {portrait?                    portrait?
-                [window-width window-height] window-size}
+               {[window-width window-height] window-size}
                {:display        "flex"
-                :flex-direction (if portrait? "column" "row")
+                :flex-direction "row"
                 ;; These next plus the overflow/height in the columns are
                 ;; what let the two sides scroll separately
-                :overflow       (if portrait? "show" "hidden")
-                :height         (if portrait?
-                                  "100%"
-                                  (str (- window-height 90) "px"))})
+                :overflow       "hidden"
+                :height         (px (- window-height 90))})
         (div
          :class "left-column"
-         :css (formula-of
-                [portrait?]
-                (if portrait?
-                  {}
-                  {:overflow "auto"
-                   :height   "auto"}))
+         :css {:overflow "auto"
+               :height   "auto"}
          (button-bar)
          (grid :display-params display-params
                :weather-data weather-data
@@ -4874,19 +4866,16 @@
         (let [right-column (div)]
           (right-column
            :class "right-column"
-           :css (formula-of
-                  [portrait?]
-                  (merge {:display       "block"
-                          :align-content "flex-start"
-                          :flex-wrap     "wrap"
-                          :flex-grow     1
-                          :min-width     (str (- right-width 20) "px")
-                          ;;  This one weird trick keeps the column from expanding
-                          ;;  past where it should. Yay CSS.
-                          :width         0}
-                         (when-not portrait?
-                           {:overflow "auto"
-                            :height   "auto"})))
+           :css {:display       "block"
+                 :align-content "flex-start"
+                 :flex-wrap     "wrap"
+                 :flex-grow     1
+                 :min-width     (str (- right-width 20) "px")
+                 ;;  This one weird trick keeps the column from expanding
+                 ;;  past where it should. Yay CSS.
+                 :width         0
+                 :overflow      "auto"
+                 :height        "auto"}
            (let [first-tab    (-> section-infos first :id)
                  selected-tab (cell first-tab)]
              (.addEventListener js/document
