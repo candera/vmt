@@ -3147,3 +3147,95 @@ type: 0x64 -> image
      ::mission/features
      (map #(select-keys % [:value ::mission/index :name]))
      pprint)
+
+
+(->> @smpu
+     ::mission/objectives
+     first
+     ::mission/image
+     keys
+     )
+
+(->> @smpu
+     ::mission/objectives
+     (filter #(-> % ::mission/image nil?))
+     ::mission/name
+     )
+
+
+(-> @ffw keys pprint)
+
+(let [mission @ffw
+      objective (-> mission
+                 ::mission/objectives
+                 rand-nth)]
+  (pprint
+   {:bridge (select-keys objective [:id ::mission/name :objective-type])
+    :pointer (->> objective (mission/class-table-entry mission) :data-pointer)
+    :type (->> objective (mission/class-table-entry mission) :vu-class-data :class-info :type)}))
+
+(let [mission @ffw
+      bridge (-> mission
+                 ::mission/objectives
+                 first)]
+  (pprint
+   {:bridge (select-keys bridge [:id ::mission/name :objective-type])
+    :pointer (->> bridge (mission/class-table-entry mission) :data-pointer)
+    :type (->> bridge (mission/class-table-entry mission) :vu-class-data :class-info :type)}))
+
+;; OK, so I'm trying to figure out how to to sort out the type of the
+;; objective, and I don't understand the data structure. Specifically,
+;; there's :data-pointer and the class table entry, which I don't
+;; really understand the difference between. I think the class data is
+;; generic, like it applies to all entities, and the data pointer
+;; indexes into the objective class data, which is specific to
+;; objectives. The above bridge, "Gwan-gi Bridge", prints this info:
+
+{:bridge
+ {:id {:name 456, :creator 0},
+  :weathergen.falcon.files.mission/name "Gwan-gi Bridge",
+  :objective-type 1979},
+ :pointer 531,
+ :type 6}
+
+;; In mission commander, it has "OCD ID" (which I assume is objective
+;; class data ID) 1979, which matches :objective-type but
+;; not :pointer. If I look in the BMS editor, objective class 531 is "78B Bridge 1":
+
+(-> @ffw
+    :objective-class-data
+    (nth 531)
+    :name)
+
+;; The above code returns "78B Bridge 1", too. Oh! Objective type is a
+;; pointer (minus 100, so 1879) into the class table:
+
+(-> @ffw
+    :class-table
+    (nth 1879)
+    :data-pointer)
+
+;; Returns 531, which is the index into the objective class table. So
+;; objective-type is the pointer from the objective to the class
+;; table, which in turn points to the objective class table.
+
+;; Got it.
+
+;; OK, so if I want to group objectives by type, I need to do something like this:
+
+(->> @ffw
+    ::mission/objectives
+    (group-by ::mission/type))
+
+
+(let [zone-rules (java.time.zone.ZoneRulesProvider/getRules "America/New_York" false)]
+ (->> (iterate (fn [t]
+                 (-> zone-rules
+                     (.nextTransition t)
+                     .getInstant))
+               (java.time.Instant/now))
+      (map (fn [t]
+             {:start (str t)
+              :offset (str (.getOffset zone-rules t))}))
+      (take 15)
+      pprint))

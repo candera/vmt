@@ -121,6 +121,15 @@
      (log/debug "Done reading.")
      mission)))
 
+(def ffw
+  (delay
+   (log/debug "Reading Custom 1st VFW theater...")
+   (let [mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.33.3/Data/Add-On 1st VFW/Campaign/Save/Rolling Fire Start.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
 (defn smoke-test
   []
   (map :mission-name [@balkans @ito @wnpu @te-new @stratus-te @save2 @smpu @smpu-old]))

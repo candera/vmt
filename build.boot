@@ -16,6 +16,7 @@
                  ;; [tailrecursion/boot-jetty  "0.1.3"]
                  [cljsjs/jquery-ui "1.11.4-0"]
                  [org.clojure/data.csv "0.1.4"]
+                 [org.clojure/data.json "0.2.6"]
 
                  [rum "0.10.8"]
                  [com.cognitect/transit-cljs "0.8.243"]
@@ -64,6 +65,7 @@
  '[octet.core :as buf]
  '[clojure.repl :refer :all]
  '[clojure.pprint :refer [pprint]]
+ '[weathergen.boot :refer [fixup-source-maps]]
  '[weathergen.falcon.files :as files]
  '[weathergen.filesystem :as fs]
  '[clojure.tools.namespace.repl :refer [refresh]]
@@ -82,6 +84,7 @@
    (watch :verbose true :exclude #{#"~$" #"^#.*#$" #"^\.#" #"#$"})
    (notify :theme "ordinance"
            :audible true
+           ;; :soundfiles {:failure "dev/build-error.mp3"}
            :visual true
            :title "VMT")
    (hoplon)
@@ -103,8 +106,7 @@
                             :infer-externs false
                             :pretty-print true
                             :pseudo-names true
-                            :preloads '[devtools.preload]
-                            }
+                            :preloads '[devtools.preload]}
          ;; The problem here is that the .map files have bogus paths
          ;; in them. They're just JSON, though, so it might be worth
          ;; figuring out how to fix them up.
@@ -134,6 +136,7 @@
                             :pretty-print true
                             :pseudo-names true}
          :source-map (boolean source-maps))
+   (fixup-source-maps)
    (target)))
 
 (deftask electron

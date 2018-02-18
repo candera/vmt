@@ -84,9 +84,11 @@
         "Load")
        (hr)
        (let [data (cell (range 4000))
+             last-changed (cell nil)
              value (cell nil)
              highlighted (cell nil)]
          (div
+          (div "Last chanaged: " (cell= (pr-str last-changed)))
           (div "Value: " (cell= (pr-str value)))
           (div "Highlighted: "(cell= (pr-str highlighted)))
           (select3
@@ -99,7 +101,9 @@
            :formatter (fn [v]
                         (span (cell= (str v))))
            :highlight (fn [v]
-                        (reset! highlighted v)))
+                        (reset! highlighted v))
+           :change (fn [v]
+                     (reset! last-changed v)))
           (buttons/a-button
            :click (fn [_] (reset! value nil))
            "Reset")))
