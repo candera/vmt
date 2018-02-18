@@ -1557,7 +1557,7 @@
                               assoc
                               (unique-id)
                               @annotation)
-               :title "Hide"
+               :title "Copy"
                :src "images/copy.svg"
                :width "16px"
                :height "16px")
