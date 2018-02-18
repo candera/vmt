@@ -31,10 +31,11 @@
 :key-fn - Function of choice value returning immutable unique ID.
 :search-fn - Function from value to text it should match when searching.
 :formatter - Function from cell of value to UI for that item.
-:highlight - Function called with highlighted value when value changes.
+:change - Function called with selected value when value changes.
+:highlight - Function called with highlighted value when highlight changes.
 :max-dropdown-height - (Optional) Max height of dropdown"
   [attrs _]
-  (with-attr-bindings attrs [data width value key-fn search-fn formatter highlight max-dropdown-height placeholder]
+  (with-attr-bindings attrs [data width value key-fn search-fn formatter highlight change max-dropdown-height placeholder]
     (assert search-fn "search-fn is required")
     (assert key-fn "key-fn is required")
     (assert formatter "formatter is required")
@@ -73,7 +74,7 @@
       (do-watch filtered-data
         (fn [_ n]
           (reset! highlighted (if @open? 0 nil))))
-      (with-let [elem (div)]
+      (with-let [elem (div :debug "select3 outer")]
         ;; Handling Blur isn't a good solution because clicking on one
         ;; of the list elements also causes a blur, and it happens
         ;; before the click, which screws up our ability to handle the
@@ -137,101 +138,118 @@
                                                (if open? 180 0)
                                                "deg)")})))))
          (div
-          :debug "dropdown area"
-          :css
-          (formula-of [open?]
-            {:display                    (if open? "block" "none")
-             :top                        0
-             :position                   "absoute"
-             :background                 "white"
-             ;; :padding                    (px 0 5)
-             :border-color               "#aaa"
-             :border-width               (px 1)
-             :border-style               "solid"
-             :border-top-style           "none"
-             :border-bottom-left-radius  (px border-radius)
-             :border-bottom-right-radius (px border-radius)})
-          ;; Something like this: http://jsfiddle.net/v7YTT/90/
-          (let [gap 5]
-            (div
-             :debug "Search box"
-             :css
-             {:padding (px 0 gap 2 (* 2 gap))}
-             (with-let [i (input
-                           :css {:width    (pct 100)
-                                 :position "relative"
-                                 :right    (px gap)}
-                           :value search-text
-                           :input #(reset! search-text @%)
-                           :keydown (fn [^KeyboardEvent e]
-                                      (condp = (.-keyCode e)
-                                        comm/ESCAPE_KEY
-                                        (reset! open? false)
+          :debug "spacer")
+         (div
+          :debug "dropdown area container"
+          :css {:position "relative"}
+          (div
+           :debug "dropdown area"
+           :css
+           (formula-of [open?]
+             {:display                    (if open? "block" "none")
+              :top                        0
+              :position                   "absolute"
+              :z-index                    100
+              :background                 "white"
+              ;; :padding                    (px 0 5)
+              :border-color               "#aaa"
+              :border-width               (px 1)
+              :border-style               "solid"
+              :border-top-style           "none"
+              :border-bottom-left-radius  (px border-radius)
+              :border-bottom-right-radius (px border-radius)})
+           (div
+            :debug "sets width"
+            :css {:width width
+                  :margin-left (px -2) ; accounts for border
+                  }
+            )
+           ;; something like this: http://jsfiddle.net/v7YTT/90/
+           (let [gap 5]
+             (div
+              :debug "Search box"
+              :css
+              {:padding (px 0 gap 2 (* 2 gap))}
+              (with-let [i (input
+                            :css {:width    (pct 100)
+                                  :position "relative"
+                                  :right    (px gap)}
+                            :value search-text
+                            :input #(reset! search-text @%)
+                            :keydown (fn [^KeyboardEvent e]
+                                       (condp = (.-keyCode e)
+                                         comm/ESCAPE_KEY
+                                         (reset! open? false)
 
-                                        comm/ENTER_KEY
-                                        (when-not (empty? @filtered-data)
-                                          (dosync
-                                           (reset! open? false)
-                                           (reset! value (get-in @matching-items [:index-to-item @highlighted]))))
+                                         comm/ENTER_KEY
+                                         (when-not (empty? @filtered-data)
+                                           (let [new-val (get-in @matching-items [:index-to-item @highlighted])]
+                                             (dosync
+                                              (reset! open? false)
+                                              (reset! value new-val)
+                                              (when change
+                                                (change new-val)))))
 
-                                        comm/DOWN_ARROW
-                                        (swap! highlighted
-                                               #(min (inc %)
-                                                     (dec (count @filtered-data))))
+                                         comm/DOWN_ARROW
+                                         (swap! highlighted
+                                                #(min (inc %)
+                                                      (dec (count @filtered-data))))
 
-                                        comm/UP_ARROW
-                                        (swap! highlighted
-                                               #(max 0 (dec %)))
+                                         comm/UP_ARROW
+                                         (swap! highlighted
+                                                #(max 0 (dec %)))
 
-                                        nil)))]
-               (do-watch open?
-                 (fn [_ n]
-                   (when n
-                     (with-timeout 0
-                       (.focus i))))))))
-          (let [has-matches? (cell= (not (empty? filtered-data)))]
-            (comm/styled
-             :garden (formula-of [highlighted matching-items ids]
-                       [(css-sel/selector (str "#" (get ids (key-fn (get-in matching-items [:index-to-item highlighted])))))
-                        {:background "#5897fb"
-                         :color      "white"}])
-             (div :css {:padding-left (px 5)
-                        :user-select  "none"}
-                  :toggle (cell= (not has-matches?))
-                  "No results found")
-             (with-let [elem (ul)]
-               (do-watch filtered-data
-                 (fn [_ _]
-                   (-> elem .-scrollTop (set! 0))))
-               (elem
-                :toggle has-matches?
-                :debug "item list area"
-                :css {:overflow-y  "scroll"
-                      :max-height  (or max-dropdown-height (px 150))
-                      :padding     0
-                      :margin      0
-                      :user-select "none"
-                      :list-style "none"}
-                (keyed-for-tpl key-fn [item data]
-                  (with-let [elem (li)]
-                    (do-watch highlighted
-                      (fn [_ n]
-                        (when (= @item (get-in @matching-items [:index-to-item n]))
-                          ;; with-timeout 0
-                          (.scrollIntoViewIfNeeded elem))))
-                    (elem
-                     :id (-> item key-fn ids cell=)
-                     :mouseenter #(reset! highlighted (get-in @matching-items [:key-to-index (key-fn @item)]))
-                     :class (formula-of [item matching-items]
-                              {(comm/class-for ::hidden)
-                               (not (contains? (:key-to-index matching-items)
-                                               (key-fn item)))})
-                     (div
-                      :css {:padding-left (px 5)}
-                      :click #(dosync
-                               (reset! value @item)
-                               (reset! open? false))
-                      (formatter item))))))))))
+                                         nil)))]
+                (do-watch open?
+                  (fn [_ n]
+                    (when n
+                      (with-timeout 0
+                        (.focus i))))))))
+           (let [has-matches? (cell= (not (empty? filtered-data)))]
+             (comm/styled
+              :garden (formula-of [highlighted matching-items ids]
+                        [(css-sel/selector (str "#" (get ids (key-fn (get-in matching-items [:index-to-item highlighted])))))
+                         {:background "#5897fb"
+                          :color      "white"}])
+              (div :css {:padding-left (px 5)
+                         :user-select  "none"}
+                   :toggle (cell= (not has-matches?))
+                   "No results found")
+              (with-let [elem (ul)]
+                (do-watch filtered-data
+                  (fn [_ _]
+                    (-> elem .-scrollTop (set! 0))))
+                (elem
+                 :toggle has-matches?
+                 :debug "item list area"
+                 :css {:overflow-y  "scroll"
+                       :max-height  (or max-dropdown-height (px 150))
+                       :padding     0
+                       :margin      0
+                       :user-select "none"
+                       :list-style "none"}
+                 (keyed-for-tpl key-fn [item data]
+                   (with-let [elem (li)]
+                     (do-watch highlighted
+                       (fn [_ n]
+                         (when (= @item (get-in @matching-items [:index-to-item n]))
+                           ;; with-timeout 0
+                           (.scrollIntoViewIfNeeded elem))))
+                     (elem
+                      :id (-> item key-fn ids cell=)
+                      :mouseenter #(reset! highlighted (get-in @matching-items [:key-to-index (key-fn @item)]))
+                      :class (formula-of [item matching-items]
+                               {(comm/class-for ::hidden)
+                                (not (contains? (:key-to-index matching-items)
+                                                (key-fn item)))})
+                      (div
+                       :css {:padding-left (px 5)}
+                       :click #(dosync
+                                (reset! value @item)
+                                (reset! open? false)
+                                (when change
+                                  (change @item)))
+                       (formatter item)))))))))))
          #_(div
           (pre-cell "open?" open?)
           (pre-cell "search-text" search-text)
