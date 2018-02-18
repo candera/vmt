@@ -1089,6 +1089,9 @@
 
 (def ESCAPE_KEY 27)
 (def ENTER_KEY 13)
+(def UP_ARROW 38)
+(def DOWN_ARROW 40)
+
 
 (defelem validating-edit
   "Renders a control that will provide feedback as to whether the
