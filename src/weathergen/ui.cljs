@@ -310,11 +310,18 @@
 ;; Min width of controls column
 (def controls-min-width 575)
 
+;; Whether the titlebar is shown full size
+(defc titlebar-fullsize? true)
+
+(defc= titlebar-height (if titlebar-fullsize? 64 27))
+
 ;; Size of the SVG map
-(def map-size (formula-of [window-size]
+(def map-size (formula-of [window-size titlebar-height]
                 (let [[window-width window-height] window-size
                       dim (max 250 (min (- window-width controls-min-width)
-                                        (- window-height 121)))]
+                                        (-> window-height
+                                            (- titlebar-height)
+                                            (- 57))))]
                   [dim dim])))
 
 ;; These are *weather* display options
@@ -2795,7 +2802,7 @@
        (div
         :css {:display "inline-block"
               :float   "right"
-              :margin  (px 5 7 0 0)}
+              :margin  (px 5 32 0 0)}
         (span
          (with-help [:map :mission-time]
            "Mission Time:")
@@ -4724,20 +4731,34 @@
   []
   (div
    :debug "titlebar"
-   :css {:background    "black"
-         :color         "white"
-         :padding       (px 4 13)
-         :margin-bottom (px 2)
-         :height        (px 64)}
+   :css (formula-of [titlebar-fullsize?]
+          {:background    "black"
+           :color         "white"
+           :padding       (px 4 13)
+           :margin-bottom (px 2)
+           :height        (px (if titlebar-fullsize? 64 27))
+           :position      "relative"})
    (inl
     :debug "titlebar-contents"
+    (a
+     :css {:position "absolute"
+           :left     (px 5)
+           :top      (px -5)}
+     :click #(swap! titlebar-fullsize? not)
+     (comm/css-triangle
+      :rotation (cell= (if titlebar-fullsize? 0 -90))
+      :size 6
+      :color "#888"))
     (inl
      :debug "left-words"
-     :css {:margin-top (px 14)}
+     :css (formula-of [titlebar-fullsize?]
+            {:margin-top  (when titlebar-fullsize? (px 14))
+             :margin-left (when-not titlebar-fullsize? (px 7))})
      (span
       :debug "title"
-      :css {:padding-top (px 16)
-            :font-size   (pct 200)}
+      :css (formula-of [titlebar-fullsize?]
+             {:padding-top (px 16)
+              :font-size   (pct (if titlebar-fullsize? 200 125))})
       "Virtual Mission Tools")
      (span
       :debug "version"
@@ -4766,13 +4787,14 @@
      :debug "right-words"
      (styled
       :debug "helpstring"
-      :garden [[:span {:position "absolute"
-                       :right    (px 100)
-                       :top      (px 45)}]
-               [:a {:color       "white"
-                    :margin-left (ems 0.2)}]
-               [:a:visited {:color "white"}]
-               [:a:hover {:color "lightblue"} ]]
+      :garden (formula-of [titlebar-fullsize?]
+                [[:span {:position "absolute"
+                         :right    (px (if titlebar-fullsize? 100 54))
+                         :bottom   (px 7)}]
+                 [:a {:color       "white"
+                      :margin-left (ems 0.2)}]
+                 [:a:visited {:color "white"}]
+                 [:a:hover {:color "lightblue"} ]])
       (span
        "Help? Bug? Feature request? Click"
        (a :href "https://www.bmsforum.org/forum/showthread.php?31611-Release-Tyrant-s-Virtual-Mission-Tools-(VMT)&p=441129#post441129"
@@ -4782,12 +4804,13 @@
      (a
       :css {:position "absolute"
             :right    (px 20)
-            :top      (px 12)}
+            :top      (px 7)}
       :href "http://firstfighterwing.com"
       :target "_blank"
       (img
-       :css {:display "inline-block"
-             :height  (px 64)}
+       :css (formula-of [titlebar-fullsize?]
+              {:display "inline-block"
+               :height  (px (if titlebar-fullsize? 64 24))})
        :src "images/1stVFW_Insignia-64.png"))))))
 
 (defn- layer-controls
@@ -4840,13 +4863,16 @@
      (let [right-width controls-min-width]
        (div
         :css (formula-of
-               {[window-width window-height] window-size}
+               {titlebar-height              titlebar-height
+                [window-width window-height] window-size}
                {:display        "flex"
                 :flex-direction "row"
                 ;; These next plus the overflow/height in the columns are
                 ;; what let the two sides scroll separately
                 :overflow       "hidden"
-                :height         (px (- window-height 90))})
+                :height         (px (-> window-height
+                                        (- titlebar-height)
+                                        (- 26)))})
         (div
          :class "left-column"
          :css {:overflow "auto"

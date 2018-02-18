@@ -265,6 +265,29 @@
      {:style {:display "inline-block"}}
      args]))
 
+(defelem css-triangle
+  "Returns a CSS triangle. Rotation is zero when pointed down."
+  [attrs _]
+  (with-attr-bindings attrs [size rotation color]
+    (div
+     attrs
+     :css (formula-of [rotation]
+            {:display            "inline-block"
+             :width              0
+             :height             0
+             :border-left-width  (px (* 0.66 size))
+             :border-left-style  "solid"
+             :border-left-color  "transparent"
+             :border-right-width (px (* 0.66 size))
+             :border-right-style "solid"
+             :border-right-color "transparent"
+             :border-top-width   (px size)
+             :border-top-style   "solid"
+             :border-top-color   color
+             :transform          (str "rotate("
+                                      rotation
+                                      "deg)")}))))
+
 (defelem triangle
   [attrs _]
   (let [{:keys [r]} attrs
