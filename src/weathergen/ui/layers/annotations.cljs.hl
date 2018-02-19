@@ -1316,6 +1316,7 @@
       (td (helped :threat "Threat:"))
       (td
        (comm/select2
+        :css {:width (px 150)}
         :value threat
         :choices (formula-of [threats]
                    (for [{:keys [id radius-ft description] :as threat} threats]
@@ -1450,6 +1451,7 @@
                 (case-tpl type
                   :shape
                   (comm/select2
+                   :css {:width (px 125)}
                    :value shape-type
                    :choices [{:value :rectangle
                               :label "Rectangle"}
