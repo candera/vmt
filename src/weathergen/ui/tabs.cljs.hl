@@ -1,8 +1,8 @@
 (ns weathergen.ui.tabs
   "Homegrown tab controls."
-  (:require [weathergen.ui.common :as comm :refer [inl]])
+  (:require [weathergen.ui.common :as comm :refer [inl pct px]])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of]]))
 
 ;; (set! *warn-on-infer* true)
 
@@ -10,6 +10,8 @@
   "Renders a tab control. `selected` is a cell containing the ID of
   the currently selected tab. `tabs` is a vector of maps describing
   the tabs.
+
+  `:tab-background` - background color of tabs
 
   Keys include:
 
@@ -19,7 +21,7 @@
   `:hidden?` - A cell for whether the tab is hidden or not
   "
   [attrs _]
-  (let [{:keys [selected tabs]} attrs]
+  (with-attr-bindings attrs [tab-background selected tabs]
     (doseq [{:keys [id hidden?]} tabs]
       (when hidden?
         (add-watch hidden?
@@ -29,28 +31,43 @@
                        (reset! selected (-> tabs first :id)))))))
     (div
      (div
-      :css {:margin-bottom "7px"
-            :border-bottom "1px solid lightgray"}
-      (for [{:keys [title id hidden?]} tabs]
-        (div
-         :click #(reset! selected id)
-         :css (formula-of [selected hidden?]
-                {:display    (if hidden? "none" "inline-block")
-                 :background (when (= selected id) "black")
-                 :color      (if (= selected id)
-                               "white"
-                               "#737373")
-                 :font-size  "120%"
-                 :padding    (if (= selected id)
-                               "0 10px"
-                               0)
-                 :margin     (if (= selected id)
-                               0
-                               "0 10px")
-                 :cursor     "pointer"})
-         title)))
+      :debug "buttons and spacer"
+      :css {:position    "sticky"
+            :top        0
+            :background tab-background
+            :z-index    100}
+      (div
+       :debug "tab buttons"
+       :css {:border-bottom-width (px 1)
+             :border-bottom-style "solid"
+             :border-bottom-color "lightgray"}
+       (for [{:keys [title id hidden?]} tabs]
+         (div
+          :click #(reset! selected id)
+          :css (formula-of [selected hidden?]
+                 (let [selected? (= selected id)]
+                   {:display                 (if hidden? "none" "inline-block")
+                    :background              (when selected? "black")
+                    :border-top-left-radius  (px 5)
+                    :border-top-right-radius (px 5)
+                    :border-style            "solid"
+                    :border-bottom-style     "none"
+                    :border-width            (px 1)
+                    :border-color            (if selected?
+                                               "black"
+                                               "lightgray")
+                    :color                   (if (= selected id)
+                                               "white"
+                                               "#737373")
+                    :font-size               (pct 120)
+                    :padding                 (px 0 10 3 10)
+                    :cursor                  "pointer"}))
+          title)))
+      (div
+       :debug "spacer"
+       :css {:background tab-background
+             :height     (px 3)}))
      (for [{:keys [id ui]} tabs]
        (div
-        :css {:padding "0 3px"}
         :toggle (cell= (= id selected))
         ui)))))

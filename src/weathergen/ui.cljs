@@ -4918,6 +4918,7 @@
                                                :tools-tab
                                                first-tab))))))
              (tabs/tabs
+              :tab-background "#FDFFD9"
               :selected selected-tab
               :tabs (concat
                      (for [{:keys [title id sections]} section-infos]
