@@ -144,19 +144,35 @@
         :when bool]
     class))
 
-(def registered-styles (atom #{}))
+(let [registered-styles (atom #{})
+      pending           (atom {})]
 
-(defn register-styles!
-  "Adds styles to the head of the document. If already registered under `key`, does nothing."
-  [key garden]
-  (when-not (contains? @registered-styles key)
-    (let [^js/Element head (aget (.getElementsByTagName js/document "head") 0)
-          styles (cell= (css garden))]
-      (swap! registered-styles conj key)
-      (with-timeout 0
-        (do
-           (log/debug "Registering style" (str key))
-           (.appendChild head (style :type "text/css" :debug (str key) styles)))))))
+  (defn- register-style!
+    [key garden]
+    (log/debug "Registering style" key)
+    (.appendChild (.-head js/document)
+                  (style
+                   :type "text/css"
+                   :debug (str key)
+                   (cell= (css garden))))
+    (swap! registered-styles conj key)
+    (log/debug "Registered style" key))
+
+  (.addEventListener js/document
+                     "DOMContentLoaded"
+                     (fn [_]
+                       (log/debug "Document loaded. Registering pending styles.")
+                       (doseq [[key garden] @pending]
+                         (register-style! key garden))
+                       (reset! pending {})))
+
+  (defn register-styles!
+    "Adds styles to the head of the document. If already registered under `key`, does nothing."
+    [key garden]
+    (when-not (contains? @registered-styles key)
+      (if-not (= "complete" (.-readyState js/document))
+        (swap! pending assoc key garden)
+        (register-style! key garden)))))
 
 (defn register-class!
   "Adds a style to the head of a document for abstract class `key`.
