@@ -4426,6 +4426,95 @@
    (let [flight-path-display-controls (:map-display-controls-fn flight-paths-layer)]
      (flight-path-display-controls "Flight Path Display Options"))))
 
+(defn- dataize-images!
+  "Given an SVG element, recursively turn all its image sources into data URLs."
+  [elem]
+  (when (= "image" (.-tagName elem))
+    (let [href (.getAttributeNS elem "http://www.w3.org/1999/xlink" "href")]
+      (when-let [b64 (some-> href
+                             fs/file-buffer
+                             (.toString "base64"))]
+        (-> elem
+            (.setAttributeNS "http://www.w3.org/1999/xlink"
+                             "href"
+                             (str "data:image/" (fs/extension href) ";base64," b64))))))
+  (doseq [child (-> elem .-childNodes array-seq)]
+    (dataize-images! child))
+  elem)
+
+(defn- svg-png-data
+  "Given an SVG element `svg`, asynchronously return a blob (via
+  callback `cb`) of PNG data with size `w` by `h`."
+  [svg [w h] cb]
+  (let [data   (-> svg (.cloneNode true) dataize-images! .-outerHTML js/encodeURIComponent)
+        src    (str "data:image/svg+xml;utf8," data)
+        canvas (.createElement js/document "canvas")
+        ctx    (.getContext canvas "2d")
+        img    (js/Image.)]
+    (-> canvas .-width (set! w))
+    (-> canvas .-height (set! h))
+    (-> img .-onload (set! (fn []
+                             (.drawImage ctx img 0 0 w h)
+                             (.toBlob canvas cb))))
+    (-> img .-src (set! src))))
+
+
+(defn map-image-save-controls
+  "UI for saving the map as a PNG."
+  [_]
+  (control-section
+   :title (with-help [:map :save-image]
+            "Save Map Image")
+   (let [size        (cell :medium)
+         custom-size (cell 1000)]
+     (div
+      :css {:padding (px 3)}
+      (comm/radio-group
+       :value size
+       :choices [{:value :small
+                  :label "Small (250x250)"}
+                 {:value :medium
+                  :label "Medium (500x500)"}
+                 {:value :large
+                  :label "Large (1000x1000)"}
+                 {:value :x-large
+                  :label "Very Large (2000x2000)"}
+                 {:value :xx-large
+                  :label "Extremely Large (4000x4000)"}
+                 {:value :custom
+                  :label (div
+                          :css {:display "inline-block"}
+                          "Custom: "
+                          (validating-edit
+                           :css {:display "inline-block"}
+                           :conform comm/conform-positive-integer
+                           :fmt str
+                           :source custom-size
+                           :width 50
+                           :placeholder "Size in pixels")
+                          (span
+                           :css {:margin-left (px 7)}
+                           "x"
+                           (cell= (str custom-size))))}])
+      (buttons/a-button
+       :click #(let [dim (get {:small    250
+                               :medium   500
+                               :large    1000
+                               :x-large  2000
+                               :xx-large 4000
+                               :custom   @custom-size}
+                              @size)]
+                 (svg-png-data (.getElementById js/document "grid")
+                               [dim dim]
+                               (fn [data]
+                                 (comm/save-data
+                                  {:title        "Save Map Image"
+                                   :data         data
+                                   :filters      [{:name      "PNG Image"
+                                                   :extension [".png"]}]
+                                   :default-path (-> @mission :mission-name mission-name-base (str "-map.png"))}))))
+       "Save Map as PNG Image")))))
+
 (defn damage-computer-section
   [_]
   ;; TODO: Make it possible to add a column for each weapon of
@@ -4839,6 +4928,7 @@
                                                   (::scroll-container opts)))
    :air-forces-section          air-forces-section
    :map-controls-section        map-controls-section
+   :map-image-save-controls     map-image-save-controls
    :annotation-controls         (fn [opts]
                                   (layer-controls annotations-layer))
    :oob-section                 order-of-battle-section

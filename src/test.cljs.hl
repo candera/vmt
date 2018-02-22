@@ -6,10 +6,12 @@
             [goog.string :as gstring]
             [goog.string.format]
             [hoplon.storage-atom :refer [local-storage]]
+            [hoplon.svg :as svg]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
             [weathergen.falcon.install :as install]
             [weathergen.falcon.files.mission :as mission]
+            [weathergen.filesystem :as fs]
             [weathergen.help :as help]
             [weathergen.math :as math]
             [weathergen.model :as model]
@@ -64,6 +66,74 @@
     (reset! mission (with-time "read-mission"
                       (mission/read-mission @installations path)))))
 
+#_(defn- save-svg
+  "Given an SVG element `svg`, save it (asynchronously) to a PNG at
+  `path`, with size `w` by `h`."
+  [svg [w h] path]
+  (let [data   (-> svg .-outerHTML js/encodeURIComponent)
+        src    (str "data:image/svg+xml;utf8," data)
+        canvas (.createElement js/document "canvas")
+        ctx    (.getContext canvas "2d")
+        img    (js/Image.)]
+    (-> canvas .-width (set! w))
+    (-> canvas .-height (set! h))
+    (.log js/console "Canvas created")
+    #_(-> js/document .-body (.appendChild canvas))
+    (with-timeout 1000
+      (.log js/console src)
+      (-> img .-onload (set! (fn []
+                               (.log js/console "img loaded" img)
+                               (.drawImage ctx img 0 0 w h)
+                               (.log js/console "image drawn")
+                               (.toBlob canvas
+                                        (fn [blob]
+                                          (.log js/console "Saving blob")
+                                          (comm/save-blob-async blob path))))))
+      (-> img .-onerror (set! (fn [e a b c]
+                                (.log js/console "img failed to load" e a b c))))
+      (-> img .-src (set! src)))))
+
+(defn- save-svg
+  "Given an SVG element `svg`, save it (asynchronously) to a PNG at
+  `path`, with size `w` by `h`."
+  [svg [w h] path]
+  (let [data   (-> svg .-outerHTML js/encodeURIComponent)
+        src    (str "data:image/svg+xml;utf8," data)
+        canvas (.createElement js/document "canvas")
+        ctx    (.getContext canvas "2d")
+        img    (js/Image.)]
+    (-> canvas .-width (set! w))
+    (-> canvas .-height (set! h))
+    (.log js/console "Canvas created")
+    #_(-> js/document .-body (.appendChild canvas))
+    (.log js/console src)
+    (-> img .-onload (set! (fn []
+                             (.log js/console "img loaded" img)
+                             (.drawImage ctx img 0 0 w h)
+                             (.log js/console "image drawn")
+                             (.toBlob canvas
+                                      (fn [blob]
+                                        (.log js/console "Saving blob")
+                                        (comm/save-blob-async blob path))))))
+    (-> img .-onerror (set! (fn [e a b c]
+                              (.log js/console "img failed to load" e a b c))))
+    (-> img .-src (set! src))))
+
+(defn dataize-images!
+  [elem]
+  (when (= "image" (.-tagName elem))
+    (let [href (.getAttributeNS elem "http://www.w3.org/1999/xlink" "href")]
+      (when-let [b64 (some-> href
+                             fs/file-buffer
+                             (.toString "base64"))]
+        (-> elem
+            (.setAttributeNS "http://www.w3.org/1999/xlink"
+                             "href"
+                             (str "data:image/" (fs/extension href) ";base64," b64))))))
+  (doseq [child (-> elem .-childNodes array-seq)]
+    (dataize-images! child))
+  elem)
+
 (html
  (ui/head)
  (let [b (body)]
@@ -78,15 +148,84 @@
       (formula-of [mission]
         (.log js/console (clj->js (map mission/team-number (mission/teams mission)))))
       (div
-       (buttons/a-button
-        :click #(with-time "load-mission"
-                  (load-mission mission))
-        "Load")
        (hr)
-       (let [data (cell (range 4000))
+       (let [size        (cell :medium)
+             custom-size (cell 1000)
+             saved-name  (cell nil)]
+         (div
+          :css {:padding (px 3)}
+          (comm/radio-group
+           :value size
+           :choices [{:value :small
+                      :label "Small (250x250)"}
+                     {:value :medium
+                      :label "Medium (500x500)"}
+                     {:value :large
+                      :label "Large (1000x1000)"}
+                     {:value :x-large
+                      :label "Very Large (2000x2000)"}
+                     {:value :xx-large
+                      :label "Extremely Large (4000x4000)"}
+                     {:value :custom
+                      :label (div
+                              :css {:display "inline-block"}
+                              "Custom: "
+                              (comm/validating-edit
+                               :conform comm/conform-positive-integer
+                               :fmt str
+                               :source custom-size
+                               :width 150
+                               :placeholder "Size in pixels"))}])
+          (buttons/a-button
+           :click #(let [dim (get {:small    250
+                                   :medium   500
+                                   :large    1000
+                                   :x-large  2000
+                                   :xx-large 4000
+                                   :custom   @custom-size}
+                                  @size)
+                         path (str "/tmp/map" (rand-int 10000) ".png")]
+                     (save-svg (-> js/document
+                                   (.getElementById "grid")
+                                   (.cloneNode true)
+                                   dataize-images!)
+                               [dim dim]
+                               path)
+                     (reset! saved-name path))
+           "Save Map as PNG Image")
+          (when-tpl saved-name
+            (div "Saved: " saved-name))))
+       (svg/svg
+        :id "grid"
+        :css {:border "solid 1px black"}
+        :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
+               "xmlns"       "http://www.w3.org/2000/svg"}
+        :viewBox "0 0 100 100"
+        :width 500
+        :height 500
+        (svg/rect
+         :fill "red"
+         :x 10
+         :y 10
+         :width 50
+         :height 50)
+        (svg/text
+         :x 50
+         :y 50
+         :stroke "black"
+         :fill "black"
+         :text "Hello")
+        (svg/image
+         :x 20
+         :y 70
+         :width 50
+         :height 20
+         :xlink-href "/tmp/kto.jpg"))
+       (hr)
+       (let [data         (cell (range 4000))
              last-changed (cell nil)
-             value (cell nil)
-             highlighted (cell nil)]
+             value        (cell nil)
+             highlighted  (cell nil)]
          (div
           (div "Last chanaged: " (cell= (pr-str last-changed)))
           (div "Value: " (cell= (pr-str value)))
@@ -108,7 +247,7 @@
            :click (fn [_] (reset! value nil))
            "Reset")))
        (hr)
-       (let [value (cell nil)
+       (let [value   (cell nil)
              choices (for [n (range 10000)]
                        {:value n
                         :label (str n)})]
@@ -121,7 +260,7 @@
            :placeholder "Pick something")
           (buttons/a-button :click #(reset! value nil) "Reset")))
        (hr)
-       (let [value (cell nil)
+       (let [value   (cell nil)
              choices [{:value :apple1
                        :label "Apple1"}
                       {:value :apple2
@@ -154,223 +293,223 @@
           (buttons/a-button :click #(reset! value nil) "Reset")))
        (hr)
        #_(let [val (cell false)]
-         (div
-          (comm/checkbox
-           :value val)
-          (buttons/a-button
-           :click #(reset! val ::comm/indeterminate)
-           "Indeterminate")))
+           (div
+            (comm/checkbox
+             :value val)
+            (buttons/a-button
+             :click #(reset! val ::comm/indeterminate)
+             "Indeterminate")))
        (hr)
        #_(let [s (cell {:from {:day 1 :hour 2 :minute 3}})]
-         (div
-          (ui/time-entry :source s
-                         :path [:from])
-          (comm/time-edit :source s
-                          :path [:from])
-          (comm/validating-edit
-           :fmt comm/format-time
-           :conform (comm/time-conformer nil))))
+           (div
+            (ui/time-entry :source s
+                           :path [:from])
+            (comm/time-edit :source s
+                            :path [:from])
+            (comm/validating-edit
+             :fmt comm/format-time
+             :conform (comm/time-conformer nil))))
        (hr)
        #_(let [choices (cell [{:value "a"
-                             :label "A"}
-                            {:value "b"
-                             :label "B"}])
-             value (cell "a")]
-         (div
-          (div "Value: " value)
-          (div "Choices:" (cell= (pr-str choices)))
-          (buttons/a-button
-           :click #(let [x (str "oblkasd lkjasdf " (gensym))]
-                     (swap! choices conj {:value x
-                                          :label x}))
-           "Add")
-          (buttons/a-button
-           :click #(reset! choices [])
-           "Clear")
-          (comm/select2
-           :id "foo"
-           :choices choices
-           :value value)))
+                               :label "A"}
+                              {:value "b"
+                               :label "B"}])
+               value   (cell "a")]
+           (div
+            (div "Value: " value)
+            (div "Choices:" (cell= (pr-str choices)))
+            (buttons/a-button
+             :click #(let [x (str "oblkasd lkjasdf " (gensym))]
+                       (swap! choices conj {:value x
+                                            :label x}))
+             "Add")
+            (buttons/a-button
+             :click #(reset! choices [])
+             "Clear")
+            (comm/select2
+             :id "foo"
+             :choices choices
+             :value value)))
        (hr)
        #_(let [hidden? (cell false)
-             tabs    [{:id    :a
-                       :title "A"
-                       :ui    (div "A")}
-                      {:id      :b
-                       :title   "B"
-                       :ui      (div "B")
-                       :hidden? hidden?}]]
-         (div
-          (buttons/a-button
-           :click #(swap! hidden? not)
-           "Toggle")
-          (tabs/tabs
-           :selected (cell :a)
-           :tabs tabs)))
+               tabs    [{:id    :a
+                         :title "A"
+                         :ui    (div "A")}
+                        {:id      :b
+                         :title   "B"
+                         :ui      (div "B")
+                         :hidden? hidden?}]]
+           (div
+            (buttons/a-button
+             :click #(swap! hidden? not)
+             "Toggle")
+            (tabs/tabs
+             :selected (cell :a)
+             :tabs tabs)))
        (hr)
        #_(let [items (cell (for [n (range 20)]
-                           {:key  n
-                            :text (gstring/format "%02d" n)}))]
-         (div
-          (div
-           (pre :css {:white-space "pre-wrap"}
-                (cell= (with-out-str (pprint items))))
-           (buttons/a-button
-            :click #(swap! items shuffle)
-            "Shuffle")
-           (buttons/a-button
-            :click #(swap! items (fn [items]
-                                   (sort-by :key items)))
-            "Sort")
-           (buttons/a-button
-            :click #(swap! items
-                           (fn [items]
-                             (if (empty? items)
-                               items
+                             {:key  n
+                              :text (gstring/format "%02d" n)}))]
+           (div
+            (div
+             (pre :css {:white-space "pre-wrap"}
+                  (cell= (with-out-str (pprint items))))
+             (buttons/a-button
+              :click #(swap! items shuffle)
+              "Shuffle")
+             (buttons/a-button
+              :click #(swap! items (fn [items]
+                                     (sort-by :key items)))
+              "Sort")
+             (buttons/a-button
+              :click #(swap! items
+                             (fn [items]
+                               (if (empty? items)
+                                 items
+                                 (let [n (rand-int (count items))]
+                                   (.log js/console "Removing" n)
+                                   (concat (take n items) (drop (inc n) items))))))
+              "Remove one")
+             (buttons/a-button
+              :click #(swap! items
+                             (fn [items]
                                (let [n (rand-int (count items))]
-                                 (.log js/console "Removing" n)
-                                 (concat (take n items) (drop (inc n) items))))))
-            "Remove one")
-           (buttons/a-button
-            :click #(swap! items
-                           (fn [items]
-                             (let [n (rand-int (count items))]
-                               (.log js/console "Inserting" n)
-                               (concat (take n items)
-                                       [{:key  (->> items
-                                                    (map :key)
-                                                    (reduce max 0)
-                                                    inc)
-                                         :text "inserted"}]
-                                       (drop n items)))))
-            "Insert one"))
-          (table
-           (tbody
-            (for-tpl [item items]
-              (tr (td (cell= (:key item)))
-                  (td (cell= (:text item)))))
-            #_(keyed-for-tpl :key
-                  [item items]
-                  (.log js/console "item" (pr-str item))
-                  (tr (td (cell= (:key item)))
-                      (td (cell= (:text item)))))))))
+                                 (.log js/console "Inserting" n)
+                                 (concat (take n items)
+                                         [{:key  (->> items
+                                                      (map :key)
+                                                      (reduce max 0)
+                                                      inc)
+                                           :text "inserted"}]
+                                         (drop n items)))))
+              "Insert one"))
+            (table
+             (tbody
+              (for-tpl [item items]
+                (tr (td (cell= (:key item)))
+                    (td (cell= (:text item)))))
+              #_(keyed-for-tpl :key
+                    [item items]
+                    (.log js/console "item" (pr-str item))
+                    (tr (td (cell= (:key item)))
+                        (td (cell= (:text item)))))))))
        (hr)
        #_(let [v (cell "No Such")]
-         (div
-          (div v
-               (buttons/a-button
-                :click #(reset! v "Arial")
-                "Reset"))
-          (comm/select2
-           :css {:width (px 170)}
-           :value v
-           :choices (for [font ["Arial"
-                                "Bookman"
-                                "Comic Sans MS"
-                                "Courier"
-                                "Courier New"
-                                "Garamond"
-                                "Georgia"
-                                "Helvetica"
-                                "Palatino"
-                                "Times"
-                                "Times New Roman"
-                                "Verdana"]]
-                      {:value font
-                       :label font})
-           :formatter (fn [{:keys [label]}]
-                        (span :css {:font-family label}
-                              label)))))
+           (div
+            (div v
+                 (buttons/a-button
+                  :click #(reset! v "Arial")
+                  "Reset"))
+            (comm/select2
+             :css {:width (px 170)}
+             :value v
+             :choices (for [font ["Arial"
+                                  "Bookman"
+                                  "Comic Sans MS"
+                                  "Courier"
+                                  "Courier New"
+                                  "Garamond"
+                                  "Georgia"
+                                  "Helvetica"
+                                  "Palatino"
+                                  "Times"
+                                  "Times New Roman"
+                                  "Verdana"]]
+                        {:value font
+                         :label font})
+             :formatter (fn [{:keys [label]}]
+                          (span :css {:font-family label}
+                                label)))))
        (hr)
        #_(let [c  (cell "#abcdef")
-             c2 (cell "#123456")]
-         (div
-          (div c)
-          (buttons/a-button
-           :click #(reset! c "#000000")
-           "Reset")
-          (with-let [elem (div)]
-            (when-dom elem
-              #(elem #_(cell= (pr-str c2))
-                     (comm/color-picker2
-                      :value c
-                      :alpha? true))))))
+               c2 (cell "#123456")]
+           (div
+            (div c)
+            (buttons/a-button
+             :click #(reset! c "#000000")
+             "Reset")
+            (with-let [elem (div)]
+              (when-dom elem
+                #(elem #_(cell= (pr-str c2))
+                       (comm/color-picker2
+                        :value c
+                        :alpha? true))))))
        (hr)
        #_(let [c  (cell "#abcdef")
-             id (str (gensym))]
-         (div
-          (cell= (pr-str c))
-          (buttons/a-button
-           :click #(reset! c "red")
-           "Reset")
-          (comm/color-picker2 :value c :alpha? true)))
+               id (str (gensym))]
+           (div
+            (cell= (pr-str c))
+            (buttons/a-button
+             :click #(reset! c "red")
+             "Reset")
+            (comm/color-picker2 :value c :alpha? true)))
        (hr)
        #_(let [filter? (cell false)
-             data    (cell (->> (for [n (range 10)]
-                                  {:id n
-                                   :a  n
-                                   :b  (- 100 n)
-                                   :c  (str (rand-int 1000))})
-                                (into [])))
-             data*   (formula-of [data filter?]
-                       (->> data
-                            (filter (fn [{:keys [a]}]
-                                      (if filter?
-                                        (even? a)
-                                        true)))
-                            (into [])))]
-         (div
-          (buttons/a-button
-           :latched? filter?
-           :click #(swap! filter? not)
-           "Filtered?")
-          (buttons/a-button
-           :click #(swap! data shuffle)
-           "Shuffle")
-          (buttons/a-button
-           :click #(swap! data (fn [items]
-                                 (sort-by :id items)))
-           "Sort")
-          (buttons/a-button
-           :click #(swap! data
-                          (fn [items]
-                            (let [n (rand-int (count items))]
-                              (with-let [i* (concat (take n items)
-                                                    [{:id (->> items
-                                                               (map :id)
-                                                               (reduce max 0)
-                                                               inc)
-                                                      :a  (rand-int 1000)
-                                                      :b  (rand-int 1000)
-                                                      :c  (str (rand-int 1000))}]
-                                                    (drop n items))]
-                                (.log js/console "Inserting" n (pr-str i*))))))
-           "Insert one")
-          (buttons/a-button
-           :click #(swap! data
-                          (fn [items]
-                            (if (empty? items)
-                              items
+               data    (cell (->> (for [n (range 10)]
+                                    {:id n
+                                     :a  n
+                                     :b  (- 100 n)
+                                     :c  (str (rand-int 1000))})
+                                  (into [])))
+               data*   (formula-of [data filter?]
+                         (->> data
+                              (filter (fn [{:keys [a]}]
+                                        (if filter?
+                                          (even? a)
+                                          true)))
+                              (into [])))]
+           (div
+            (buttons/a-button
+             :latched? filter?
+             :click #(swap! filter? not)
+             "Filtered?")
+            (buttons/a-button
+             :click #(swap! data shuffle)
+             "Shuffle")
+            (buttons/a-button
+             :click #(swap! data (fn [items]
+                                   (sort-by :id items)))
+             "Sort")
+            (buttons/a-button
+             :click #(swap! data
+                            (fn [items]
                               (let [n (rand-int (count items))]
-                                (concat (take n items) (drop (inc n) items))))))
-           "Remove one")
-          (grids/table-grid
-           {:data            data*
-            :key-fn          :id
-            :row-attrs       (fn [id] {})
-            :when-empty      "I am empty"
-            :columns         {:a {:title     "A"
-                                  :sort-key  :a
-                                  :formatter #(-> % :a str cell= div)}
-                              :b {:title     "B"
-                                  :sort-key  :b
-                                  :formatter #(-> % :b str cell= div)}
-                              :c {:title     "C"
-                                  :sort-key  :c
-                                  :formatter #(-> % :c str cell= div)}}
-            :fixed-columns   [:b]
-            :movable-columns (cell [:a :c])
-            :hidden-columns  (cell #{:c})})))
+                                (with-let [i* (concat (take n items)
+                                                      [{:id (->> items
+                                                                 (map :id)
+                                                                 (reduce max 0)
+                                                                 inc)
+                                                        :a  (rand-int 1000)
+                                                        :b  (rand-int 1000)
+                                                        :c  (str (rand-int 1000))}]
+                                                      (drop n items))]
+                                  (.log js/console "Inserting" n (pr-str i*))))))
+             "Insert one")
+            (buttons/a-button
+             :click #(swap! data
+                            (fn [items]
+                              (if (empty? items)
+                                items
+                                (let [n (rand-int (count items))]
+                                  (concat (take n items) (drop (inc n) items))))))
+             "Remove one")
+            (grids/table-grid
+             {:data            data*
+              :key-fn          :id
+              :row-attrs       (fn [id] {})
+              :when-empty      "I am empty"
+              :columns         {:a {:title     "A"
+                                    :sort-key  :a
+                                    :formatter #(-> % :a str cell= div)}
+                                :b {:title     "B"
+                                    :sort-key  :b
+                                    :formatter #(-> % :b str cell= div)}
+                                :c {:title     "C"
+                                    :sort-key  :c
+                                    :formatter #(-> % :c str cell= div)}}
+              :fixed-columns   [:b]
+              :movable-columns (cell [:a :c])
+              :hidden-columns  (cell #{:c})})))
        #_(grids/rtable-grid
           {:data            (cell (into []
                                         (for [n (range 100)]
@@ -379,8 +518,8 @@
                                            :b  (- 100 n)
                                            :c  (str (rand-int 1000))}
                                           )) #_[{:id 1 :a 1 :b 2 :c "three"}
-                                        {:id 2 :a 3 :b 1 :c "four"}
-                                        {:id 3 :a 2 :b 4}])
+                                                {:id 2 :a 3 :b 1 :c "four"}
+                                                {:id 3 :a 2 :b 4}])
            :key-fn          :id
            :row-attrs       (fn [id] {})
            :when-empty      "I am empty"
@@ -405,8 +544,8 @@
                                            :b  (- 100 n)
                                            :c  (str (rand-int 1000))}
                                           )) #_[{:id 1 :a 1 :b 2 :c "three"}
-                                        {:id 2 :a 3 :b 1 :c "four"}
-                                        {:id 3 :a 2 :b 4}])
+                                                {:id 2 :a 3 :b 1 :c "four"}
+                                                {:id 3 :a 2 :b 4}])
            :row-attrs       (fn [id] {})
            :when-empty      "I am empty"
            :columns         {:a {:title     "A"

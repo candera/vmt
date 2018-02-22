@@ -652,7 +652,11 @@ forward and backward in time. ")
      "The altitude at which condensation trails will form.")}
 
    :map
-   {:legend
+   {:save-image
+    (content-para
+     "Save a PNG image of the current map view. Select a preset size or specify your own.")
+
+    :legend
     (content
      (let [section (fn [title & contents]
                      [:div

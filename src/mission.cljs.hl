@@ -83,7 +83,8 @@
   {:title    "Map"
    :id       :map-controls
    :sections [:map-controls-section {}
-              :weather-display-controls {:title "Weather Display Options"}]}
+              :weather-display-controls {:title "Weather Display Options"}
+              :map-image-save-controls {}]}
   {:title    "Annotations"
    :id       :annotation-controls
    :sections [:annotation-controls {}]}
