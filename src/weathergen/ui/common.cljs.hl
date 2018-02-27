@@ -1400,34 +1400,37 @@
 ;; sure that's possible.
 (defn keyed-loop-tpl*
   "Like Hoplon's `loop-tpl*` but accepts a `key-fn` which, given an item
-  returns an (immutable) key under which to cache it. "
+  returns an (immutable) key under which to cache it. `tpl` is passed
+  a cell containing a value from `items` and its (non-cell) id."
   [items key-fn tpl]
-  (let [items* (cell= (vec items))
-        pos-map (formula-of [items*]
-                  (zipmap (map key-fn items*)
-                          (range)))
-        index     (atom {})]
+  (let [ks       (cell= (map key-fn items))
+        key-map  (cell= (zipmap ks items))
+        priors   (atom {})
+        ui-cache (atom {})]
     (with-let [current (cell [])]
       (do-watch
-       pos-map
-       (fn [_ _]
-         #_(.log js/console
-               "pos-map" (pr-str @pos-map))
-         (reset! current
-                 (with-let [frag (.createDocumentFragment js/document)]
-                   (doseq [item @items*]
-                     (let [k (key-fn item)]
-                       (when-not (contains? @index k)
-                         (swap! index
-                                assoc
-                                k
-                                {:item item
-                                 :ui   (do
-                                         #_(.log js/console
-                                               "Creating template item"
-                                               "k" k)
-                                         (tpl
-                                          (formula-of [items* pos-map]
-                                            (when-let [pos (get pos-map k)]
-                                              (nth items* pos nil)))))}))
-                       (gdom/appendChild frag (get-in @index [k :ui])))))))))))
+          key-map
+          (fn [o n]
+            (let [old-keys   (->> o keys set)
+                  new-keys   (->> n keys set)
+                  gone-keys  (set/difference old-keys new-keys)
+                  added-keys (set/difference new-keys old-keys (-> @ui-cache keys set))]
+              #_(.log js/console
+                    "old-keys" (pr-str old-keys)
+                    "new-keys" (pr-str new-keys)
+                    "gone-keys" (pr-str gone-keys)
+                    "added-keys" (pr-str added-keys))
+              (doseq [k gone-keys]
+                (swap! priors assoc k (get o k)))
+              (reset! current
+                      (with-let [frag (.createDocumentFragment js/document)]
+                        (doseq [k added-keys]
+                          (swap! ui-cache
+                                 assoc
+                                 k
+                                 (tpl
+                                  (formula-of [key-map]
+                                    (get key-map k (get @priors k)))
+                                  k)))
+                        (doseq [k @ks]
+                          (gdom/appendChild frag (get @ui-cache k)))))))))))
