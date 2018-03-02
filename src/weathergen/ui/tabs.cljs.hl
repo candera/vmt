@@ -131,7 +131,7 @@
                      :font-size               (pct 120)
                      :padding                 (px 0 10 3 10)
                      :cursor                  "pointer"}))
-           (title-formatter item id)))))
+           (title-formatter item id (cell= (= value id)))))))
       (div
        :debug "spacer"
        :css {:background tab-background
