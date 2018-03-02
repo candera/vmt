@@ -5081,13 +5081,11 @@
         (async/<! (async/timeout 500))
         (recur)))))
 
-#_(defmethod hoplon.core/on! :hoplon.core/default
+(defmethod hoplon.core/on! :hoplon.core/default
   [elem event callback]
-  (when-dom elem #(do
-                    (.log js/console "Executing default on! method"
-                           "elem" elem "event" event "callback" callback)
-                    (.on (js/jQuery elem) (name event) callback))))
+  (comm/when-dom3 elem #(.on (js/jQuery elem) (name event) callback)))
 
-#_(defmethod hoplon.core/do! :hoplon.core/default
-  [elem key val]
-  (hoplonc.core/do! elem :attr {key val}))
+(defmethod hoplon.core/on! :html/*
+  [elem event callback]
+  (comm/when-dom3 elem #(.on (js/jQuery elem) (name event) callback)))
+

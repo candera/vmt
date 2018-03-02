@@ -48,20 +48,23 @@
     (when-not (js/isNaN n)
       n)))
 
+;; Might be able to use this:
+;; http://www.backalleycoder.com/2012/04/25/i-want-a-damnodeinserted/
+;; along with the below to actually get notified when an element makes
+;; its way into the DOM. This way, we're just giving up.
 (defn when-dom3
   "Like `when-dom` but (hopefully) without the CPU problems."
-  [elem f]
-  (let [counter (atom [0 0 0 10 10 20 20 40 40 80 80 100 250 500])]
-    (if (-> js/document .-documentElement (.contains elem))
-      (f)
-      (let [interval (first @counter)]
-        (when (= interval 500)
-          (.warn js/console
-                 "element did not get added to the DOM in a timely manner"
-                 elem))
-        (swap! counter #(drop 1 %))
-        (with-timeout (or interval 1000)
-          (when-dom3 elem f))))))
+  ([elem f] (when-dom3 elem f [0 0 0 10 10 20 20 40 40 80 80 100 250 500]))
+  ([elem f intervals]
+   (if (-> js/document .-documentElement (.contains elem))
+     (f)
+     (let [[interval & more] intervals]
+       (if interval
+         (with-timeout interval
+           (when-dom3 elem f more))
+         (.warn js/console
+                "element did not get added to the DOM in a timely manner"
+                elem))))))
 
 ;; (set! *warn-on-infer* true)
 
