@@ -149,148 +149,211 @@
         (.log js/console (clj->js (map mission/team-number (mission/teams mission)))))
       (div
        (hr)
-       (let [size        (cell :medium)
-             custom-size (cell 1000)
-             saved-name  (cell nil)]
+       (let [hidden? (cell false)
+             extras  (cell [])
+             tabs    (formula-of [hidden? extras]
+                       (concat [{:id    :a
+                                 :title "A"
+                                 ;; :ui    (div "A")
+                                 }
+                                {:id      :b
+                                 :title   "B"
+                                 ;; :ui      (div "B")
+                                 :hidden? hidden?}]
+                               (for [extra extras]
+                                 {:id    extra
+                                  :title (str extra)
+                                  ;;:ui
+                                  #_(do
+                                      (.log js/console "rendering" extra)
+                                      (div (str extra)))})))]
          (div
-          :css {:padding (px 3)}
-          (comm/radio-group
-           :value size
-           :choices [{:value :small
-                      :label "Small (250x250)"}
-                     {:value :medium
-                      :label "Medium (500x500)"}
-                     {:value :large
-                      :label "Large (1000x1000)"}
-                     {:value :x-large
-                      :label "Very Large (2000x2000)"}
-                     {:value :xx-large
-                      :label "Extremely Large (4000x4000)"}
-                     {:value :custom
-                      :label (div
-                              :css {:display "inline-block"}
-                              "Custom: "
-                              (comm/validating-edit
-                               :conform comm/conform-positive-integer
-                               :fmt str
-                               :source custom-size
-                               :width 150
-                               :placeholder "Size in pixels"))}])
           (buttons/a-button
-           :click #(let [dim (get {:small    250
-                                   :medium   500
-                                   :large    1000
-                                   :x-large  2000
-                                   :xx-large 4000
-                                   :custom   @custom-size}
-                                  @size)
-                         path (str "/tmp/map" (rand-int 10000) ".png")]
-                     (save-svg (-> js/document
-                                   (.getElementById "grid")
-                                   (.cloneNode true)
-                                   dataize-images!)
-                               [dim dim]
-                               path)
-                     (reset! saved-name path))
-           "Save Map as PNG Image")
-          (when-tpl saved-name
-            (div "Saved: " saved-name))))
-       (svg/svg
-        :id "grid"
-        :css {:border "solid 1px black"}
-        :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
-               "xmlns"       "http://www.w3.org/2000/svg"}
-        :viewBox "0 0 100 100"
-        :width 500
-        :height 500
-        (svg/rect
-         :fill "red"
-         :x 10
-         :y 10
-         :width 50
-         :height 50)
-        (svg/text
-         :x 50
-         :y 50
-         :stroke "black"
-         :fill "black"
-         :text "Hello")
-        (svg/image
-         :x 20
-         :y 70
-         :width 50
-         :height 20
-         :xlink-href "/tmp/kto.jpg"))
-       (hr)
-       (let [data         (cell (range 4000))
-             last-changed (cell nil)
-             value        (cell nil)
-             highlighted  (cell nil)]
-         (div
-          (div "Last chanaged: " (cell= (pr-str last-changed)))
-          (div "Value: " (cell= (pr-str value)))
-          (div "Highlighted: "(cell= (pr-str highlighted)))
-          (select3
-           :data data
-           :width (px 390)
-           :value value
-           :key-fn identity
-           :search-fn str
-           :placeholder "Enter a search term"
-           :formatter (fn [v]
-                        (span (cell= (str v))))
-           :highlight (fn [v]
-                        (reset! highlighted v))
-           :change (fn [v]
-                     (reset! last-changed v)))
+           :click #(swap! extras conj (rand-int 10000))
+           "Add")
           (buttons/a-button
-           :click (fn [_] (reset! value nil))
-           "Reset")))
+           :click #(swap! hidden? not)
+           "Toggle")
+          (let [value (cell :a)]
+            (div
+             (div "Value: " (cell= (pr-str value)))
+             (tabs/tabs2
+              :key-fn :id
+              :value value
+              :title-formatter (fn [tab k]
+                                 (.log js/console "title-formatter" tab)
+                                 (formula-of [tab]
+                                   (when (nil? tab)
+                                     (.log js/console "tab is nil" k))
+                                   (let [title (:title tab)]
+                                     (div title
+                                          (span :css {:color "red"
+                                                      :float "right"
+                                                      :margin-left (px 5)}
+                                                :click (fn [e]
+                                                         (reset! extras
+                                                                 (remove #{k} @extras))
+                                                         #_(.preventDefault e)
+                                                         #_false)
+                                                "X")))))
+              :formatter (fn [tab]
+                           (.log js/console "formatter" tab)
+                           (div
+                            (formula-of [tab]
+                              (:title tab))))
+              :data tabs)))))
        (hr)
-       (let [value   (cell nil)
-             choices (for [n (range 10000)]
-                       {:value n
-                        :label (str n)})]
+       (let [shown? (cell false)]
          (div
-          (div (cell= (pr-str value)))
-          (comm/select2
-           :css {:width (px 200)}
-           :value value
-           :choices choices
-           :placeholder "Pick something")
-          (buttons/a-button :click #(reset! value nil) "Reset")))
+          (buttons/a-button
+           :click #(swap! shown? not)
+           "Toggle")
+          (when-tpl shown?
+            (do
+              (.log js/console "Rendering")
+              "hi"))))
+       #_(let [size        (cell :medium)
+               custom-size (cell 1000)
+               saved-name  (cell nil)]
+           (div
+            :css {:padding (px 3)}
+            (comm/radio-group
+             :value size
+             :choices [{:value :small
+                        :label "Small (250x250)"}
+                       {:value :medium
+                        :label "Medium (500x500)"}
+                       {:value :large
+                        :label "Large (1000x1000)"}
+                       {:value :x-large
+                        :label "Very Large (2000x2000)"}
+                       {:value :xx-large
+                        :label "Extremely Large (4000x4000)"}
+                       {:value :custom
+                        :label (div
+                                :css {:display "inline-block"}
+                                "Custom: "
+                                (comm/validating-edit
+                                 :conform comm/conform-positive-integer
+                                 :fmt str
+                                 :source custom-size
+                                 :width 150
+                                 :placeholder "Size in pixels"))}])
+            (buttons/a-button
+             :click #(let [dim  (get {:small    250
+                                      :medium   500
+                                      :large    1000
+                                      :x-large  2000
+                                      :xx-large 4000
+                                      :custom   @custom-size}
+                                     @size)
+                           path (str "/tmp/map" (rand-int 10000) ".png")]
+                       (save-svg (-> js/document
+                                     (.getElementById "grid")
+                                     (.cloneNode true)
+                                     dataize-images!)
+                                 [dim dim]
+                                 path)
+                       (reset! saved-name path))
+             "Save Map as PNG Image")
+            (when-tpl saved-name
+              (div "Saved: " saved-name))))
+       #_(svg/svg
+          :id "grid"
+          :css {:border "solid 1px black"}
+          :attr {"xmlns:xlink" "http://www.w3.org/1999/xlink"
+                 "xmlns"       "http://www.w3.org/2000/svg"}
+          :viewBox "0 0 100 100"
+          :width 500
+          :height 500
+          (svg/rect
+           :fill "red"
+           :x 10
+           :y 10
+           :width 50
+           :height 50)
+          (svg/text
+           :x 50
+           :y 50
+           :stroke "black"
+           :fill "black"
+           :text "Hello")
+          (svg/image
+           :x 20
+           :y 70
+           :width 50
+           :height 20
+           :xlink-href "/tmp/kto.jpg"))
        (hr)
-       (let [value   (cell nil)
-             choices [{:value :apple1
-                       :label "Apple1"}
-                      {:value :apple2
-                       :label "Apple2"}
-                      {:value :apple3
-                       :label "Apple3"}
-                      {:value :bear
-                       :label "Bear"}
-                      {:value :charlie
-                       :label "Charlie"}
-                      {:value :dapper
-                       :label "Dapper"}
-                      {:value :echo
-                       :label "Echo"}
-                      {:value :family
-                       :label "Family"}
-                      {:value :gopher
-                       :label "Gopher"}
-                      {:value :hotel
-                       :label "Hotel"}
-                      {:value :injury
-                       :label "Injury"}]]
-         (div
-          (div (cell= (pr-str value)))
-          (comm/select2
-           :css {:width (px 200)}
-           :value value
-           :choices choices
-           :placeholder "Pick something")
-          (buttons/a-button :click #(reset! value nil) "Reset")))
+       #_(let [data         (cell (range 4000))
+               last-changed (cell nil)
+               value        (cell nil)
+               highlighted  (cell nil)]
+           (div
+            (div "Last chanaged: " (cell= (pr-str last-changed)))
+            (div "Value: " (cell= (pr-str value)))
+            (div "Highlighted: "(cell= (pr-str highlighted)))
+            (select3
+             :data data
+             :width (px 390)
+             :value value
+             :key-fn identity
+             :search-fn str
+             :placeholder "Enter a search term"
+             :formatter (fn [v]
+                          (span (cell= (str v))))
+             :highlight (fn [v]
+                          (reset! highlighted v))
+             :change (fn [v]
+                       (reset! last-changed v)))
+            (buttons/a-button
+             :click (fn [_] (reset! value nil))
+             "Reset")))
+       (hr)
+       #_(let [value   (cell nil)
+               choices (for [n (range 10000)]
+                         {:value n
+                          :label (str n)})]
+           (div
+            (div (cell= (pr-str value)))
+            (comm/select2
+             :css {:width (px 200)}
+             :value value
+             :choices choices
+             :placeholder "Pick something")
+            (buttons/a-button :click #(reset! value nil) "Reset")))
+       (hr)
+       #_(let [value   (cell nil)
+               choices [{:value :apple1
+                         :label "Apple1"}
+                        {:value :apple2
+                         :label "Apple2"}
+                        {:value :apple3
+                         :label "Apple3"}
+                        {:value :bear
+                         :label "Bear"}
+                        {:value :charlie
+                         :label "Charlie"}
+                        {:value :dapper
+                         :label "Dapper"}
+                        {:value :echo
+                         :label "Echo"}
+                        {:value :family
+                         :label "Family"}
+                        {:value :gopher
+                         :label "Gopher"}
+                        {:value :hotel
+                         :label "Hotel"}
+                        {:value :injury
+                         :label "Injury"}]]
+           (div
+            (div (cell= (pr-str value)))
+            (comm/select2
+             :css {:width (px 200)}
+             :value value
+             :choices choices
+             :placeholder "Pick something")
+            (buttons/a-button :click #(reset! value nil) "Reset")))
        (hr)
        #_(let [val (cell false)]
            (div
@@ -331,21 +394,6 @@
              :choices choices
              :value value)))
        (hr)
-       #_(let [hidden? (cell false)
-               tabs    [{:id    :a
-                         :title "A"
-                         :ui    (div "A")}
-                        {:id      :b
-                         :title   "B"
-                         :ui      (div "B")
-                         :hidden? hidden?}]]
-           (div
-            (buttons/a-button
-             :click #(swap! hidden? not)
-             "Toggle")
-            (tabs/tabs
-             :selected (cell :a)
-             :tabs tabs)))
        (hr)
        #_(let [items (cell (for [n (range 20)]
                              {:key  n
@@ -518,8 +566,8 @@
                                            :b  (- 100 n)
                                            :c  (str (rand-int 1000))}
                                           )) #_[{:id 1 :a 1 :b 2 :c "three"}
-                                                {:id 2 :a 3 :b 1 :c "four"}
-                                                {:id 3 :a 2 :b 4}])
+                                        {:id 2 :a 3 :b 1 :c "four"}
+                                        {:id 3 :a 2 :b 4}])
            :key-fn          :id
            :row-attrs       (fn [id] {})
            :when-empty      "I am empty"
@@ -544,8 +592,8 @@
                                            :b  (- 100 n)
                                            :c  (str (rand-int 1000))}
                                           )) #_[{:id 1 :a 1 :b 2 :c "three"}
-                                                {:id 2 :a 3 :b 1 :c "four"}
-                                                {:id 3 :a 2 :b 4}])
+                                        {:id 2 :a 3 :b 1 :c "four"}
+                                        {:id 3 :a 2 :b 4}])
            :row-attrs       (fn [id] {})
            :when-empty      "I am empty"
            :columns         {:a {:title     "A"
