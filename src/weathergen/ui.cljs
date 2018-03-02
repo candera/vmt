@@ -69,6 +69,7 @@
             [weathergen.ui.layers.acmi]
             [weathergen.ui.layers.annotations]
             [weathergen.ui.layers.flights]
+            [weathergen.ui.select :as select]
             [weathergen.ui.trees :as trees]
             [weathergen.ui.tabs :as tabs]
             [weathergen.util :as util]
@@ -489,6 +490,8 @@
   (cell false))
 
 ;;; Components
+
+;; tabs: seq of maps with keys :title, :id, and :ui
 
 (def flight-paths-layer
   (weathergen.ui.layers.flights/create
@@ -4936,6 +4939,45 @@
                                   (layer-controls acmi-layer))
    :test-section                test-section})
 
+(defmulti tab-formatter (fn [item id opts] (first id)))
+(defmulti title-formatter (fn [item id selected? opts]
+                            #_(.log js/console "Dispatching title" :id id)
+                            (first id)))
+
+;; These are the default tabs that are always there
+(defmethod tab-formatter nil
+  [item _ opts]
+  (div
+   #_(.log js/console "tab-formatter nil: item" item)
+   (for [[section options] (partition 2 (-> @item :data :sections))
+         :let           [ctor (section-ctor section)]]
+     (with-time
+       (str "Rendering " section)
+       (ctor (merge options opts ;; ::scroll-container right-column
+                    ))))))
+
+(defmethod title-formatter nil
+  [item _ _ _]
+  (-> @item :data :title))
+
+(defmethod tab-formatter :tools
+  [_ _ _]
+  (hidden-tools-tab))
+
+(defmethod title-formatter :tools
+  [_ _ _ _]
+  "Tools")
+
+(defmethod tab-formatter :flights
+  [item _ _]
+  (let [body-fn (:tab-body-fn flight-paths-layer)]
+    (body-fn (cell= (:data item)))))
+
+(defmethod title-formatter :flights
+  [item [_ id] selected? _]
+  (let [title-fn (:tab-title-fn flight-paths-layer)]
+    (title-fn (cell= (:data item)) selected?)))
+
 (defn weather-page
   "Emits an app page. `section-infos` is a seq of maps, one for each
   tab, with keys `:title`, `:id`, and `:sections`. The sections are a
@@ -4993,7 +5035,7 @@
                  :overflow      "auto"
                  :height        "auto"}
            (let [first-tab    (-> section-infos first :id)
-                 selected-tab (cell first-tab)]
+                 selected-tab (cell [nil first-tab])]
              (.addEventListener js/document
                                 "keydown"
                                 (fn [event]
@@ -5005,24 +5047,27 @@
                                      (swap! tools-visible? not)
                                      (reset! selected-tab
                                              (if @tools-visible?
-                                               :tools-tab
-                                               first-tab))))))
-             (tabs/tabs
-              :tab-background "#FDFFD9"
-              :selected selected-tab
-              :tabs (concat
-                     (for [{:keys [title id sections]} section-infos]
-                       {:title title
-                        :id    id
-                        :ui    (for [[section opts] (partition 2 sections)
-                                     :let           [ctor (section-ctor section)]]
-                                 (with-time
-                                   (str "Rendering " section)
-                                   (ctor (assoc opts ::scroll-container right-column))))})
-                     [{:title   "Tools"
-                       :id      :tools-tab
-                       :ui      (hidden-tools-tab)
-                       :hidden? (cell= (not tools-visible?))}]))))))))
+                                               [:tools :tools]
+                                               [nil first-tab]))))))
+             (let [flight-tabs (:tabs flight-paths-layer)]
+               (tabs/tabs2
+                :tab-background "#FDFFD9"
+                :value selected-tab
+                :data (formula-of [tools-visible? flight-tabs]
+                        (concat
+                         (for [{:keys [id] :as data} section-infos]
+                           {:id   [nil id]
+                            :data data})
+                         (for [{:keys [id] :as data} flight-tabs]
+                           {:id   [:flights id]
+                            :data data})
+                         (when tools-visible?
+                           [{:id [:tools :tools]}])))
+                :key-fn :id
+                :formatter (fn [item id]
+                             (tab-formatter item id {::scroll-container right-column}))
+                :title-formatter (fn [item id selected?]
+                                    (title-formatter item id selected? {::scroll-container right-column}))))))))))
     (debug-info))))
 
 #_(with-init!

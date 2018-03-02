@@ -800,6 +800,43 @@
                    (save-blob-async blob path)))
         (.toDataURL canvas)))))
 
+(defn- centered-image
+  "Renders an image centered in width and height."
+  [mission image size]
+  (let [dims (formula-of [image]
+               (if-not image
+                 {:w size
+                  :h size}
+                 (let [[w h]  (get-in image [:image-data :size])
+                       aspect (/ w h)]
+                   (if (< aspect 1)
+                     {:w (* aspect size)
+                      :h size}
+                     {:w size
+                      :h (/ size aspect)}))))]
+    (div
+     :css (formula-of [dims]
+            {:display        "inline-block"
+             :margin         (px 0 (:w dims) 0 0)
+             :vertical-align "middle"
+             :text-align     "center"
+             :position       "relative"})
+     (if-tpl image
+       (img
+        :css (formula-of [dims]
+               {:position "absolute"
+                :top      0
+                :bottom   0
+                :left     0
+                :right    0
+                :width    (px (:w dims))
+                :height   (px (:h dims))
+                :margin   "auto"})
+        :src (cell= (get-image mission image)))
+       " "))))
+
+
+
 ;; Conformers are functions that take a cell containing a string value
 ;; to conform, and return a cell (presumably a formula of the input
 ;; cell) that yields a map containing keys:
