@@ -1492,9 +1492,9 @@ forward and backward in time. ")
                       :css {:white-space "normal"
                             :font-weight "normal"}
                       ;; Unfortunately this isn't really working. Not sure why
-                      :blur (fn [e]
-                              (.log js/console "Blur firing")
-                              (reset! open-instance nil))
+                       ;; :blur (fn [e]
+                       ;;        (.log js/console "Blur firing")
+                       ;;        (reset! open-instance nil))
                       (if help-ctor
                         (help-ctor :hoplon)
                         [(p "Help has not yet been written for this feature.")

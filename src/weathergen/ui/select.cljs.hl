@@ -27,6 +27,7 @@
   "Like select2, but artisinal and bespoke.
 
 :data - A cell containing a seq of values.
+:width - px width
 :value - A cell. The currently selected value, or `nil` if no selection.
 :key-fn - Function of choice value returning immutable unique ID.
 :search-fn - Function from value to text it should match when searching.
@@ -88,6 +89,8 @@
         (elem
          attrs
          :css
+         ;; TODO: Might be able to remove width here if we can just
+         ;; use attrs both here and below.
          {:width       width
           :font-family "Open Sans Condensed"
           :position    "relative"}

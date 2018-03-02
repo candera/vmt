@@ -4178,12 +4178,12 @@
                                               (->> squadron
                                                    ::mission/image
                                                    (get-image mission)))
-                                       :css {:height         "20px"
-                                             :margin-left    "3px"
+                                       :css {:height         (px 20)
+                                             :margin-left    (px 3)
                                              :vertical-align "middle"})))
                                    (div
                                     :toggle expanded?
-                                    :css {:margin-left "22px"
+                                    :css {:margin-left (px 22)
                                           :font-style  "italic"
                                           :color       "gray"}
                                     (formula-of [status]
