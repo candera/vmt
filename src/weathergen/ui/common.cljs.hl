@@ -455,7 +455,7 @@
         (add-watch value
                    (-> (gensym) str keyword)
                    (fn [_ _ _ n]
-                     (.log js/console "value changing" n (to-hex-str n) i)
+                     #_(.log js/console "value changing" n (to-hex-str n) i)
                      (when n
                        (-> i
                            js/jQuery

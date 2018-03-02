@@ -86,14 +86,8 @@
     (add-watch data
                (gensym)
                (fn [_ _ o n]
-                 (.log js/console
-                       "old keys" (pr-str (map key-fn o))
-                       "new keys" (pr-str (map key-fn n))
-                       "value" @value)
                  (when-not (some #(= @value (key-fn %)) n)
-                   (.log js/console "Moving to first tab")
-                   (reset! value (-> n first key-fn))
-                   (.log js/console "Value is now" (pr-str @value)))))
+                   (reset! value (-> n first key-fn)))))
     (div
      (div
       :debug "buttons and spacer"

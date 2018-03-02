@@ -1,3 +1,5 @@
 -/src/cljsjs
 -/target
 -/package
+-/node_modules
+-/assets
