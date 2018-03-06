@@ -1,0 +1,52 @@
+(ns weathergen.ui.textarea
+  "Controls for editing text."
+  (:require [clojure.string :as str]
+            [weathergen.ui.common :as comm :refer [colors control-section
+                                                   format-heading format-distance format-speed format-mach format-time
+                                                   inl pre-cell pct px styled team-color]])
+  (:require-macros
+   [weathergen.cljs.macros :refer [keyed-for-tpl with-attr-bindings with-bbox with-time formula-of]]))
+
+(defelem textarea2
+  "Like textarea, but better."
+  [attrs _]
+  (with-attr-bindings attrs [value change placeholder css]
+    (let [interim  (cell nil)
+          editing? (cell false)
+          blank?   (cell= (and (not editing?)
+                               (str/blank? interim)))]
+      (do-watch editing?
+        (fn [_ n]
+          (if-not n
+            (dosync
+             (reset! value @interim)
+             (when change (change @value)))
+            (reset! interim @value))))
+      (with-let [elem (div)]
+        (elem
+         :contenteditable "true"
+         :click (fn []
+                  (reset! editing? true))
+         :keyup (fn [^KeyboardEvent e]
+                  ;; Not sure I need both of these...
+                  (let [v (-> elem .-innerText)]
+                    (reset! interim v)
+                    (when change (change v))))
+         :css (formula-of [blank? css]
+                (merge {:white-space  "pre-wrap"
+                        :color        (when blank? "#999")
+                        :cursor       "text"
+                        :background   "white"
+                        :border-color "black"
+                        :border-width (px 1)
+                        :border-style "solid"
+                        :padding      (px 5 3 3 3)}
+                       css))
+         :focus (fn [e]
+                  (reset! editing? true))
+         :blur (fn [e]
+                 (reset! editing? false))
+         attrs
+         (cell= (if (and blank? (not editing?))
+                  placeholder
+                  value)))))))

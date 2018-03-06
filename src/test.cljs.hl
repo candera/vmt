@@ -21,7 +21,8 @@
             [weathergen.ui.grids :as grids]
             [weathergen.ui.layers.flights :as flights]
             [weathergen.ui.select :refer [select3]]
-            [weathergen.ui.tabs :as tabs])
+            [weathergen.ui.tabs :as tabs]
+            [weathergen.ui.textarea :as ta])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
    [weathergen.cljs.macros :refer [with-time formula-of keyed-for-tpl]]))
@@ -148,6 +149,21 @@
       (formula-of [mission]
         (.log js/console (clj->js (map mission/team-number (mission/teams mission)))))
       (div
+       (let [value (cell nil)
+             interim (cell nil)]
+         (div
+          (div "Value: " (cell= (pr-str value)))
+          (div "Interim: " (cell= (pr-str interim)))
+          (buttons/a-button
+           :click #(reset! value "This is a\ntext.")
+           "Reset")
+          (ta/textarea2
+           :value value
+           :css {:font-family "monospace"}
+           :change (fn [v] (reset! interim v))
+           :placeholder "Enter some text")
+          (textarea
+           "This is a bunch of \n multiline text for comparison.")))
        (hr)
        (let [hidden? (cell false)
              extras  (cell [])
