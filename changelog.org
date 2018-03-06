@@ -4,6 +4,19 @@
 #+TITLE:
 
 * Change Log
+** v057-36 (dev-only) [2018-03-06 Tue]
+- Fix incorrect label on annotations copy button
+- Improved map sizing and positioning: controls will never move below
+  map. Instead, map gets smaller if necessary to accommodate controls
+  when resizing window.
+- Titlebar of map is collapsible to increase usable space.
+- Tab names now remain visible even when scrolling content.
+- Fixed width of dropdowns in annotation controls.
+- Implemented "Save map image as PNG"
+- Fixed intermittent bug where things wouldn't render right sometimes
+- Flights can be opened in their own tabs
+- Fix (again) high CPU when app is idle
+- Flight colors and check state are now saved with briefing
 ** v057-9 (dev-only) [2018-02-02 Fri]
 - Focus Tools tab when it is activated
 - Improvements to damage computer
