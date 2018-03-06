@@ -123,7 +123,7 @@
       and will be displayed in the Recon list.."]])
 
     :database-export
-     (content-para "Exports the mission database to a series of CSV files. Use the dialog box to select a directory. Files will be written here with names in the pattern \"THEATER-MISSION-CATEGORY.csv\".")}
+    (content-para "Exports the mission database to a series of CSV files. Use the dialog box to select a directory. Files will be written here with names in the pattern \"THEATER-MISSION-CATEGORY.csv\".")}
 
    :wind-stability-areas
    (content
@@ -1235,7 +1235,7 @@ forward and backward in time. ")
         [:dt "Import From Briefing"]
         [:dd "Load all the annoations from a VMT Briefing (.vmtb) file onto the current map."]]])
      } ;; :annotations
-    } ;; :map-controls
+    }  ;; :map-controls
 
    :flights
    {:mission-key
@@ -1297,19 +1297,26 @@ forward and backward in time. ")
        (condp = mode
          :hoplon
          (hoplon.core/div
-          (hoplon.core/p "Click the "
-                         (buttons/a-button
-                          :css {:border-radius "50%"
-                                :width         (px 12)
-                                :height        (px 12)
-                                :text-align    "center"
-                                :font-weight   "bold"
-                                :font-family   "serif"
-                                :font-size     "110%"
-                                :line-height   (px 12)}
-                          "i")
-                         " button to display additional information about the flight,
-          including munitions and detailed flight plan info."))))
+          (hoplon.core/p
+           "Click the "
+           (buttons/a-button
+            :css {:border-radius "50%"
+                  :width         (px 12)
+                  :height        (px 12)
+                  :text-align    "center"
+                  :font-weight   "bold"
+                  :font-family   "serif"
+                  :font-size     "110%"
+                  :line-height   (px 12)}
+            "i")
+           " button to display additional information about the flight,
+          including munitions and detailed flight plan info.")
+          (hoplon.core/p
+           "Click the "
+           (buttons/image-button
+            :width (px 12)
+            :src "images/open-external.svg")
+           " button to toggle displaying flight details in a separate tab."))))
 
      :combatant
      (content-para
@@ -1410,7 +1417,7 @@ forward and backward in time. ")
    {:settings
     (fn [mode]
       (condp = mode
-        :hoplon ; Ignore React for now
+        :hoplon                         ; Ignore React for now
         (div
          (p "Press this button to toggle column configuration. When the
   button is depressed, columns can be added, hidden, and

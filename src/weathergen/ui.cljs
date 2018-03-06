@@ -312,7 +312,9 @@
 (def controls-min-width 575)
 
 ;; Whether the titlebar is shown full size
-(defc titlebar-fullsize? true)
+(def titlebar-fullsize? (comm/versioned-local-storage
+                         ::titlebar-fullsize?
+                         true))
 
 (defc= titlebar-height (if titlebar-fullsize? 64 27))
 
@@ -1010,10 +1012,16 @@
                (reset! cloud-params (-> vmtb :weather :cloud-params))
                (reset! movement-params (-> vmtb :weather :movement-params))
                (reset! display-params (-> vmtb :weather :display-params))
-               (reset! briefing-notes (-> vmtb :briefing-notes (or "")))
-               (weathergen.ui.layers.annotations/load-briefing-data
-                annotations-layer
-                (-> vmtb :annotations))))))))))
+               (reset! briefing-notes (-> vmtb :briefing-notes (or ""))))
+              ;; Some ordering dependencies in these next two mean
+              ;; they have to happen outside the dosync. Not in love
+              ;; with that constraint...
+              (weathergen.ui.layers.annotations/load-briefing-data
+               annotations-layer
+               (-> vmtb :annotations))
+              (weathergen.ui.layers.flights/load-briefing-data
+               flight-paths-layer
+               (-> vmtb :flights)))))))))
 
 (defn save-briefing
   "Prompts the user for a path and saves a briefing file to it."
@@ -1028,7 +1036,8 @@
                                          :display-params  @display-params}
                         :visible-sides  visible-sides
                         :briefing-notes @briefing-notes
-                        :annotations    (weathergen.ui.layers.annotations/briefing-data annotations-layer)}
+                        :annotations    (weathergen.ui.layers.annotations/briefing-data annotations-layer)
+                        :flights        (weathergen.ui.layers.flights/briefing-data flight-paths-layer)}
                        encode
                        compress)
     :title        "Save a briefing file"
@@ -4288,7 +4297,7 @@
      (div
       (buttons/a-button
        :click #(save-briefing (-> @mission :original-briefing :install-id)
-                              (-> @mission :original-briefing :visible-sides))
+                              @visible-sides)
        "Save Briefing (.vmtb)")
       (help-icon [:mission-info :save-briefing-from-briefing]))
      (let [only-install     (formula-of [mission]
@@ -5054,20 +5063,24 @@
                 :tab-background "#FDFFD9"
                 :value selected-tab
                 :data (formula-of [tools-visible? flight-tabs]
-                        (concat
-                         (for [{:keys [id] :as data} section-infos]
-                           {:id   [nil id]
-                            :data data})
-                         (for [{:keys [id] :as data} flight-tabs]
-                           {:id   [:flights id]
-                            :data data})
-                         (when tools-visible?
-                           [{:id [:tools :tools]}])))
+                        (let [[before [flight & after]] (split-with #(not= :flights (:id %)) section-infos)]
+                          (concat
+                           (for [{:keys [id] :as data} (concat before [flight])]
+                             {:id   [nil id]
+                              :data data})
+                           (for [{:keys [id] :as data} flight-tabs]
+                             {:id   [:flights id]
+                              :data data})
+                           (for [{:keys [id] :as data} after]
+                             {:id   [nil id]
+                              :data data})
+                           (when tools-visible?
+                             [{:id [:tools :tools]}]))))
                 :key-fn :id
                 :formatter (fn [item id]
                              (tab-formatter item id {::scroll-container right-column}))
                 :title-formatter (fn [item id selected?]
-                                    (title-formatter item id selected? {::scroll-container right-column}))))))))))
+                                   (title-formatter item id selected? {::scroll-container right-column}))))))))))
     (debug-info))))
 
 #_(with-init!

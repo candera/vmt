@@ -133,7 +133,7 @@
 
 (defn flight-details
   "Returns UI for the info/details display of the flight given a cell for the flight."
-  [flight tabbed-flights]
+  [{:keys [mission flight display tabbed-flights checked-flights]}]
   (let [col      (fn col
                    ([title help-key f] (col title help-key {} f))
                    ([title help-key opts f]
@@ -189,6 +189,35 @@
       :css {:font-weight "bold"
             :font-size   "110%"}
       "Steerpoints")
+     (div
+      :css {:margin-bottom (px 3)}
+      (comm/checkbox
+       :value (formula-of [checked-flights flight]
+                (checked-flights flight))
+       :change (fn [e]
+                 (.log js/console "checkbox change" (if (@checked-flights @flight)
+                                                      "true"
+                                                      "false"))
+                 (swap! checked-flights util/toggle-set-membership @flight)))
+      (with-help [:flight-paths :show?]
+        (span
+         :css {:margin-left (px 3)}
+         "Show flight path on map?")))
+     (div
+      :css {:margin-bottom (px 3)}
+      (with-help [:flight-paths :color]
+        (span
+         :css {:margin-right (px 3)}
+         "Color:"))
+      (comm/color-picker2
+       :value (formula-of [mission flight display mission-category-colors]
+                (let [{:keys [camp-id]} flight]
+                  (if-let [c (get-in display [camp-id :color])]
+                    c
+                    (flight-mission-color mission
+                                          flight
+                                          mission-category-colors))))
+       :change #(swap! display assoc-in [(:camp-id @flight) :color] %)))
      (grids/table-grid
       :data (-> flight ::mission/waypoints cell=)
       :key-fn ::mission/number
@@ -306,7 +335,7 @@
 
 (defn flight-info-formatter
   "Returns a formatter for the info cell of the flight table."
-  [detailed-flight scroll-container tabbed-flights]
+  [{:keys [mission display detailed-flight scroll-container tabbed-flights checked-flights]}]
   (fn [flight]
     (cell-let [{:keys [camp-id]} flight]
       (let [visible?  (cell= (= camp-id detailed-flight))
@@ -345,6 +374,7 @@
                      (swap! tabbed-flights dissoc (:id @flight))
                      (swap! tabbed-flights assoc  (:id @flight) @flight)))
           :width (px 16)
+          :title "Show flight in separate tab"
           :src "images/open-external.svg")
          (when-tpl visible?
            (with-let [d (div
@@ -357,7 +387,11 @@
                                :background    "#FDFFD9"
                                :z-index       1
                                :margin-bottom (px 5)}
-                         (flight-details flight tabbed-flights))]
+                         (flight-details {:mission         mission
+                                          :flight          flight
+                                          :display         display
+                                          :tabbed-flights  tabbed-flights
+                                          :checked-flights checked-flights}))]
              (do-watch visible?
                        (fn [old new]
                          (when (and (not old) new)
@@ -451,6 +485,10 @@
       :title (with-help [:flights :mission-key]
                "Mission Key")
       :css {:margin-bottom (px 3)}
+      ;; (pre-cell "checked flights"
+      ;;           (cell= (map :id checked-flights)))
+      ;; (pre-cell "display"
+      ;;           display)
       (div
        :css {:display   "flex"
              :flex-wrap "wrap"
@@ -480,8 +518,8 @@
        :mission mission
        :selected-teams selected-teams
        :selectable-teams visible-teams))
-     #_(pre-cell "tabbed-flights"
-                 tabbed-flights
+     #_(pre-cell "visible-teams"
+               visible-teams
                  #_(formula-of [tabbed-flights]
                      (map #(select-keys % [:title]) tabbed-flights)))
      (control-section
@@ -548,7 +586,12 @@
                      :info      {:title        (with-help [:flights :columns :info]
                                                  "Info")
                                  :disable-sort true
-                                 :formatter    (flight-info-formatter detailed-flight scroll-container tabbed-flights)}
+                                 :formatter    (flight-info-formatter {:mission          mission
+                                                                       :display          display
+                                                                       :detailed-flight  detailed-flight
+                                                                       :scroll-container scroll-container
+                                                                       :tabbed-flights   tabbed-flights
+                                                                       :checked-flights  checked-flights})}
                      :combatant {:title     (with-help [:flights :columns :combatant]
                                               "Who")
                                  :sort-key  #(->> %
@@ -580,7 +623,6 @@
                                  :sort-key  #(flight-aircraft %)
                                  :formatter (fn [flight]
                                               (div
-                                               :css {:white-space "nowrap"}
                                                (div
                                                 :css {:display    "inline-block"
                                                       :float      "left"
@@ -799,11 +841,12 @@
   (let [map-flight-path-size  (cell 0)
         map-flight-path-scale (cell= (Math/pow 4.0 map-flight-path-size))
         tabbed-flights        (cell {})
+        checked-flights       (cell #{})
         highlighted-flight    (cell nil)
         display               (cell {})
         state                 (merge opts
                                      {:mission               mission
-                                      :checked-flights       (cell #{})
+                                      :checked-flights       checked-flights
                                       :highlighted-flight    highlighted-flight
                                       :display               display
                                       :all-flights           (cell= (::mission/flights mission))
@@ -838,8 +881,11 @@
            :map-display-controls-fn #(flight-path-display-controls % state)
            :overlay-fn (fn [] (overlay state))
            :tab-body-fn (fn [data]
-                          (flight-details (cell= (::flight data))
-                                          tabbed-flights))
+                          (flight-details {:mission         mission
+                                           :flight           (cell= (::flight data))
+                                           :display          display
+                                           :tabbed-flights   tabbed-flights
+                                           :checked-flights checked-flights}))
            :tab-title-fn (fn [data selected?]
                            (div
                             :mouseenter #(reset! highlighted-flight (-> @data ::flight))
@@ -891,11 +937,25 @@
 (defn briefing-data
   "Returns data for saving in a briefing file."
   [layer]
-  ;; TODO
-  )
+  (let [{:keys [display tabbed-flights checked-flights]} layer]
+    {:display         @display
+     :tabbed-flights  (set (keys @tabbed-flights))
+     ;; Wish I would have used IDs instead of the flights themselves
+     :checked-flights (set (map :id @checked-flights))}))
 
 (defn load-briefing-data
   "Given briefing data, update the layer with the state from it."
   [layer data]
-  ;; TODO
-  )
+  (let [{:keys [display tabbed-flights checked-flights mission]} layer]
+    (dosync
+     (.log js/console "Using data" (pr-str (select-keys  data [:display :tabbed-flights :checked-flights])))
+     (reset! display (:display data))
+     (reset! tabbed-flights (let [flights (->> @mission
+                                               ::mission/flights
+                                               (filter #(contains? (:tabbed-flights data) (:id %))))]
+                              (zipmap (map :id flights) flights)))
+     (reset! checked-flights
+             (->> @mission
+                  ::mission/flights
+                  (filter #(contains? (:checked-flights data) (:id %)))
+                  set)))))

@@ -639,14 +639,14 @@
                                 key))]
       (with-let [elem (select attrs kids)]
         (do-watch value
-            (fn [_ n]
-              (let [e (js/$ elem)]
-                (if-let [found (lookup n)]
-                  (doto e
-                    (.val found)
-                    (.trigger "change"))
-                  ;; TODO: How do we handle this?
-                  (.warn js/console "select2: item" (pr-str n) "not found")))))
+          (fn [_ n]
+            (let [e (js/$ elem)]
+              (if-let [found (lookup n)]
+                (doto e
+                  (.val found)
+                  (.trigger "change"))
+                ;; TODO: How do we handle this?
+                (.warn js/console "select2: item" (pr-str n) "not found")))))
         (add-watch index
                    (gensym)
                    (fn [_ _ _ n]
@@ -668,36 +668,36 @@
                                    @choices*)
                            (.val (lookup @value))
                            (.trigger "change")))))
-        (when-dom3 elem
-          #(do
-             (-> js/jQuery .-fn .-select2 .-defaults (.set "width" "resolve"))
-             (-> elem
-                 js/jQuery
-                 (hint-> js/jQuery)
-                 (.select2 (clj->js
-                            (cond->
-                                {:data              (clj->js (for [[id item] @index]
-                                                               {:text (if (::placeholder? item)
-                                                                        ""
-                                                                        id)
-                                                                :id   (if (::placeholder? item)
-                                                                        ""
-                                                                        id)}))
-                                 :templateResult    formatter*
-                                 :templateSelection formatter*
-                                 :allowClear allow-clear?}
-                              placeholder
-                              (merge {:placeholder placeholder}))))
-                 (.on "change" (fn [e]
-                                 (let [v (->> e
-                                              .-currentTarget
-                                              .-value
-                                              (get @index)
-                                              :value)]
-                                   #_(.log js/console "changed" v)
-                                   (reset! value v))))
-                 (.val (lookup @value))
-                 (.trigger "change"))))))))
+        (with-timeout 0
+          ;; do
+          (-> js/jQuery .-fn .-select2 .-defaults (.set "width" "resolve"))
+          (-> elem
+              js/jQuery
+              (hint-> js/jQuery)
+              (.select2 (clj->js
+                         (cond->
+                             {:data              (clj->js (for [[id item] @index]
+                                                            {:text (if (::placeholder? item)
+                                                                     ""
+                                                                     id)
+                                                             :id   (if (::placeholder? item)
+                                                                     ""
+                                                                     id)}))
+                              :templateResult    formatter*
+                              :templateSelection formatter*
+                              :allowClear allow-clear?}
+                           placeholder
+                           (merge {:placeholder placeholder}))))
+              (.on "change" (fn [e]
+                              (let [v (->> e
+                                           .-currentTarget
+                                           .-value
+                                           (get @index)
+                                           :value)]
+                                #_(.log js/console "changed" v)
+                                (reset! value v))))
+              (.val (lookup @value))
+              (.trigger "change")))))))
 
 (defn image-cache-path
   "Returns a path to where we should cache an image."
@@ -1160,10 +1160,14 @@
   "Renders an HTML checkbox."
   [attrs _]
   (with-attr-bindings attrs [change value]
-    (let [change* (or change #(swap! value not))]
+    (let [change* (or change #(swap! value not))
+          change** (fn [e]
+                     (change* e)
+                     (.preventDefault e)
+                     false)]
       (input (assoc attrs
                     :type "checkbox"
-                    :change change*
+                    :change change**
                     :value value)))))
 
 (def ESCAPE_KEY 27)
