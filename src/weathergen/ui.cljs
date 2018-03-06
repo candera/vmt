@@ -4542,32 +4542,40 @@
       (inl (inl
             {:css {:margin-right (px 3)}}
             "Objective:")
-           (comm/select2
-            :css {:width (px 150)}
-            :value selected-objective
-            :choices (formula-of [mission]
-                       (for [objective (->> mission
-                                            ::mission/objectives
-                                            (sort-by ::mission/name))]
-                         {:value objective
-                          :label (::mission/name objective)}))))
+           (inl
+            (select/select3
+             :width 150
+             :data (formula-of [mission]
+                     (->> mission
+                          ::mission/objectives
+                          (sort-by ::mission/name)))
+             :value selected-objective
+             :placeholder "Select an objective"
+             :key-fn :id
+             :search-fn ::mission/name
+             :formatter (fn [objective]
+                          (div (cell= (::mission/name objective)))))))
       (inl (inl
             {:css {:margin-left  (px 7)
                    :margin-right (px 3)}}
             "Weapon:")
-           (comm/select2
-            :css {:width (px 150)}
-            :value selected-weapon
-            :choices (formula-of [mission]
-                       (for [weapon (->> mission
-                                         ::mission/weapons
-                                         (remove #(-> %
-                                                      :hit-chance
-                                                      (get c/NoMove)
-                                                      zero?))
-                                         (sort-by ::mission/name))]
-                         {:value weapon
-                          :label (::mission/name weapon)}))))
+           (inl
+            (select/select3
+             :width 150
+             :data (formula-of [mission]
+                     (->> mission
+                          ::mission/weapons
+                          (remove #(-> %
+                                       :hit-chance
+                                       (get c/NoMove)
+                                       zero?))
+                          (sort-by ::mission/name)))
+             :key-fn :index
+             :value selected-weapon
+             :placeholder "Select a weapon"
+             :search-fn ::mission/name
+             :formatter (fn [weapon]
+                          (div (cell= (::mission/name weapon)))))))
       (when-tpl selected-weapon
         (div
          (div
