@@ -25,7 +25,7 @@
             [weathergen.ui.textarea :as ta])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-time formula-of keyed-for-tpl]]))
+   [weathergen.cljs.macros :refer [with-key-lenses with-time formula-of keyed-for-tpl]]))
 
 ;; (reset! ui/max-time {:day 2 :hour 2 :minute 2})
 
@@ -149,21 +149,21 @@
       (formula-of [mission]
         (.log js/console (clj->js (map mission/team-number (mission/teams mission)))))
       (div
-       (let [value (cell nil)
-             interim (cell nil)]
-         (div
-          (div "Value: " (cell= (pr-str value)))
-          (div "Interim: " (cell= (pr-str interim)))
-          (buttons/a-button
-           :click #(reset! value "This is a\ntext.")
-           "Reset")
-          (ta/textarea2
-           :value value
-           :css {:font-family "monospace"}
-           :change (fn [v] (reset! interim v))
-           :placeholder "Enter some text")
-          (textarea
-           "This is a bunch of \n multiline text for comparison.")))
+       (let [annotation (cell {:text "something"})]
+         (with-key-lenses annotation [text]
+          (div
+           (div "Value: " (cell= (pr-str text)))
+           ;; (div "Interim: " (cell= (pr-str interim)))
+           (buttons/a-button
+            :click #(reset! text "This is a\ntext.")
+            "Reset")
+           (ta/textarea2
+            :value text
+            :css {:font-family "monospace"}
+            :change (fn [v] (reset! text v))
+            :placeholder "Enter some text")
+           (textarea
+            "This is a bunch of \n multiline text in a normal textarea for comparison."))))
        (hr)
        (let [hidden? (cell false)
              extras  (cell [])
