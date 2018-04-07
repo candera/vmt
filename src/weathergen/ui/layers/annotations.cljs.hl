@@ -25,6 +25,7 @@
                                                    styled team-color triangle
                                                    validating-edit]]
             [weathergen.ui.tabs :as tabs]
+            [weathergen.ui.textarea :as ta]
             [weathergen.util :as util])
   (:require-macros
    [weathergen.cljs.macros :refer [hint->
@@ -1242,26 +1243,18 @@
        (color-controls "Color:" :color font-color)
        (tr (td (helped :text "Text:"))
            (td :colspan 2
-               (with-let [elem (textarea)]
-                 (do-watch text
-                           (fn [_ _]
-                             (with-timeout 0
-                               (-> elem
-                                   js/jQuery
-                                   (.css #js {:height     "auto"
-                                              :overflow-y "hidden"})
-                                   (.height (max 20 (.-scrollHeight elem)))))))
-                 (elem
-                  :css (formula-of [font-family font-italic? font-bold?]
-                         {:font-family          font-family
-                          :font-style           (when font-italic? "italic")
-                          :font-weight          (when font-bold? "bold")
-                          :font-size            (pct 100)
-                          :width                (pct 100)
-                          :horizontal-alignment halign})
-                  :value text
-                  :placeholder "Enter text here"
-                  :input #(reset! text @%)))))))))
+               (ta/textarea2
+                :css (formula-of [font-family font-italic? font-bold?]
+                       {:font-family          font-family
+                        :font-style           (when font-italic? "italic")
+                        :font-weight          (when font-bold? "bold")
+                        :font-size            (pct 100)
+                        :width                (pct 100)
+                        :horizontal-alignment halign})
+                :value text
+                :change (fn [val]
+                          (reset! text val))
+                :placeholder "Enter text here")))))))
 
 (defn- edge-controls
   "Returns UI for the controls used to set up edges."
@@ -1306,11 +1299,11 @@
   [annotation threats]
   (with-key-lenses annotation [threat label]
     #_(add-watch
-     threat
-     (gensym)
-     (fn [_ _ _ n]
-       (when (and n @annotation)
-         (reset! label nil))))
+       threat
+       (gensym)
+       (fn [_ _ _ n]
+         (when (and n @annotation)
+           (reset! label nil))))
     (tbody
      (tr
       (td (helped :threat "Threat:"))
