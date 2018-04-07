@@ -1464,32 +1464,33 @@
                       "new-keys" (pr-str new-keys)
                       "gone-keys" (pr-str gone-keys)
                       "added-keys" (pr-str added-keys))
-              (doseq [k gone-keys]
-                (swap! priors assoc k (get o k)))
-              (reset! current
-                      (with-let [frag (.createDocumentFragment js/document)]
-                        (doseq [k added-keys]
-                          (swap! ui-cache
-                                 assoc
-                                 k
-                                 (tpl
-                                  (formula-of [key-map]
-                                    (get key-map k (get @priors k)))
-                                  k)))
-                        (doseq [k @ks]
-                          (let [v (get @ui-cache k)]
-                            (cond
-                              (nil? v)
-                              (.warn js/console
-                                     "keyed-loop-tpl*: not appending nil node"
-                                     k
-                                     v)
+              (when (pos? (+ (count gone-keys) (count added-keys)))
+                (doseq [k gone-keys]
+                  (swap! priors assoc k (get o k)))
+                (reset! current
+                        (with-let [frag (.createDocumentFragment js/document)]
+                          (doseq [k added-keys]
+                            (swap! ui-cache
+                                   assoc
+                                   k
+                                   (tpl
+                                    (formula-of [key-map]
+                                      (get key-map k (get @priors k)))
+                                    k)))
+                          (doseq [k @ks]
+                            (let [v (get @ui-cache k)]
+                              (cond
+                                (nil? v)
+                                (.warn js/console
+                                       "keyed-loop-tpl*: not appending nil node"
+                                       k
+                                       v)
 
-                              (not (instance? js/Node v))
-                              (.error js/console
-                                      "keyed-loop-tpl*: trying to append non-node"
-                                      k
-                                      v)
+                                (not (instance? js/Node v))
+                                (.error js/console
+                                        "keyed-loop-tpl*: trying to append non-node"
+                                        k
+                                        v)
 
-                              :else
-                              (gdom/appendChild frag v))))))))))))
+                                :else
+                                (gdom/appendChild frag v)))))))))))))
