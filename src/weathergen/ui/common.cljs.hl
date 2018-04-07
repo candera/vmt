@@ -1460,10 +1460,10 @@
                   gone-keys  (set/difference old-keys new-keys)
                   added-keys (set/difference new-keys old-keys (-> @ui-cache keys set))]
               #_(.log js/console
-                    "old-keys" (pr-str old-keys)
-                    "new-keys" (pr-str new-keys)
-                    "gone-keys" (pr-str gone-keys)
-                    "added-keys" (pr-str added-keys))
+                      "old-keys" (pr-str old-keys)
+                      "new-keys" (pr-str new-keys)
+                      "gone-keys" (pr-str gone-keys)
+                      "added-keys" (pr-str added-keys))
               (doseq [k gone-keys]
                 (swap! priors assoc k (get o k)))
               (reset! current
@@ -1477,4 +1477,19 @@
                                     (get key-map k (get @priors k)))
                                   k)))
                         (doseq [k @ks]
-                          (gdom/appendChild frag (get @ui-cache k)))))))))))
+                          (let [v (get @ui-cache k)]
+                            (cond
+                              (nil? v)
+                              (.warn js/console
+                                     "keyed-loop-tpl*: not appending nil node"
+                                     k
+                                     v)
+
+                              (not (instance? js/Node v))
+                              (.error js/console
+                                      "keyed-loop-tpl*: trying to append non-node"
+                                      k
+                                      v)
+
+                              :else
+                              (gdom/appendChild frag v))))))))))))
