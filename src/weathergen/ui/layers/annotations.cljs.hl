@@ -1243,6 +1243,7 @@
        (color-controls "Color:" :color font-color)
        (tr (td (helped :text "Text:"))
            (td :colspan 2
+               :css {:padding-right (px 8)}
                (ta/textarea2
                 :css (formula-of [font-family font-italic? font-bold?]
                        {:font-family          font-family
