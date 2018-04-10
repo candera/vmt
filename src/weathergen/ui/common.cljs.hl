@@ -1447,16 +1447,18 @@
   returns an (immutable) key under which to cache it. `tpl` is passed
   a cell containing a value from `items` and its (non-cell) id."
   [items key-fn tpl]
-  (let [ks       (cell= (map key-fn items))
-        key-map  (cell= (zipmap ks items))
+  (let [kindex   (formula-of [items]
+                   (let [ks (mapv key-fn items)]
+                     {:keys     ks
+                      :item-map (zipmap ks items)}))
         priors   (atom {})
         ui-cache (atom {})]
     (with-let [current (cell [])]
       (do-watch
-          key-map
+          kindex
           (fn [o n]
-            (let [old-keys   (->> o keys set)
-                  new-keys   (->> n keys set)
+            (let [old-keys   (->> o :keys set)
+                  new-keys   (->> n :keys set)
                   gone-keys  (set/difference old-keys new-keys)
                   added-keys (set/difference new-keys old-keys (-> @ui-cache keys set))]
               #_(.log js/console
@@ -1464,9 +1466,9 @@
                       "new-keys" (pr-str new-keys)
                       "gone-keys" (pr-str gone-keys)
                       "added-keys" (pr-str added-keys))
-              (when (pos? (+ (count gone-keys) (count added-keys)))
+              (when (not= (:keys o) (:keys n))
                 (doseq [k gone-keys]
-                  (swap! priors assoc k (get o k)))
+                  (swap! priors assoc k (get-in o [:item-map k])))
                 (reset! current
                         (with-let [frag (.createDocumentFragment js/document)]
                           (doseq [k added-keys]
@@ -1474,10 +1476,10 @@
                                    assoc
                                    k
                                    (tpl
-                                    (formula-of [key-map]
-                                      (get key-map k (get @priors k)))
+                                    (formula-of [kindex]
+                                      (get-in kindex [:item-map k] (get @priors k)))
                                     k)))
-                          (doseq [k @ks]
+                          (doseq [k (-> kindex deref :keys)]
                             (let [v (get @ui-cache k)]
                               (cond
                                 (nil? v)
