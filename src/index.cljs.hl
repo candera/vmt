@@ -6,7 +6,7 @@
             [weathergen.ipc :as ipc]
             [weathergen.ui :as ui]
             [weathergen.ui.buttons :as buttons]
-            [weathergen.ui.common :as comm :refer [inl pct px rinl when-dom3]]
+            [weathergen.ui.common :as comm :refer [external-link inl pct px rinl when-dom3]]
             [weathergen.help :as help :refer [with-help]]
             [weathergen.ui.trees :as trees]
             [taoensso.timbre :as log
