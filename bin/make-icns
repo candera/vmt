@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+TMPDIR=$(mktemp -d)
+
+cd $(dirname $0)/../assets/images
+
+for SIZE in 256 64 32 16
+do
+  cp vmt256.png $TMPDIR/icon_${SIZE}x${SIZE}.png
+done
+
+mv $TMPDIR $TMPDIR.iconset
+
+iconutil --convert icns --output vmt.icns $TMPDIR.iconset 

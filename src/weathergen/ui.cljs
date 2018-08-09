@@ -58,6 +58,7 @@
             [weathergen.ui.common :as comm :refer [colors control-section
                                                    dropdown
                                                    ems
+                                                   external-link
                                                    get-image
                                                    format-time inl
                                                    map-lens
@@ -4889,9 +4890,9 @@
                 [:a:link    {:color "white"}]
                 [:a:visited {:color "white"}]
                 [:a:hover   {:color "lightblue"}]]
-       (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
-          :target "_blank"
-          "Tyrant"))))
+       (external-link
+        :href "http://www.440thvfw.com/memberlist.php?mode=viewprofile&u=52"
+        "Tyrant"))))
     (inl
      :debug "right-words"
      (styled
@@ -4906,21 +4907,21 @@
                  [:a:hover {:color "lightblue"} ]])
       (span
        "Help? Bug? Feature request? Click"
-       (a :href "https://www.bmsforum.org/forum/showthread.php?31611-Release-Tyrant-s-Virtual-Mission-Tools-(VMT)&p=441129#post441129"
-          :target "_blank"
+       (external-link
+        :href "https://www.bmsforum.org/forum/showthread.php?31611-Release-Tyrant-s-Virtual-Mission-Tools-(VMT)&p=441129#post441129"
           "here")
        "."))
-     (a
+     (external-link
       :css {:position "absolute"
             :right    (px 20)
             :top      (px 7)}
-      :href "http://firstfighterwing.com"
-      :target "_blank"
+      :href "http://www.440thvfw.com"
       (img
        :css (formula-of [titlebar-fullsize?]
               {:display "inline-block"
                :height  (px (if titlebar-fullsize? 64 24))})
-       :src "images/1stVFW_Insignia-64.png"))))))
+       :title "440th Virtual Fighter Wing"
+       :src "images/440th-logo-64.png"))))))
 
 (defn- layer-controls
   "Return controls for a layer."

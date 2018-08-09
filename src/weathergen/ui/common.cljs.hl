@@ -260,6 +260,17 @@
      (merge attrs {:id id})
      content)))
 
+(defelem external-link
+  "Creates an element that will open in an external browser."
+  [attrs content]
+  (a
+   (-> attrs
+       (assoc :href "")
+       (assoc :click (fn [e]
+                       (.preventDefault e)
+                       (-> electron .-shell (.openExternal (:href attrs))))))
+   content))
+
 (defelem inl
   [attrs content]
   (let [{:keys [css]} attrs]

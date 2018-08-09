@@ -36,7 +36,7 @@
                        :height h
                        :frame frame?
                        :show show?
-                       :icon "images/1stVFW_Insignia.png"
+                       :icon "images/440th-logo-500.png"
                        :center true}))
 
 (defn open
