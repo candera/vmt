@@ -141,7 +141,11 @@
    (b
     (div
      :id "outer"
-     (let [annotations (cell {1 {:text "something"}})]
+     (comm/when-dom4
+       (div "hi")
+       (fn []
+         (.log js/console "triggered")))
+     #_(let [annotations (cell {1 {:text "something"}})]
        (keyed-for-tpl key [[k _] annotations]
          (let [annotation (comm/map-lens annotations k)]
            (with-key-lenses annotation [text]

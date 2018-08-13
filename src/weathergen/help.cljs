@@ -12,7 +12,7 @@
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
             [weathergen.ui.buttons :as buttons]
-            [weathergen.ui.common :as comm :refer [inl px when-dom3]]
+            [weathergen.ui.common :as comm :refer [inl px when-dom3 when-dom4]]
             [weathergen.wind :as wind])
   (:require-macros [hiccups.core :as hic]))
 
