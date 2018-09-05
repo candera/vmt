@@ -88,6 +88,7 @@
    :margin          "2px"
    :padding         "3px"
    :border-radius   "4px"
+   :text-align      "center"
    :text-decoration "none"
    :color           "black"
    :cursor          "pointer"}
