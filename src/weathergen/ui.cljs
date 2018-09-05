@@ -5106,14 +5106,7 @@
 (defn- on*
   "Handles registering events on nodes when they are inserted into the DOM."
   [elem event callback]
-  ;; I'm not thrilled about having this conditional here, but
-  ;; when-dom3 sometimes fails if it takes too long to insert the
-  ;; node, and for some reason when-dom4 does not work on SVG
-  ;; elements.
-  (let [technique (if (instance? js/SVGElement elem)
-                    comm/when-dom3
-                    comm/when-dom4)]
-    (technique elem #(.on (js/jQuery elem) (name event) callback))))
+  (comm/when-dom* elem #(.on (js/jQuery elem) (name event) callback)))
 
 (defmethod hoplon.core/on! :hoplon.core/default
   [elem event callback]

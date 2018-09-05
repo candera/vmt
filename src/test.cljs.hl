@@ -141,7 +141,7 @@
    (b
     (div
      :id "outer"
-     (comm/when-dom4
+     (comm/when-dom*
        (div "hi")
        (fn []
          (.log js/console "triggered")))

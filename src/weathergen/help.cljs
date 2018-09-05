@@ -12,7 +12,7 @@
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)]
             [weathergen.ui.buttons :as buttons]
-            [weathergen.ui.common :as comm :refer [inl px when-dom3 when-dom4]]
+            [weathergen.ui.common :as comm :refer [inl px when-dom*]]
             [weathergen.wind :as wind])
   (:require-macros [hiccups.core :as hic]))
 
@@ -1510,8 +1510,7 @@ forward and backward in time. ")
                     (fn [old new]
                       (when (and (not old) new)
                         ;; (.log js/console "Focusing help element")
-                        (;;with-timeout 0
-                         when-dom3 e
+                        (when-dom* e
                          #(.focus e))))))
         content))))
 

@@ -6,7 +6,7 @@
             [weathergen.ipc :as ipc]
             [weathergen.ui :as ui]
             [weathergen.ui.buttons :as buttons]
-            [weathergen.ui.common :as comm :refer [external-link inl pct px rinl when-dom4]]
+            [weathergen.ui.common :as comm :refer [external-link inl pct px rinl when-dom*]]
             [weathergen.help :as help :refer [with-help]]
             [weathergen.ui.trees :as trees]
             [taoensso.timbre :as log
@@ -449,7 +449,7 @@
        (add-watch load-status
                   ::scroll-notifications
                   (fn [_ _ _ _]
-                    (when-dom4 elem
+                    (when-dom* elem
                       ;; TODO: Scroll to the bottom of the element, not the top
                      #(-> elem .-scrollTop (set! (.-scrollHeight elem)))))))))))
 

@@ -48,77 +48,62 @@
     (when-not (js/isNaN n)
       n)))
 
-;; Might be able to use this:
-;; http://www.backalleycoder.com/2012/04/25/i-want-a-damnodeinserted/
-;; along with the below to actually get notified when an element makes
-;; its way into the DOM. This way, we're just giving up.
-(defn when-dom3
-  "Like `when-dom` but (hopefully) without the CPU problems."
-  ([elem f] (when-dom3 elem f [0 0 0 10 10 20 20 40 40 80 80 100 250 500]))
-  ([elem f intervals]
-   (if (-> js/document .-documentElement (.contains elem))
-     (f)
-     (let [[interval & more] intervals]
-       (if interval
-         (with-timeout interval
-           (when-dom3 elem f more))
-         (.warn js/console
-                "element did not get added to the DOM in a timely manner"
-                elem))))))
+(let [registry     (atom #{})
+      batch        10
+      min-interval 1
+      interval     (atom min-interval)
+      max-interval 200
+      pending-call (atom false)]
+  (defn- process
+    []
+    (let [processed? (loop [found?                                   false
+                            [{:keys [elem f] :as item} & more-items] (->> @registry
+                                                                          shuffle
+                                                                          (take batch))]
+                       (let [in-dom? (-> js/document .-documentElement (.contains elem))]
+                         (when in-dom?
+                           (swap! registry disj item)
+                           (try
+                             (f)
+                             (catch :default x
+                               (.log js/warn "Error while invoking when-dom handler" elem x))))
+                         (if (seq more-items)
+                           (recur (or found? in-dom?)
+                                  more-items)
+                           found?)))]
+      (swap! interval (fn [current]
+                        (if processed?
+                          min-interval
+                          (max max-interval (* 2 current)))))
+      (reset! pending-call false)
+      (with-timeout @interval
+        (process))))
 
-(let [animation-name  (str (gensym "node-inserted"))
-      animation-class (str (gensym "node-inserted-animation"))
-      registry        (atom {})]
-  (.addEventListener
-   js/document
-   "DOMContentLoaded"
-   (fn [_]
-     (.appendChild (.-head js/document)
-                   (style
-                    :type "text/css"
-                    :debug "when-dom4"
-                    (gstring/format
-                     "
-@keyframes %s {
-    from {
-        outline-color: #fff;
-    }
-    to {
-        outline-color: #000;
-    }
-}
+  (with-timeout @interval
+    (process))
 
-.%s {
-  animation-duration: 0.01s;
-  animation-name: %s;
-}"
-                     animation-name
-                     animation-class
-                     animation-name)))
-     (.addEventListener js/document
-                        "animationstart"
-                        (fn [e]
-                          (when (= (.-animationName e) animation-name)
-                            (let [elem (.-target e)]
-                              (if-let [f (get @registry elem)]
-                                (try
-                                  (.log js/console "fired DOM insertion event for " elem)
-                                  (f)
-                                  (finally
-                                    (-> elem .-classList (.remove animation-class))
-                                    (swap! registry dissoc elem)))
-                                (.warn js/console
-                                       "Insertion event was fired, but no handler was found for element"
-                                       elem))))))))
-
-  ;; This does not seem to work for SVG elements. I think the
-  ;; animationstart event fires before the node has entered the dom.
-  (defn when-dom4
-    "Like `when-dom3`, but more efficient and doesn't give up."
+  ;; I tried to use the animation-start trick
+  ;; http://www.backalleycoder.com/2012/04/25/i-want-a-damnodeinserted/
+  ;; but it didn't work in all cases. This is the only thing that
+  ;; worked consistently without killing the CPU.
+  (defn- when-dom5
     [elem f]
-    (swap! registry assoc elem f)
-    (-> elem .-classList (.add animation-class))
-    elem))
+    (swap! registry conj {:elem elem :f f})
+    ;; If someone registers a new element, set up a processing loop to
+    ;; happen as soon as possible, but don't pile them up, since we
+    ;; probably get bunches of these calls all at once.
+    (when-not @pending-call
+      (reset! pending-call true)
+      (with-timeout min-interval
+        (process)))))
+
+(defn when-dom*
+  "Like Hoplon's `when-dom`, but hopefully without the CPU problems."
+  [elem f]
+  ;; The idea here is to dispatch to different implementations based
+  ;; on what works best for a given scenario. At the moment there's
+  ;; only one strategy.
+  (when-dom5 elem f))
 
 ;; (set! *warn-on-infer* true)
 
@@ -529,7 +514,7 @@
                            js/jQuery
                            ;; (hint-> js/HTMLInputElement)
                            (.minicolors "value" (to-hex-str n) #_(to-hex8-str n))))))
-        (when-dom4 i
+        (when-dom* i
           #(-> i
                js/jQuery
                (hint-> js/HTMLInputElement)
