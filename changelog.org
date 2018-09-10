@@ -4,6 +4,10 @@
 #+TITLE:
 
 * Change Log
+** v057-50 (dev-only) [2018-09-05 Wed]
+- Build Linux version as well
+- Change logo to 440th VFW's
+- Fix various formatting problems
 ** v057-36 (dev-only) [2018-03-06 Tue]
 - Fix incorrect label on annotations copy button
 - Improved map sizing and positioning: controls will never move below
