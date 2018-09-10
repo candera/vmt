@@ -94,7 +94,7 @@ cat > $REDIRECTS <<EOF
 </head>
 <body>
 <h1>VMT</h1>
-This is the Virtual Mission Tools download and change log page. VMT is a suite of tools for Falcon BMS. Visit <a href="http://www.440thvfw.com/vmt">the VMT home page</a> for more information.x
+This is the Virtual Mission Tools download and change log page. VMT is a suite of tools for Falcon BMS. Visit <a href="http://www.440thvfw.com/vmt">the VMT home page</a> for more information.
 <h1>Download VMT ${GIT_VERSION} (the latest on the ${CHANNEL} channel)</h1>
 <ul>
 EOF
@@ -132,6 +132,9 @@ EOF
   if [[ "$PLATFORM" == "darwin" ]]
   then
     PLATFORM_NAME="Mac OS X"
+  elif [[ "$PLATFORM" == "linux" ]]
+  then
+    PLATFORM_NAME="Linux"
   else
     PLATFORM_NAME="Windows"
   fi

@@ -4,6 +4,8 @@
 #+TITLE:
 
 * Change Log
+** v057-51 (dev-only) [2018-09-10 Mon]
+- Fix typos in download page.
 ** v057-50 (dev-only) [2018-09-05 Wed]
 - Build Linux version as well
 - Change logo to 440th VFW's
