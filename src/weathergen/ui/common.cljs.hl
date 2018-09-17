@@ -97,13 +97,42 @@
       (with-timeout min-interval
         (process)))))
 
+(let [agenda         (atom (sorted-map))
+      timer-interval 5
+      max-interval   150
+      now            (fn [] (.getTime (js/Date.)))
+      process        (fn process []
+                       (let [t (now)]
+                         (doseq [[k v] (->> @agenda
+                                            (filter (fn [[k v]]
+                                                      (< k t))))]
+                           (swap! agenda dissoc k)
+                           (doseq [{:keys [elem f interval] :as item} v]
+                             (if (-> js/document .-documentElement (.contains elem))
+                               (try
+                                 (f)
+                                 (catch :default x
+                                   (.log js/warn "Error while invoking when-dom handler" elem x)))
+                               (let [new-interval (max max-interval (* 2 interval))
+                                     new-time     (+ t new-interval)]
+                                 (swap! agenda update new-time conj (assoc item :interval new-interval)))))))
+                       (with-timeout timer-interval
+                         (process)))]
+
+  (with-timeout timer-interval
+    (process))
+
+  (defn- when-dom6
+    [elem f]
+    (swap! agenda update (now) conj {:elem elem :f f :interval 1})))
+
 (defn when-dom*
   "Like Hoplon's `when-dom`, but hopefully without the CPU problems."
   [elem f]
   ;; The idea here is to dispatch to different implementations based
   ;; on what works best for a given scenario. At the moment there's
   ;; only one strategy.
-  (when-dom5 elem f))
+  (when-dom6 elem f))
 
 ;; (set! *warn-on-infer* true)
 
