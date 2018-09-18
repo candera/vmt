@@ -4,15 +4,11 @@
 #+TITLE:
 
 * Change Log
-** v057-52 (dev-only) [2018-09-17 Mon]
-- Fix all the things I broke in the last dev release.
-** v057-51 (dev-only) [2018-09-10 Mon]
+** v058 [2018-09-18 Tue]
 - Fix typos in download page.
-** v057-50 (dev-only) [2018-09-05 Wed]
 - Build Linux version as well
 - Change logo to 440th VFW's
 - Fix various formatting problems
-** v057-36 (dev-only) [2018-03-06 Tue]
 - Fix incorrect label on annotations copy button
 - Improved map sizing and positioning: controls will never move below
   map. Instead, map gets smaller if necessary to accommodate controls
@@ -25,12 +21,6 @@
 - Flights can be opened in their own tabs
 - Fix (again) high CPU when app is idle
 - Flight colors and check state are now saved with briefing
-** v057-9 (dev-only) [2018-02-02 Fri]
-- Focus Tools tab when it is activated
-- Improvements to damage computer
-  - Remove game mechanics, add uncertainty to estimate
-  - Sort to match Recon order
-  - Don't list weapons that can't damage target
 ** v057 [2018-02-01 Thu]
 - Add missing help text
 ** v056 [2018-01-28 Sun]
