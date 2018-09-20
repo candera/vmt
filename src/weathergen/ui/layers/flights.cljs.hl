@@ -922,6 +922,7 @@
                                    :font-weight "bold"
                                    :font-size   (pct 90)}
                              :click (fn [_]
+                                      (reset! highlighted-flight nil)
                                       (swap! tabbed-flights
                                              dissoc
                                              (:id @data)))

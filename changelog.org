@@ -4,6 +4,9 @@
 #+TITLE:
 
 * Change Log
+** v058-2 [2018-09-20 Thu]
+- Remove highlight from flight when closing flight tab.
+- Make tools tab always visible.
 ** v058 [2018-09-18 Tue]
 - Fix typos in download page.
 - Build Linux version as well
