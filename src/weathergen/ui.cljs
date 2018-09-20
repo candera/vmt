@@ -490,7 +490,8 @@
 
 (def tools-visible?
   "Whether or not the tools tab is visible"
-  (cell false))
+  ;; Used to be selectable by a key - I made it always visible.
+  (cell true))
 
 ;;; Components
 
@@ -5054,7 +5055,7 @@
                  :height        "auto"}
            (let [first-tab    (-> section-infos first :id)
                  selected-tab (cell [nil first-tab])]
-             (.addEventListener js/document
+             #_(.addEventListener js/document
                                 "keydown"
                                 (fn [event]
                                   (when (and (= (.-code event) "KeyT")
