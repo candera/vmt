@@ -48,20 +48,91 @@
     (when-not (js/isNaN n)
       n)))
 
-(defn when-dom3
-  "Like `when-dom` but (hopefully) without the CPU problems."
+(let [registry     (atom #{})
+      batch        10
+      min-interval 1
+      interval     (atom min-interval)
+      max-interval 200
+      pending-call (atom false)]
+  (defn- process
+    []
+    (let [processed? (loop [found?                                   false
+                            [{:keys [elem f] :as item} & more-items] (->> @registry
+                                                                          shuffle
+                                                                          (take batch))]
+                       (let [in-dom? (-> js/document .-documentElement (.contains elem))]
+                         (when in-dom?
+                           (swap! registry disj item)
+                           (try
+                             (f)
+                             (catch :default x
+                               (.log js/warn "Error while invoking when-dom handler" elem x))))
+                         (if (seq more-items)
+                           (recur (or found? in-dom?)
+                                  more-items)
+                           found?)))]
+      (swap! interval (fn [current]
+                        (if processed?
+                          min-interval
+                          (max max-interval (* 2 current)))))
+      (reset! pending-call false)
+      (with-timeout @interval
+        (process))))
+
+  (with-timeout @interval
+    (process))
+
+  ;; I tried to use the animation-start trick
+  ;; http://www.backalleycoder.com/2012/04/25/i-want-a-damnodeinserted/
+  ;; but it didn't work in all cases. This is the only thing that
+  ;; worked consistently without killing the CPU.
+  (defn- when-dom5
+    [elem f]
+    (swap! registry conj {:elem elem :f f})
+    ;; If someone registers a new element, set up a processing loop to
+    ;; happen as soon as possible, but don't pile them up, since we
+    ;; probably get bunches of these calls all at once.
+    (when-not @pending-call
+      (reset! pending-call true)
+      (with-timeout min-interval
+        (process)))))
+
+(let [agenda         (atom (sorted-map))
+      timer-interval 5
+      max-interval   150
+      now            (fn [] (.getTime (js/Date.)))
+      process        (fn process []
+                       (let [t (now)]
+                         (doseq [[k v] (->> @agenda
+                                            (filter (fn [[k v]]
+                                                      (< k t))))]
+                           (swap! agenda dissoc k)
+                           (doseq [{:keys [elem f interval] :as item} v]
+                             (if (-> js/document .-documentElement (.contains elem))
+                               (try
+                                 (f)
+                                 (catch :default x
+                                   (.log js/warn "Error while invoking when-dom handler" elem x)))
+                               (let [new-interval (max max-interval (* 2 interval))
+                                     new-time     (+ t new-interval)]
+                                 (swap! agenda update new-time conj (assoc item :interval new-interval)))))))
+                       (with-timeout timer-interval
+                         (process)))]
+
+  (with-timeout timer-interval
+    (process))
+
+  (defn- when-dom6
+    [elem f]
+    (swap! agenda update (now) conj {:elem elem :f f :interval 1})))
+
+(defn when-dom*
+  "Like Hoplon's `when-dom`, but hopefully without the CPU problems."
   [elem f]
-  (let [counter (atom [0 0 0 10 10 20 20 40 40 80 80 100 250 500])]
-    (if (-> js/document .-documentElement (.contains elem))
-      (f)
-      (let [interval (first @counter)]
-        (when (= interval 500)
-          (.warn js/console
-                 "element did not get added to the DOM in a timely manner"
-                 elem))
-        (swap! counter #(drop 1 %))
-        (with-timeout (or interval 1000)
-          (when-dom3 elem f))))))
+  ;; The idea here is to dispatch to different implementations based
+  ;; on what works best for a given scenario. At the moment there's
+  ;; only one strategy.
+  (when-dom6 elem f))
 
 ;; (set! *warn-on-infer* true)
 
@@ -144,19 +215,35 @@
         :when bool]
     class))
 
-(def registered-styles (atom #{}))
+(let [registered-styles (atom #{})
+      pending           (atom {})]
 
-(defn register-styles!
-  "Adds styles to the head of the document. If already registered under `key`, does nothing."
-  [key garden]
-  (when-not (contains? @registered-styles key)
-    (let [^js/Element head (aget (.getElementsByTagName js/document "head") 0)
-          styles (cell= (css garden))]
-      (swap! registered-styles conj key)
-      (with-timeout 0
-        (do
-           (log/debug "Registering style" (str key) (pr-str @styles))
-           (.appendChild head (style :type "text/css" :debug (str key) styles)))))))
+  (defn- register-style!
+    [key garden]
+    (log/debug "Registering style" key)
+    (.appendChild (.-head js/document)
+                  (style
+                   :type "text/css"
+                   :debug (str key)
+                   (cell= (css garden))))
+    (swap! registered-styles conj key)
+    (log/debug "Registered style" key))
+
+  (.addEventListener js/document
+                     "DOMContentLoaded"
+                     (fn [_]
+                       (log/debug "Document loaded. Registering pending styles.")
+                       (doseq [[key garden] @pending]
+                         (register-style! key garden))
+                       (reset! pending {})))
+
+  (defn register-styles!
+    "Adds styles to the head of the document. If already registered under `key`, does nothing."
+    [key garden]
+    (when-not (contains? @registered-styles key)
+      (if-not (= "complete" (.-readyState js/document))
+        (swap! pending assoc key garden)
+        (register-style! key garden)))))
 
 (defn register-class!
   "Adds a style to the head of a document for abstract class `key`.
@@ -241,6 +328,17 @@
      (merge attrs {:id id})
      content)))
 
+(defelem external-link
+  "Creates an element that will open in an external browser."
+  [attrs content]
+  (a
+   (-> attrs
+       (assoc :href "")
+       (assoc :click (fn [e]
+                       (.preventDefault e)
+                       (-> electron .-shell (.openExternal (:href attrs))))))
+   content))
+
 (defelem inl
   [attrs content]
   (let [{:keys [css]} attrs]
@@ -264,6 +362,29 @@
     [:div
      {:style {:display "inline-block"}}
      args]))
+
+(defelem css-triangle
+  "Returns a CSS triangle. Rotation is zero when pointed down."
+  [attrs _]
+  (with-attr-bindings attrs [size rotation color]
+    (div
+     attrs
+     :css (formula-of [rotation]
+            {:display            "inline-block"
+             :width              0
+             :height             0
+             :border-left-width  (px (* 0.66 size))
+             :border-left-style  "solid"
+             :border-left-color  "transparent"
+             :border-right-width (px (* 0.66 size))
+             :border-right-style "solid"
+             :border-right-color "transparent"
+             :border-top-width   (px size)
+             :border-top-style   "solid"
+             :border-top-color   color
+             :transform          (str "rotate("
+                                      rotation
+                                      "deg)")}))))
 
 (defelem triangle
   [attrs _]
@@ -416,13 +537,13 @@
         (add-watch value
                    (-> (gensym) str keyword)
                    (fn [_ _ _ n]
-                     (.log js/console "value changing" n (to-hex-str n) i)
+                     #_(.log js/console "value changing" n (to-hex-str n) i)
                      (when n
                        (-> i
                            js/jQuery
                            ;; (hint-> js/HTMLInputElement)
                            (.minicolors "value" (to-hex-str n) #_(to-hex8-str n))))))
-        (when-dom3 i
+        (when-dom* i
           #(-> i
                js/jQuery
                (hint-> js/HTMLInputElement)
@@ -620,14 +741,14 @@
                                data)))))]
       (with-let [elem (select attrs kids)]
         (do-watch value
-            (fn [_ n]
-              (let [e (js/$ elem)]
-                (if-let [found (lookup n)]
-                  (doto e
-                    (.val found)
-                    (.trigger "change"))
-                  ;; TODO: How do we handle this?
-                  (.warn js/console "select2: item" (pr-str n) "not found")))))
+          (fn [_ n]
+            (let [e (js/$ elem)]
+              (if-let [found (lookup n)]
+                (doto e
+                  (.val found)
+                  (.trigger "change"))
+                ;; TODO: How do we handle this?
+                (.warn js/console "select2: item" (pr-str n) "not found")))))
         (add-watch index
                    (gensym)
                    (fn [_ _ _ n]
@@ -649,42 +770,36 @@
                                    @choices*)
                            (.val (lookup @value))
                            (.trigger "change")))))
-        (when-dom3 elem
-          #(do
-             (-> js/jQuery .-fn .-select2 .-defaults (.set "width" "resolve"))
-             (-> elem
-                 js/jQuery
-                 (hint-> js/jQuery)
-                 (.select2 (clj->js
-                            (cond-> {:data              (clj->js (for [[id item] @index]
-                                                                   {:text (if (::placeholder? item)
-                                                                            ""
-                                                                            (:label item))
-                                                                    :id   (if (::placeholder? item)
-                                                                            ""
-                                                                            id)}))
-                                     :templateResult    formatter*
-                                     :templateSelection formatter*
-                                     :allowClear        allow-clear?}
-
-                              match-fn
-                              (merge {:matcher match-fn})
-
-                              placeholder
-                              (merge {:placeholder placeholder}))))
-                 (.on "change" (fn [e]
-                                 (let [v (->> e
-                                              .-currentTarget
-                                              .-value
-                                              (get @index)
-                                              :value)]
-                                   #_(.log js/console "changed" v)
-                                   (reset! value v))))
-                 (.on "highlight" (fn [e]
-                                    (when highlight
-                                      (highlight e))))
-                 (.val (lookup @value))
-                 (.trigger "change"))))))))
+       (with-timeout 0
+          ;; do
+          (-> js/jQuery .-fn .-select2 .-defaults (.set "width" "resolve"))
+          (-> elem
+              js/jQuery
+              (hint-> js/jQuery)
+              (.select2 (clj->js
+                         (cond->
+                             {:data              (clj->js (for [[id item] @index]
+                                                            {:text (if (::placeholder? item)
+                                                                     ""
+                                                                     id)
+                                                             :id   (if (::placeholder? item)
+                                                                     ""
+                                                                     id)}))
+                              :templateResult    formatter*
+                              :templateSelection formatter*
+                              :allowClear allow-clear?}
+                           placeholder
+                           (merge {:placeholder placeholder}))))
+              (.on "change" (fn [e]
+                              (let [v (->> e
+                                           .-currentTarget
+                                           .-value
+                                           (get @index)
+                                           :value)]
+                                #_(.log js/console "changed" v)
+                                (reset! value v))))
+              (.val (lookup @value))
+              (.trigger "change")))))))
 
 (defn image-cache-path
   "Returns a path to where we should cache an image."
@@ -796,6 +911,43 @@
 (def get-image
   "Return a URL for the image identified by `image-descriptor`."
   (memoize get-image*))
+
+(defn- centered-image
+  "Renders an image centered in width and height."
+  [mission image size]
+  (let [dims (formula-of [image]
+               (if-not image
+                 {:w size
+                  :h size}
+                 (let [[w h]  (get-in image [:image-data :size])
+                       aspect (/ w h)]
+                   (if (< aspect 1)
+                     {:w (* aspect size)
+                      :h size}
+                     {:w size
+                      :h (/ size aspect)}))))]
+    (div
+     :css (formula-of [dims]
+            {:display        "inline-block"
+             :margin         (px 0 (:w dims) 0 0)
+             :vertical-align "middle"
+             :text-align     "center"
+             :position       "relative"})
+     (if-tpl image
+       (img
+        :css (formula-of [dims]
+               {:position "absolute"
+                :top      0
+                :bottom   0
+                :left     0
+                :right    0
+                :width    (px (:w dims))
+                :height   (px (:h dims))
+                :margin   "auto"})
+        :src (cell= (get-image mission image)))
+       " "))))
+
+
 
 ;; Conformers are functions that take a cell containing a string value
 ;; to conform, and return a cell (presumably a formula of the input
@@ -1118,15 +1270,14 @@
   [attrs _]
   (with-attr-bindings attrs [change value]
     (let [change* (or change #(swap! value not))
-          i       (input)]
-      (do-watch value
-          (fn [_ n]
-            (-> i .-indeterminate (set! (= n ::indeterminate)))))
-      (i (assoc attrs
-                :type "checkbox"
-                :change change*
-                :value value)))))
-
+          change** (fn [e]
+                     (change* e)
+                     (.preventDefault e)
+                     false)]
+      (input (assoc attrs
+                    :type "checkbox"
+                    :change change**
+                    :value value)))))
 (def ESCAPE_KEY 27)
 (def ENTER_KEY 13)
 (def UP_ARROW 38)
@@ -1400,37 +1551,58 @@
 ;; sure that's possible.
 (defn keyed-loop-tpl*
   "Like Hoplon's `loop-tpl*` but accepts a `key-fn` which, given an item
-  returns an (immutable) key under which to cache it. "
+  returns an (immutable) key under which to cache it. `tpl` is passed
+  a cell containing a value from `items` and its (non-cell) id."
   [items key-fn tpl]
-  (let [items* (cell= (vec items))
-        pos-map (formula-of [items*]
-                  (zipmap (map key-fn items*)
-                          (range)))
-        index     (atom {})]
+  (let [kindex   (formula-of [items]
+                   (let [ks (mapv key-fn items)]
+                     {:keys     ks
+                      :item-map (zipmap ks items)}))
+        priors   (atom {})
+        ui-cache (atom {})]
     (with-let [current (cell [])]
       (do-watch
-       pos-map
-       (fn [_ _]
-         #_(.log js/console
-               "pos-map" (pr-str @pos-map))
-         (reset! current
-                 (with-let [frag (.createDocumentFragment js/document)]
-                   (doseq [item @items*]
-                     (let [k (key-fn item)]
-                       (when-not (contains? @index k)
-                         (swap! index
-                                assoc
-                                k
-                                {:item item
-                                 :ui   (do
-                                         #_(.log js/console
-                                               "Creating template item"
-                                               "k" k)
-                                         (tpl
-                                          (formula-of [items* pos-map]
-                                            (when-let [pos (get pos-map k)]
-                                              (nth items* pos nil)))))}))
-                       (gdom/appendChild frag (get-in @index [k :ui])))))))))))
+          kindex
+          (fn [o n]
+            (let [old-keys   (->> o :keys set)
+                  new-keys   (->> n :keys set)
+                  gone-keys  (set/difference old-keys new-keys)
+                  added-keys (set/difference new-keys old-keys (-> @ui-cache keys set))]
+              #_(.log js/console
+                      "old-keys" (pr-str old-keys)
+                      "new-keys" (pr-str new-keys)
+                      "gone-keys" (pr-str gone-keys)
+                      "added-keys" (pr-str added-keys))
+              (when (not= (:keys o) (:keys n))
+                (doseq [k gone-keys]
+                  (swap! priors assoc k (get-in o [:item-map k])))
+                (reset! current
+                        (with-let [frag (.createDocumentFragment js/document)]
+                          (doseq [k added-keys]
+                            (swap! ui-cache
+                                   assoc
+                                   k
+                                   (tpl
+                                    (formula-of [kindex]
+                                      (get-in kindex [:item-map k] (get @priors k)))
+                                    k)))
+                          (doseq [k (-> kindex deref :keys)]
+                            (let [v (get @ui-cache k)]
+                              (cond
+                                (nil? v)
+                                (.warn js/console
+                                       "keyed-loop-tpl*: not appending nil node"
+                                       k
+                                       v)
+
+                                (not (instance? js/Node v))
+                                (.error js/console
+                                        "keyed-loop-tpl*: trying to append non-node"
+                                        k
+                                        v)
+
+                                :else
+                                (gdom/appendChild frag v)))))))))))))
 
 (defn compute-selected-teams
   "Figure out which teams to select based on what side the player last

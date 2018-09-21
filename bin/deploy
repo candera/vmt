@@ -5,57 +5,58 @@ set -e
 
 source $(dirname $0)/common.sh
 
-if [[ -z $AWS_ACCESS_KEY_ID || -z $AWS_SECRET_ACCESS_KEY ]]
-then
-    echo "AWS credentials not set."
-    exit 1
-fi
-
 # PROJECT_VERSION=$(head -1 project.clj | grep -oE '\d+\.\d+(\.\d+)?(-SNAPSHOT)?')
 GIT_VERSION=$(git describe --tags)
 GIT_SHA=$(git rev-parse HEAD)
 
 function print_usage() {
-    cat <<EOF
+  cat <<EOF
 $(basename $0) [ --no-upload ] [ --allow-dirty ] [ --verbose | -v ] [ --help | -h ] CHANNEL
 
 EOF
 }
 
 while [[ "$1" != "" ]]; do
-    case "$1" in
-        "--no-upload")
-            UPLOAD="no"
-            ;;
-        "--allow-dirty")
-            echo "Allowing uncommitted changes in the build."
-            ALLOW_DIRTY=yes
-            GIT_SHA="${GIT_SHA}-dirty"
-            GIT_VERSION="${GIT_VERSION}-dirty"
-            ;;
-        "--verbose" | "-v")
-            set -x
-            ;;
-        "--help" | "-h")
-            print_usage
-            exit 0
-            ;;
-        *)
-            ARGS=$1
-            ;;
-    esac
-    shift
+  case "$1" in
+    "--no-upload")
+      UPLOAD="no"
+      echo "Build will not be uploaded."
+      ;;
+    "--allow-dirty")
+      echo "Allowing uncommitted changes in the build."
+      ALLOW_DIRTY=yes
+      GIT_SHA="${GIT_SHA}-dirty"
+      GIT_VERSION="${GIT_VERSION}-dirty"
+      ;;
+    "--verbose" | "-v")
+      set -x
+      ;;
+    "--help" | "-h")
+      print_usage
+      exit 0
+      ;;
+    *)
+      ARGS=$1
+      ;;
+  esac
+  shift
 done
 
 CHANNEL=$ARGS
 
 if [[ -z $CHANNEL ]]; then
-    echo "Channel not set."
-    exit 1
+  echo "Channel not set."
+  exit 1
 fi
 
 if [[ ("$ALLOW_DIRTY" != "yes") && (-n "$(git status --porcelain)") ]]; then
   echo "Project directory has uncommitted changes. Refusing to build."
+  exit 1
+fi
+
+if [[ $UPLOAD != "no" && ( -z $AWS_ACCESS_KEY_ID || -z $AWS_SECRET_ACCESS_KEY ) ]]
+then
+  echo "AWS credentials not set."
   exit 1
 fi
 
@@ -92,22 +93,24 @@ cat > $REDIRECTS <<EOF
 <title>Latest VMT Versions</title>
 </head>
 <body>
+<h1>VMT</h1>
+This is the Virtual Mission Tools download and change log page. VMT is a suite of tools for Falcon BMS. Visit <a href="http://www.440thvfw.com/vmt">the VMT home page</a> for more information.
 <h1>Download VMT ${GIT_VERSION} (the latest on the ${CHANNEL} channel)</h1>
 <ul>
 EOF
 
-for TYPE in "win32,ia32" "win32,x64" "darwin,x64"; do
-    BUILDINFO=$(mktemp)
-    PLATFORM=${TYPE%,*}
-    ARCH=${TYPE##*,}
-    echo "Packaging for platform ${PLATFORM} and arch ${ARCH}"
-    BUILD="VMT-${PLATFORM}-${ARCH}"
-    ZIPFILE="${BUILD}-${GIT_VERSION}-${CHANNEL}.zip"
-    DOWNLOAD_URL=$UPDATE_BASE/$CHANNEL/$ZIPFILE
-    LATEST=latest-${PLATFORM}-${ARCH}.txt
-    CHANGELOG_URL=${WEBSITE_BASE}/${CHANNEL}
-    echo $DOWNLOAD_URL >> $LINKS
-    cat > $BUILDINFO <<EOF
+for TYPE in "win32,ia32" "win32,x64" "darwin,x64" "linux,ia32" "linux,x64"; do
+  BUILDINFO=$(mktemp)
+  PLATFORM=${TYPE%,*}
+  ARCH=${TYPE##*,}
+  echo "Packaging for platform ${PLATFORM} and arch ${ARCH}"
+  BUILD="VMT-${PLATFORM}-${ARCH}"
+  ZIPFILE="${BUILD}-${GIT_VERSION}-${CHANNEL}.zip"
+  DOWNLOAD_URL=$UPDATE_BASE/$CHANNEL/$ZIPFILE
+  LATEST=latest-${PLATFORM}-${ARCH}.txt
+  CHANGELOG_URL=${WEBSITE_BASE}/${CHANNEL}
+  echo $DOWNLOAD_URL >> $LINKS
+  cat > $BUILDINFO <<EOF
 VERSION=${GIT_VERSION}
 PLATFORM=${PLATFORM}
 ARCH=${ARCH}
@@ -116,31 +119,34 @@ UPDATE=${UPDATE_BASE}/${CHANNEL}/${LATEST}?x-update-check-from-version=${GIT_VER
 DOWNLOAD_URL=$DOWNLOAD_URL
 CHANGELOG_URL=${CHANGELOG_URL}
 EOF
-    package $TARGETDIR $PACKAGEDIR $PLATFORM $ARCH $BUILDINFO
-    pushd $PACKAGEDIR/$BUILD
-    zip -r ../"$ZIPFILE" . -i \*
-    if [[ "${UPLOAD}" != "no" ]]
-    then
-        aws s3 cp ../"$ZIPFILE" ${S3_BUCKET_URL}/${CHANNEL}/
-        aws s3 cp ${BUILDINFO} ${S3_BUCKET_URL}/${CHANNEL}/${LATEST}
-    fi
-    popd
+  package $TARGETDIR $PACKAGEDIR $PLATFORM $ARCH $BUILDINFO
+  pushd $PACKAGEDIR/$BUILD
+  zip -r ../"$ZIPFILE" . -i \*
+  if [[ "${UPLOAD}" != "no" ]]
+  then
+    aws s3 cp ../"$ZIPFILE" ${S3_BUCKET_URL}/${CHANNEL}/
+    aws s3 cp ${BUILDINFO} ${S3_BUCKET_URL}/${CHANNEL}/${LATEST}
+  fi
+  popd
 
-    if [[ "$PLATFORM" == "darwin" ]]
-    then
-        PLATFORM_NAME="Mac OS X"
-    else
-      PLATFORM_NAME="Windows"
-    fi
+  if [[ "$PLATFORM" == "darwin" ]]
+  then
+    PLATFORM_NAME="Mac OS X"
+  elif [[ "$PLATFORM" == "linux" ]]
+  then
+    PLATFORM_NAME="Linux"
+  else
+    PLATFORM_NAME="Windows"
+  fi
 
-    if [[ "$ARCH" == "x64" ]]
-    then
-        ARCH_NAME="64 bit"
-    else
-      ARCH_NAME="32 bit"
-    fi
+  if [[ "$ARCH" == "x64" ]]
+  then
+    ARCH_NAME="64 bit"
+  else
+    ARCH_NAME="32 bit"
+  fi
 
-    cat >> ${REDIRECTS} <<EOF
+  cat >> ${REDIRECTS} <<EOF
 <li><a href="${DOWNLOAD_URL}">${PLATFORM_NAME} (${ARCH_NAME})</a></li>
 EOF
 done
@@ -156,10 +162,10 @@ EOF
 
 if [[ "${UPLOAD}" != "no" ]]
 then
-    aws s3 cp ${REDIRECTS} ${S3_BUCKET_URL}/${CHANNEL}/index.html --content-type text/html
-    echo $CHANGELOG_URL
+  aws s3 cp ${REDIRECTS} ${S3_BUCKET_URL}/${CHANNEL}/index.html --content-type text/html
+  echo $CHANGELOG_URL
 
-    cat $LINKS
+  cat $LINKS
 fi
 
 mkdir -p ~/Applications/VMT

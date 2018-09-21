@@ -58,6 +58,7 @@
             [weathergen.ui.common :as comm :refer [colors control-section
                                                    dropdown
                                                    ems
+                                                   external-link
                                                    get-image
                                                    format-time inl
                                                    map-lens
@@ -71,6 +72,7 @@
             [weathergen.ui.layers.flights]
             [weathergen.ui.layers.ground-forces]
             [weathergen.ui.layers.objectives]
+            [weathergen.ui.select :as select]
             [weathergen.ui.trees :as trees]
             [weathergen.ui.tabs :as tabs]
             [weathergen.util :as util]
@@ -309,10 +311,23 @@
                        :direction {:heading 135 :speed 20}
                        :looping? false})
 
-(def map-size (formula-of [window-size]
+;; Min width of controls column
+(def controls-min-width 575)
+
+;; Whether the titlebar is shown full size
+(def titlebar-fullsize? (comm/versioned-local-storage
+                         ::titlebar-fullsize?
+                         true))
+
+(defc= titlebar-height (if titlebar-fullsize? 64 27))
+
+;; Size of the SVG map
+(def map-size (formula-of [window-size titlebar-height]
                 (let [[window-width window-height] window-size
-                      dim (max 250 (min window-width
-                                        (- window-height 140)))]
+                      dim (max 250 (min (- window-width controls-min-width)
+                                        (-> window-height
+                                            (- titlebar-height)
+                                            (- 57))))]
                   [dim dim])))
 
 ;; These are *weather* display options
@@ -477,9 +492,12 @@
 
 (def tools-visible?
   "Whether or not the tools tab is visible"
-  (cell false))
+  ;; Used to be selectable by a key - I made it always visible.
+  (cell true))
 
 ;;; Components
+
+;; tabs: seq of maps with keys :title, :id, and :ui
 
 (def flight-paths-layer
   (weathergen.ui.layers.flights/create
@@ -1018,10 +1036,16 @@
                (reset! cloud-params (-> vmtb :weather :cloud-params))
                (reset! movement-params (-> vmtb :weather :movement-params))
                (reset! display-params (-> vmtb :weather :display-params))
-               (reset! briefing-notes (-> vmtb :briefing-notes (or "")))
-               (weathergen.ui.layers.annotations/load-briefing-data
-                annotations-layer
-                (-> vmtb :annotations))))))))))
+               (reset! briefing-notes (-> vmtb :briefing-notes (or ""))))
+              ;; Some ordering dependencies in these next two mean
+              ;; they have to happen outside the dosync. Not in love
+              ;; with that constraint...
+              (weathergen.ui.layers.annotations/load-briefing-data
+               annotations-layer
+               (-> vmtb :annotations))
+              (weathergen.ui.layers.flights/load-briefing-data
+               flight-paths-layer
+               (-> vmtb :flights)))))))))
 
 (defn save-briefing
   "Prompts the user for a path and saves a briefing file to it."
@@ -1036,7 +1060,8 @@
                                          :display-params  @display-params}
                         :visible-sides  visible-sides
                         :briefing-notes @briefing-notes
-                        :annotations    (weathergen.ui.layers.annotations/briefing-data annotations-layer)}
+                        :annotations    (weathergen.ui.layers.annotations/briefing-data annotations-layer)
+                        :flights        (weathergen.ui.layers.flights/briefing-data flight-paths-layer)}
                        encode
                        compress)
     :title        "Save a briefing file"
@@ -2724,7 +2749,7 @@
 
 ;;; User Interface
 
-(defn two-column
+#_(defn two-column
   [left right]
   (div :class "two-column"
        (div :class "left-column" left)
@@ -2813,9 +2838,9 @@
               :title "Zoom Map Out"))))))
        ;; Time indicators
        (div
-        :css {:position "absolute"
-              :right    (px 27)
-              :bottom   0}
+        :css {:display "inline-block"
+              :float   "right"
+              :margin  (px 5 32 0 0)}
         (span
          (with-help [:map :mission-time]
            "Mission Time:")
@@ -4188,12 +4213,12 @@
                                               (->> squadron
                                                    ::mission/image
                                                    (get-image mission)))
-                                       :css {:height         "20px"
-                                             :margin-left    "3px"
+                                       :css {:height         (px 20)
+                                             :margin-left    (px 3)
                                              :vertical-align "middle"})))
                                    (div
                                     :toggle expanded?
-                                    :css {:margin-left "22px"
+                                    :css {:margin-left (px 22)
                                           :font-style  "italic"
                                           :color       "gray"}
                                     (formula-of [status]
@@ -4298,7 +4323,7 @@
      (div
       (buttons/a-button
        :click #(save-briefing (-> @mission :original-briefing :install-id)
-                              (-> @mission :original-briefing :visible-sides))
+                              @visible-sides)
        "Save Briefing (.vmtb)")
       (help-icon [:mission-info :save-briefing-from-briefing]))
      (let [only-install     (formula-of [mission]
@@ -4439,6 +4464,95 @@
    (let [flight-path-display-controls (:map-display-controls-fn flight-paths-layer)]
      (flight-path-display-controls "Flight Path Display Options"))))
 
+(defn- dataize-images!
+  "Given an SVG element, recursively turn all its image sources into data URLs."
+  [elem]
+  (when (= "image" (.-tagName elem))
+    (let [href (.getAttributeNS elem "http://www.w3.org/1999/xlink" "href")]
+      (when-let [b64 (some-> href
+                             fs/file-buffer
+                             (.toString "base64"))]
+        (-> elem
+            (.setAttributeNS "http://www.w3.org/1999/xlink"
+                             "href"
+                             (str "data:image/" (fs/extension href) ";base64," b64))))))
+  (doseq [child (-> elem .-childNodes array-seq)]
+    (dataize-images! child))
+  elem)
+
+(defn- svg-png-data
+  "Given an SVG element `svg`, asynchronously return a blob (via
+  callback `cb`) of PNG data with size `w` by `h`."
+  [svg [w h] cb]
+  (let [data   (-> svg (.cloneNode true) dataize-images! .-outerHTML js/encodeURIComponent)
+        src    (str "data:image/svg+xml;utf8," data)
+        canvas (.createElement js/document "canvas")
+        ctx    (.getContext canvas "2d")
+        img    (js/Image.)]
+    (-> canvas .-width (set! w))
+    (-> canvas .-height (set! h))
+    (-> img .-onload (set! (fn []
+                             (.drawImage ctx img 0 0 w h)
+                             (.toBlob canvas cb))))
+    (-> img .-src (set! src))))
+
+
+(defn map-image-save-controls
+  "UI for saving the map as a PNG."
+  [_]
+  (control-section
+   :title (with-help [:map :save-image]
+            "Save Map Image")
+   (let [size        (cell :medium)
+         custom-size (cell 1000)]
+     (div
+      :css {:padding (px 3)}
+      (comm/radio-group
+       :value size
+       :choices [{:value :small
+                  :label "Small (250x250)"}
+                 {:value :medium
+                  :label "Medium (500x500)"}
+                 {:value :large
+                  :label "Large (1000x1000)"}
+                 {:value :x-large
+                  :label "Very Large (2000x2000)"}
+                 {:value :xx-large
+                  :label "Extremely Large (4000x4000)"}
+                 {:value :custom
+                  :label (div
+                          :css {:display "inline-block"}
+                          "Custom: "
+                          (validating-edit
+                           :css {:display "inline-block"}
+                           :conform comm/conform-positive-integer
+                           :fmt str
+                           :source custom-size
+                           :width 50
+                           :placeholder "Size in pixels")
+                          (span
+                           :css {:margin-left (px 7)}
+                           "x"
+                           (cell= (str custom-size))))}])
+      (buttons/a-button
+       :click #(let [dim (get {:small    250
+                               :medium   500
+                               :large    1000
+                               :x-large  2000
+                               :xx-large 4000
+                               :custom   @custom-size}
+                              @size)]
+                 (svg-png-data (.getElementById js/document "grid")
+                               [dim dim]
+                               (fn [data]
+                                 (comm/save-data
+                                  {:title        "Save Map Image"
+                                   :data         data
+                                   :filters      [{:name      "PNG Image"
+                                                   :extension [".png"]}]
+                                   :default-path (-> @mission :mission-name mission-name-base (str "-map.png"))}))))
+       "Save Map as PNG Image")))))
+
 (defn damage-computer-section
   [_]
   ;; TODO: Make it possible to add a column for each weapon of
@@ -4454,32 +4568,40 @@
       (inl (inl
             {:css {:margin-right (px 3)}}
             "Objective:")
-           (comm/select2
-            :css {:width (px 150)}
-            :value selected-objective
-            :choices (formula-of [mission]
-                       (for [objective (->> mission
-                                            ::mission/objectives
-                                            (sort-by ::mission/name))]
-                         {:value objective
-                          :label (::mission/name objective)}))))
+           (inl
+            (select/select3
+             :width 150
+             :data (formula-of [mission]
+                     (->> mission
+                          ::mission/objectives
+                          (sort-by ::mission/name)))
+             :value selected-objective
+             :placeholder "Select an objective"
+             :key-fn :id
+             :search-fn ::mission/name
+             :formatter (fn [objective]
+                          (div (cell= (::mission/name objective)))))))
       (inl (inl
             {:css {:margin-left  (px 7)
                    :margin-right (px 3)}}
             "Weapon:")
-           (comm/select2
-            :css {:width (px 150)}
-            :value selected-weapon
-            :choices (formula-of [mission]
-                       (for [weapon (->> mission
-                                         ::mission/weapons
-                                         (remove #(-> %
-                                                      :hit-chance
-                                                      (get c/NoMove)
-                                                      zero?))
-                                         (sort-by ::mission/name))]
-                         {:value weapon
-                          :label (::mission/name weapon)}))))
+           (inl
+            (select/select3
+             :width 150
+             :data (formula-of [mission]
+                     (->> mission
+                          ::mission/weapons
+                          (remove #(-> %
+                                       :hit-chance
+                                       (get c/NoMove)
+                                       zero?))
+                          (sort-by ::mission/name)))
+             :key-fn :index
+             :value selected-weapon
+             :placeholder "Select a weapon"
+             :search-fn ::mission/name
+             :formatter (fn [weapon]
+                          (div (cell= (::mission/name weapon)))))))
       (when-tpl selected-weapon
         (div
          (div
@@ -4744,20 +4866,34 @@
   []
   (div
    :debug "titlebar"
-   :css {:background    "black"
-         :color         "white"
-         :padding       (px 4 13)
-         :margin-bottom (px 2)
-         :height        (px 64)}
+   :css (formula-of [titlebar-fullsize?]
+          {:background    "black"
+           :color         "white"
+           :padding       (px 4 13)
+           :margin-bottom (px 2)
+           :height        (px (if titlebar-fullsize? 64 27))
+           :position      "relative"})
    (inl
     :debug "titlebar-contents"
+    (a
+     :css {:position "absolute"
+           :left     (px 5)
+           :top      (px -5)}
+     :click #(swap! titlebar-fullsize? not)
+     (comm/css-triangle
+      :rotation (cell= (if titlebar-fullsize? 0 -90))
+      :size 6
+      :color "#888"))
     (inl
      :debug "left-words"
-     :css {:margin-top (px 14)}
+     :css (formula-of [titlebar-fullsize?]
+            {:margin-top  (when titlebar-fullsize? (px 14))
+             :margin-left (when-not titlebar-fullsize? (px 7))})
      (span
       :debug "title"
-      :css {:padding-top (px 16)
-            :font-size   (pct 200)}
+      :css (formula-of [titlebar-fullsize?]
+             {:padding-top (px 16)
+              :font-size   (pct (if titlebar-fullsize? 200 125))})
       "Virtual Mission Tools")
      (span
       :debug "version"
@@ -4779,36 +4915,38 @@
                 [:a:link    {:color "white"}]
                 [:a:visited {:color "white"}]
                 [:a:hover   {:color "lightblue"}]]
-       (a :href "http://firstfighterwing.com/VFW/member.php?893-Tyrant"
-          :target "_blank"
-          "Tyrant"))))
+       (external-link
+        :href "http://www.440thvfw.com/memberlist.php?mode=viewprofile&u=52"
+        "Tyrant"))))
     (inl
      :debug "right-words"
      (styled
       :debug "helpstring"
-      :garden [[:span {:position "absolute"
-                       :right    (px 100)
-                       :top      (px 45)}]
-               [:a {:color       "white"
-                    :margin-left (ems 0.2)}]
-               [:a:visited {:color "white"}]
-               [:a:hover {:color "lightblue"} ]]
+      :garden (formula-of [titlebar-fullsize?]
+                [[:span {:position "absolute"
+                         :right    (px (if titlebar-fullsize? 100 54))
+                         :bottom   (px 7)}]
+                 [:a {:color       "white"
+                      :margin-left (ems 0.2)}]
+                 [:a:visited {:color "white"}]
+                 [:a:hover {:color "lightblue"} ]])
       (span
        "Help? Bug? Feature request? Click"
-       (a :href "https://www.benchmarksims.org/forum/showthread.php?31611-Release-Tyrant-s-Virtual-Mission-Tools-(VMT)&p=441129#post441129"
-          :target "_blank"
+       (external-link
+        :href "https://www.bmsforum.org/forum/showthread.php?31611-Release-Tyrant-s-Virtual-Mission-Tools-(VMT)&p=441129#post441129"
           "here")
        "."))
-     (a
+     (external-link
       :css {:position "absolute"
             :right    (px 20)
-            :top      (px 12)}
-      :href "http://firstfighterwing.com"
-      :target "_blank"
+            :top      (px 7)}
+      :href "http://www.440thvfw.com"
       (img
-       :css {:display "inline-block"
-             :height  (px 64)}
-       :src "images/1stVFW_Insignia-64.png"))))))
+       :css (formula-of [titlebar-fullsize?]
+              {:display "inline-block"
+               :height  (px (if titlebar-fullsize? 64 24))})
+       :title "440th Virtual Fighter Wing"
+       :src "images/440th-logo-64.png"))))))
 
 (defn- layer-controls
   "Return controls for a layer."
@@ -4840,12 +4978,52 @@
    :objectives-section         (fn [opts]
                                  (layer-controls objectives-layer))
    :map-controls-section        map-controls-section
+   :map-image-save-controls     map-image-save-controls
    :annotation-controls         (fn [opts]
                                   (layer-controls annotations-layer))
    :oob-section                 order-of-battle-section
    :acmi-controls               (fn [opts]
                                   (layer-controls acmi-layer))
    :test-section                test-section})
+
+(defmulti tab-formatter (fn [item id opts] (first id)))
+(defmulti title-formatter (fn [item id selected? opts]
+                            #_(.log js/console "Dispatching title" :id id)
+                            (first id)))
+
+;; These are the default tabs that are always there
+(defmethod tab-formatter nil
+  [item _ opts]
+  (div
+   #_(.log js/console "tab-formatter nil: item" item)
+   (for [[section options] (partition 2 (-> @item :data :sections))
+         :let           [ctor (section-ctor section)]]
+     (with-time
+       (str "Rendering " section)
+       (ctor (merge options opts ;; ::scroll-container right-column
+                    ))))))
+
+(defmethod title-formatter nil
+  [item _ _ _]
+  (-> @item :data :title))
+
+(defmethod tab-formatter :tools
+  [_ _ _]
+  (hidden-tools-tab))
+
+(defmethod title-formatter :tools
+  [_ _ _ _]
+  "Tools")
+
+(defmethod tab-formatter :flights
+  [item _ _]
+  (let [body-fn (:tab-body-fn flight-paths-layer)]
+    (body-fn (cell= (:data item)))))
+
+(defmethod title-formatter :flights
+  [item [_ id] selected? _]
+  (let [title-fn (:tab-title-fn flight-paths-layer)]
+    (title-fn (cell= (:data item)) selected?)))
 
 (defn weather-page
   "Emits an app page. `section-infos` is a seq of maps, one for each
@@ -4861,32 +5039,23 @@
      :id "app"
      (titlebar)
      (message-display)
-     (let [right-width 575 ; Min width of controls column
-           portrait?   (formula-of
-                         [map-size window-size]
-                         (let [[grid-width grid-height]     map-size
-                               [window-width window-height] window-size]
-                           (< window-width (+ grid-width right-width -10))))]
+     (let [right-width controls-min-width]
        (div
         :css (formula-of
-               {portrait?                    portrait?
+               {titlebar-height              titlebar-height
                 [window-width window-height] window-size}
                {:display        "flex"
-                :flex-direction (if portrait? "column" "row")
+                :flex-direction "row"
                 ;; These next plus the overflow/height in the columns are
                 ;; what let the two sides scroll separately
-                :overflow       (if portrait? "show" "hidden")
-                :height         (if portrait?
-                                  "100%"
-                                  (str (- window-height 90) "px"))})
+                :overflow       "hidden"
+                :height         (px (-> window-height
+                                        (- titlebar-height)
+                                        (- 26)))})
         (div
          :class "left-column"
-         :css (formula-of
-                [portrait?]
-                (if portrait?
-                  {}
-                  {:overflow "auto"
-                   :height   "auto"}))
+         :css {:overflow "auto"
+               :height   "auto"}
          (button-bar)
          (grid :display-params display-params
                :weather-data weather-data
@@ -4902,22 +5071,19 @@
         (let [right-column (div)]
           (right-column
            :class "right-column"
-           :css (formula-of
-                  [portrait?]
-                  (merge {:display       "block"
-                          :align-content "flex-start"
-                          :flex-wrap     "wrap"
-                          :flex-grow     1
-                          :min-width     (str (- right-width 20) "px")
-                          ;;  This one weird trick keeps the column from expanding
-                          ;;  past where it should. Yay CSS.
-                          :width         0}
-                         (when-not portrait?
-                           {:overflow "auto"
-                            :height   "auto"})))
+           :css {:display       "block"
+                 :align-content "flex-start"
+                 :flex-wrap     "wrap"
+                 :flex-grow     1
+                 :min-width     (str (- right-width 20) "px")
+                 ;;  This one weird trick keeps the column from expanding
+                 ;;  past where it should. Yay CSS.
+                 :width         0
+                 :overflow      "auto"
+                 :height        "auto"}
            (let [first-tab    (-> section-infos first :id)
-                 selected-tab (cell first-tab)]
-             (.addEventListener js/document
+                 selected-tab (cell [nil first-tab])]
+             #_(.addEventListener js/document
                                 "keydown"
                                 (fn [event]
                                   (when (and (= (.-code event) "KeyT")
@@ -4928,23 +5094,31 @@
                                      (swap! tools-visible? not)
                                      (reset! selected-tab
                                              (if @tools-visible?
-                                               :tools-tab
-                                               first-tab))))))
-             (tabs/tabs
-              :selected selected-tab
-              :tabs (concat
-                     (for [{:keys [title id sections]} section-infos]
-                       {:title title
-                        :id    id
-                        :ui    (for [[section opts] (partition 2 sections)
-                                     :let           [ctor (section-ctor section)]]
-                                 (with-time
-                                   (str "Rendering " section)
-                                   (ctor (assoc opts ::scroll-container right-column))))})
-                     [{:title   "Tools"
-                       :id      :tools-tab
-                       :ui      (hidden-tools-tab)
-                       :hidden? (cell= (not tools-visible?))}]))))))))
+                                               [:tools :tools]
+                                               [nil first-tab]))))))
+             (let [flight-tabs (:tabs flight-paths-layer)]
+               (tabs/tabs2
+                :tab-background "#FDFFD9"
+                :value selected-tab
+                :data (formula-of [tools-visible? flight-tabs]
+                        (let [[before [flight & after]] (split-with #(not= :flights (:id %)) section-infos)]
+                          (concat
+                           (for [{:keys [id] :as data} (concat before [flight])]
+                             {:id   [nil id]
+                              :data data})
+                           (for [{:keys [id] :as data} flight-tabs]
+                             {:id   [:flights id]
+                              :data data})
+                           (for [{:keys [id] :as data} after]
+                             {:id   [nil id]
+                              :data data})
+                           (when tools-visible?
+                             [{:id [:tools :tools]}]))))
+                :key-fn :id
+                :formatter (fn [item id]
+                             (tab-formatter item id {::scroll-container right-column}))
+                :title-formatter (fn [item id selected?]
+                                   (title-formatter item id selected? {::scroll-container right-column}))))))))))
     (debug-info))))
 
 #_(with-init!
@@ -4958,13 +5132,16 @@
         (async/<! (async/timeout 500))
         (recur)))))
 
-#_(defmethod hoplon.core/on! :hoplon.core/default
+(defn- on*
+  "Handles registering events on nodes when they are inserted into the DOM."
   [elem event callback]
-  (when-dom elem #(do
-                    (.log js/console "Executing default on! method"
-                           "elem" elem "event" event "callback" callback)
-                    (.on (js/jQuery elem) (name event) callback))))
+  (comm/when-dom* elem #(.on (js/jQuery elem) (name event) callback)))
 
-#_(defmethod hoplon.core/do! :hoplon.core/default
-  [elem key val]
-  (hoplonc.core/do! elem :attr {key val}))
+(defmethod hoplon.core/on! :hoplon.core/default
+  [elem event callback]
+  (on* elem event callback))
+
+(defmethod hoplon.core/on! :html/*
+  [elem event callback]
+  (on* elem event callback))
+

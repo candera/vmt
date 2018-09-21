@@ -1413,6 +1413,7 @@
                                ::squadron {:name (if-not squadron
                                                    "Unknown"
                                                    (unit-name mission squadron))}
+                               ::squadron-image (when squadron (squadron-image mission squadron))
                                ::airbase {:name (if-not squadron
                                                   "Unknown"
                                                   (->> squadron

@@ -235,7 +235,12 @@
            :padding   (px 0 5)}
      (for [[type-class types] objective-type-filters]
        (div
-        :css {:margin-right (px 20)}
+        :css {:margin       (px 0 5 5 0)
+              :border-color "black"
+              :border-width (px 4)
+              :border-style "double"
+              :min-width    (px 150)
+              :padding      (px 0 5 5 0)}
         (comm/checkbox
          :value (formula-of [type-visibility]
                   (let [members (get objective-type-filters type-class)]

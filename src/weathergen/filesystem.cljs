@@ -83,6 +83,11 @@
          (let [e (path/extname b)]
            (subs b 0 (- (count b) (count e)))))))))
 
+(defn extension
+  "Given a path, return the file extension without the leading dot."
+  [path]
+  (subs (path/extname path) 1))
+
 (defn file-buf
   "Returns a DataView wrappingx the contents of the file at `path`."
   [path]
