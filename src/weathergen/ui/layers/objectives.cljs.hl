@@ -166,27 +166,6 @@
    "War Production" #{c/TYPE_POWERPLANT c/TYPE_CHEMICAL c/TYPE_FACTORY c/TYPE_NUCLEAR c/TYPE_REFINERY}
    "Other"          #{c/TYPE_BEACH c/TYPE_FORD c/TYPE_HILL_TOP c/TYPE_PASS c/TYPE_ROAD c/TYPE_SEA c/TYPE_BORDER}})
 
-(defn- centered-image
-  "Renders an objective image centered in width and height."
-  [mission objective width]
-  (let [image (cell= (::mission/image objective))]
-    (inl
-     :css {:width          (px width)
-           :height         (px width)
-           :margin-right   (px 3)
-           :vertical-align "middle"
-           :text-align     "center"
-           :position       "relative"}
-     (when-tpl image
-       (img
-        :css {:position "absolute"
-              :top      0
-              :bottom   0
-              :left     0
-              :right    0
-              :margin   "auto"}
-        :src (cell= (comm/get-image mission image)))))))
-
 (defn- team-flag
   "Renders an img with the team flag."
   [mission objective]
@@ -244,7 +223,7 @@
               :border-color "black"
               :border-width (px 4)
               :border-style "double"
-              :min-width    (px 150)
+              :min-width    (px 135)
               :padding      (px 0 5 5 0)}
         (comm/checkbox
          :value (formula-of [type-visibility]
@@ -307,7 +286,7 @@
                        ;; (.log js/console :id (-> choice :value :id))
                        (div
                         :css {:position "relative"}
-                        (centered-image mission objective 25)
+                        (comm/centered-image mission (::mission/image objective) (px 25))
                         (team-flag mission objective)
                         (span (cell= (::mission/name objective)))
                         (span
@@ -377,7 +356,7 @@
                         (comm/checkbox
                          :change #(swap! points-of-interest update-in [@id ::checked?] not)
                          :value (path-lens objective [::checked?]))
-                        (centered-image mission objective 25))))}
+                        (comm/centered-image mission (::mission/image objective) (px 25)))))}
        :name  {:title     "Name"
                :sort-key  ::mission/name
                :formatter (fn [item]
