@@ -93,7 +93,12 @@
                                 (comm/svg-translate x y)
                                 (comm/svg-scale (/ map-icon-scale 20)))))
                 (svg/g
-                 :svg/class (comm/class-for antizoom-key)
+                 :svg/class (formula-of [highlighted objective]
+                              (str
+                               (when (= highlighted objective)
+                                 comm/pulse-class)
+                               " "
+                               (comm/class-for antizoom-key)))
                  (if-tpl src
                    (svg/image
                     :xlink-href src
@@ -273,6 +278,7 @@
    (control-section
     :title (with-help [:objectives :points-of-interest]
              "Points of Interest")
+    (pre-cell "highlighted" (cell= (::mission/name highlighted)))
     (div
      :css {:padding (px 0 5)}
      (let [obj               (cell nil)
@@ -338,7 +344,13 @@
      (grids/table-grid
       :data points-of-interest
       :key-fn key
-      :row-attrs (fn [objective rownum] {})
+      :row-attrs (fn [objective-kv rownum]
+                   {:mouseenter (fn [e]
+                                  (.debug js/console "objective row mouseenter" @objective-kv)
+                                  (reset! highlighted (dissoc ::checked? (second @objective-kv))))
+                    :mouseleave (fn [e]
+                                  (.debug js/console "objective row mouseleave")
+                                  (reset! highlighted nil))})
       :when-empty (div "No points of interest selected. Use the dropdown above to add.")
       :fixed-columns [:delete :checked]
       :hidden-columns (cell #{})
