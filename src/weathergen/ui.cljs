@@ -4567,10 +4567,13 @@
              :data (formula-of [mission]
                      (->> mission
                           ::mission/weapons
-                          (remove #(-> %
-                                       :hit-chance
-                                       (get c/NoMove)
-                                       zero?))
+                          (filter (fn [weapon]
+                                    (let [swd    (::mission/sim-weapon-data weapon)
+                                          class  (:sms-weapon-class swd)
+                                          domain (:sms-weapon-domain swd)]
+                                      (not (zero? (bit-and c/wdGround domain)))
+                                      #_(and (not (zero? (bit-and c/wdGround domain)))
+                                           (#{c/wcRocketWpn c/wcBombWpn c/wcAgmWpn c/wcGbuWpn} class)))))
                           (sort-by ::mission/name)))
              :key-fn :index
              :value selected-weapon
@@ -4620,12 +4623,12 @@
            :columns
            {:index         (col "#" :index)
             :feature-name  (col "Name" :feature-name)
-            :feature-value {:title "Value"
+            :feature-value {:title     "Value"
                             ;; Disambiguate ties through the index
-                            :sort-key (fn [item]
-                                        [(:feature-value item)
-                                         (- (:index item))])
-                            #_(juxt :feature-value :index)
+                            :sort-key  (fn [item]
+                                         [(:feature-value item)
+                                          (- (:index item))])
+                            #_         (juxt :feature-value :index)
                             :formatter (fn [item _]
                                          (formula-of [item _]
                                            (let [value (:feature-value item)]
@@ -4647,7 +4650,7 @@
                                                (js/isNaN req)          ""
                                                (not (js/isFinite req)) "∞"
                                                :else
-                                               (let [fuzz 0.25
+                                               (let [fuzz  0.25
                                                      lower (Math/ceil (max 1 (* req (- 1.0 fuzz))))
                                                      upper (Math/ceil (max 1 (* req (+ 1.0 fuzz))))]
                                                  (if (= lower upper)

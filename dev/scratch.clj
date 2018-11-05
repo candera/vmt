@@ -3239,3 +3239,50 @@ type: 0x64 -> image
               :offset (str (.getOffset zone-rules t))}))
       (take 15)
       pprint))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; How to tell if a weapon is air-to-ground
+
+(->> @smpu
+     :weapon-class-data
+     rand-nth
+     pprint)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Load the sim weapon data table
+;;
+
+(-> @smpu
+     :sim-weapon-data
+     (nth 395)
+     pprint)
+
+(-> @smpu
+     ::mission/weapons
+     ;;rand-nth
+     (nth 184)
+     pprint)
+
+(-> @smpu
+    :class-table
+    (nth 516) ; :index from 
+    pprint)
+
+(->> @smpu
+     :sim-weapon-data
+     ())
+
+(->> @smpu
+     ::mission/weapons
+     (map #(assoc % :sim-weapon-data
+                  (-> %
+                      :index
+                      (->> (nth (:class-table @smpu)))
+                      :vehicle-data-index
+                      (->> (nth (:sim-weapon-data @smpu))))))
+     (#(nth % 184))
+     (pprint))
+
+

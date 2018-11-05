@@ -3089,3 +3089,39 @@
   (def FEAT_NEXT_CRIT 0x02)
   (def FEAT_PREV_NORM 0x04)
   (def FEAT_NEXT_NORM 0x08))
+
+(with-file "hardpnt.h"
+  (defenum WeaponType
+    wtGuns,
+    wtAim9,
+    wtAim120,
+    wtAgm88,
+    wtAgm65,
+    wtMk82,
+    wtMk84,
+    wtGBU,
+    wtSAM,
+    wtLAU,
+    wtFixed,
+    wtNone,
+    wtGPS)
+
+  (defenum WeaponClass
+    wcAimWpn,
+    wcRocketWpn,
+    wcBombWpn,
+    wcGunWpn,
+    wcECM,
+    wcTank,
+    wcAgmWpn,
+    wcHARMWpn,
+    wcSamWpn,
+    wcGbuWpn,
+    wcCamera,
+    wcNoWpn)
+
+  (defenum WeaponDomain
+    wdAir = 0x1,
+    wdGround = 0x2,
+    wdBoth = 0x3,
+    wdNoDomain = 0))

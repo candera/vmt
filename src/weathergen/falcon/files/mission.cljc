@@ -88,6 +88,15 @@
     (-> weapon-class-data
         (nth id))))
 
+(defn- sim-weapon-data-entry
+  "Returns the sim weapon data record for a given weapon."
+  [mission weapon]
+  (as-> weapon ?
+      (:index ?)
+    (nth (:class-table mission) ?)
+    (:vehicle-data-index ?)
+    (nth (:sim-weapon-data mission) ?)))
+
 (defn active-units
   "Return a seq of the units in `mission` that are not inactive."
   [mission]
@@ -528,6 +537,20 @@
             :next-header buf/int16 ; Index of next header, if any
             ))
 
+(def sim-weapon-data
+  (buf/spec :flags             buf/int32
+            :drag-coefficient  buf/float
+            :weight            buf/float
+            :surface-area      buf/float
+            :ejection-velocity (buf/spec :x buf/float
+                                         :y buf/float
+                                         :z buf/float)
+            :sms-mnemonic      (fixed-string 8)
+            :sms-weapon-class  buf/int32
+            :sms-weapon-domain buf/int32
+            :sms-weapon-type   buf/int32
+            :data-index        buf/int32))
+
 (defn extension
   [file-name]
   (let [i (str/last-index-of file-name ".")]
@@ -762,7 +785,8 @@
                             ["FALCON4.WCD" :weapon-class-data weapon-class-data]
                             ["FALCON4.FCD" :feature-class-data feature-class-data]
                             ["falcon4.fed" :feature-entry-data feature-entry-data]
-                            ["FALCON4.PHD" :point-header-data point-header-data]]]
+                            ["FALCON4.PHD" :point-header-data point-header-data]
+                            ["FALCON4.SWD" :sim-weapon-data sim-weapon-data]]]
          (let [path (fs/path-combine
                      (object-dir installation theater)
                      file)
@@ -1601,8 +1625,8 @@
       (->> mission
            :weapon-class-data
            (mapv #(assoc %
-                         ::name (:name %)))))))
-
+                         ::name (:name %)
+                         ::sim-weapon-data (sim-weapon-data-entry mission %)))))))
 
 (defn- report-airbases-with-invalid-owner
   "Throw an error if an airbase has an invalid owner."
