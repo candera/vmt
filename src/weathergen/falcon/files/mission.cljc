@@ -1,5 +1,6 @@
 (ns weathergen.falcon.files.mission
   (:require [clojure.pprint]
+            [clojure.spec.alpha :as s]
             [clojure.set :as set]
             [clojure.string :as str]
             [octet.core :as buf]
@@ -18,6 +19,767 @@
             [weathergen.progress :as progress]
             [weathergen.time :as time]
             [weathergen.util :as util :refer [format-list has-flag?]]))
+
+;;; Specs
+
+(def Todo (constantly true))
+(def NonNegativeInt (s/and integer? #(<= 0 %)))
+(def Path string?)
+(def Dir string?)
+(def NotImplemented #{:not-yet-implemented})
+
+(def VuId
+  (s/keys :req-un [:int/name ::creator]))
+
+(def Vector3 (s/keys :req-un [::x ::y ::z]))
+
+(def CampaignTime
+  (s/keys :req-un [::day ::hour ::minute ::second ::millisecond]))
+
+;; TODO: Maybe put into images.cljc
+(def ImageDescriptor
+  (s/keys :req-un [::art-dir
+                   ::base
+                   ::idx-modified
+                   ::idx-size
+                   ::image-data
+                   ::image-id
+                   ::resource
+                   ::rsc-modified
+                   ::rsc-size]))
+
+(def ImageData
+  (s/keys :req-un [::type
+                   ::im/id
+                   ::flags
+                   ::center
+                   ::size
+                   ::image-offset
+                   ::palette-size
+                   ::palette-offset]))
+
+(def CampaignBaseFields
+  (s/keys :req-un [::base-flags
+                   ::camp-id
+                   ::entity-type
+                   ::id
+                   ::owner
+                   ::spot-time
+                   ::spotted
+                   ::x
+                   ::y
+                   ::z]))
+
+(def Objective
+  (s/merge CampaignBaseFields
+           (s/keys :req-un [::f-status
+                            ::first-owner
+                            ::fuel
+                            ::last-repair
+                            ::links
+                            ::losses
+                            ::name-id
+                            ::obj-flags
+                            ::parent
+                            ::priority
+                            ::radar-data
+                            ::supply])))
+
+(def Airbase
+  (s/merge Objective
+           (s/keys :req [::squadrons])))
+
+(def Haves
+  (s/coll-of (s/or :integer integer? :keyword keyword?)
+             :kind set?))
+
+(def InstallName string?)
+(def Installs (s/map-of InstallName Path))
+
+(def ObjectiveLink
+  (s/keys :req-un [::costs
+                   :map/id]))
+
+(def StringsData
+  (s/keys :req-un [::objective-type-names
+                   ::mission-type-names
+                   ::waypoint-type-names
+                   ::air-stype-names
+                   ::ground-stype-names
+                   ::naval-stype-names
+                   ::country-names
+                   ::time-compression-names
+                   ::camera-label-names
+                   ::unit-name-format]))
+
+;; TODO: Required/optional not correct
+(def Theater (s/keys :req-un [::path
+                              ::bitmap
+                              ::desc
+                              ::name
+                              ::art-dir
+                              ::campaign-dir]
+                     :opt-un [::sim-data-dir
+                              ::terrain-dir
+                              ::misc-text-dir
+                              ::sound-dir
+                              ::mintacan
+                              ::doubleres2dmap
+                              ::magneticdeclination
+                              ::3d-data-dir
+                              ::object-dir]))
+
+(def Installation
+  (s/keys :req-un [::install-dir
+                   ::data-dir
+                   ::object-dir
+                   ::art-dir
+                   ::theaters]))
+
+(def ClassInfo
+  (s/keys :req-un [::domain
+                   ::class
+                   ::type
+                   ::stype
+                   ::sptype
+                   ::owner]))
+
+;; I'm not really sure where this version of "class info" comes from,
+;; just that it's different than the other one.
+(def ClassInfo2
+  (s/keys :req-un [::data-pointer
+                   ::data-type
+                   ::vehicle-data-index
+                   ::vis-type
+                   ::vu-class-data]
+          :req [::index
+                ::feature-class-info]))
+
+(def VuEntityFields
+  (s/keys :req-un [:int/id
+                   ::collision-type
+                   ::collision-radius
+                   ::class-info
+                   ::update-rate
+                   ::update-tolerance
+                   ::fine-update-range
+                   ::fine-update-force-range
+                   ::fine-update-multiplier
+                   ::damage-speed
+                   ::hitpoints
+                   ::major-revision-number
+                   ::minor-revision-number
+                   ::create-priority
+                   ::management-domain
+                   ::transferable
+                   ::private
+                   ::tangible
+                   ::collidable
+                   ::global
+                   ::persistent]))
+
+(def Falcon4EntityFields
+  (s/keys :req-un [::vu-class-data
+                   ::vis-type
+                   ::vehicle-data-index
+                   ::data-type
+                   ::data-pointer]))
+
+
+(def UnitClassData
+  (s/keys ::req-un [::index
+                    ::num-elements
+                    ::vehicle-type
+                    ::vehicle-class
+                    ::flags
+                    ::name
+                    ::movement
+                    ::movement
+                    ::max
+                    ::fuel
+                    ::rate
+                    ::pt
+                    ::scores
+                    ::role
+                    ::hit
+                    ::strength
+                    ::range
+                    ::detection
+                    ::damage
+                    ::radar
+                    ::special
+                    ::icon]))
+
+
+(def ObjectiveClassData
+  (s/keys :req-un [::index
+                   ::name
+                   ::data-rate
+                   ::deag-distance
+                   ::pt-data-index
+                   ::detection
+                   ::damage-mod
+                   ;; ::mystery
+                   ::icon-index
+                   :raw/features
+                   ::radar-feature
+                   ::first-feature]))
+
+
+(def VehicleClassData
+  (s/keys :req-un [::index
+                   ::hit-points
+                   ::flags
+                   ::name
+                   ::nctr
+                   ::rcs-factor
+                   ::max-wt
+                   ::empty-wt
+                   ::fuel-wt
+                   ::fuel-econ
+                   ::engine-sound
+                   ::high-alt
+                   ::low-alt
+                   ::cruise-alt
+                   ::max-speed
+                   ::radar-type
+                   ::number-of-pilots
+                   ::rack-flags
+                   ::visible-flags
+                   ::callsign-index
+                   ::callsign-slots
+                   ::hit-chance
+                   ::strength
+                   ::range
+                   ::detection
+                   ::weapon
+                   :vehicle/weapons
+                   ::damage-mod]))
+
+(def WeaponClassData
+  (s/keys :req-un [::blast-radius
+                   ::collective
+                   ::damage-type
+                   ::drag-index
+                   ::fire-rate
+                   ::flags
+                   ::guidance-flags
+                   ::hit-chance
+                   ::max-alt
+                   ::name
+                   ::radar-type
+                   ::range
+                   ::rariety
+                   ::sim-data-idx
+                   ::simweap-index
+                   ::strength
+                   ::weight]
+          :req [::index]))
+
+(def Weapon
+  (s/merge WeaponClassData
+           (s/keys :req [::name])))
+
+(def FeatureClassData
+  (s/keys :req-un [::repair-time
+                   ::priority
+                   ::flags
+                   ::name
+                   ::hit-points
+                   ::height
+                   ::angle
+                   ::radar-type
+                   ::detection
+                   ::damage-mod]))
+
+(def FeatureEntryData
+  (s/keys :req-un [::index
+                   ::flags
+                   ::entity-class
+                   ::value
+                   ::offset
+                   ::facing]))
+
+(def PointHeaderData
+  (s/keys :req-un [::obj-id
+                   ::type
+                   ::count
+                   :raw/features
+                   ::data
+                   ::sin-heading
+                   ::cos-heading
+                   ::first
+                   ::tex-idx
+                   ::runway-num
+                   ::ltrt
+                   ::next-header]))
+
+(def IdList
+  (s/keys :req-un [::id->name
+                   ::name->id]))
+
+
+(def InitialDatabase
+  (s/keys :req-un [::class-table
+                   ::unit-class-data
+                   ::objective-class-data
+                   ::vehicle-class-data
+                   ::weapon-class-data
+                   ::feature-class-data
+                   ::feature-entry-data
+                   ::point-header-data
+                   ::image-ids
+                   ::user-ids]))
+
+(def Database
+  (s/merge InitialDatabase
+           (s/keys :req-un [::strings])))
+
+(def CampaignInfo Todo)
+(def Objectives (s/coll-of Objective))
+(def ObjectiveDelta
+  (s/keys :req-un [::f-status
+                   ::fuel
+                   :vu/id
+                   ::last-repair
+                   ::losses
+                   ::owner
+                   ::supply]))
+(def Units Todo)
+(def Teams Todo)
+(def Events NotImplemented)
+(def PrimaryObjectives Todo)
+(def Pilots Todo)
+(def PersistentObjects Todo)
+(def Weather Todo)
+(def Version Todo)
+(def VictoryConditions Todo)
+
+(def EmbeddedFileEntry Todo)
+
+(def Buffer bytes?)
+
+(def AugmentedObjective
+  (s/merge Objective
+           (s/keys :req [::location
+                         ::status
+                         ::image
+                         ::name
+                         ::features])))
+
+(def Unit
+  (s/merge CampaignBaseFields
+           (s/keys :req-un [::cargo-id
+                            ::current-wp
+                            ::destination-x
+                            ::destination-y
+                            ::last-check
+                            ::losses
+                            ::moved
+                            ::name-id
+                            ::reinforcement
+                            ::roster
+                            ::tactic
+                            ::target-id
+                            ::unit-flags
+                            ::waypoints])))
+
+(def UnitFlags
+  (s/coll-of (s/or :integer integer? :keyword keyword?)
+             :kind set?))
+
+(def Squadron
+  (s/merge Unit
+           (s/keys :req [::aircraft
+                         ::squadron-type
+                         ::image])))
+
+
+(def Waypoint
+  (s/keys :req-un [::action
+                   ::flags
+                   ::formation
+                   ::grid-x
+                   ::grid-y
+                   ::haves
+                   ::target-building
+                   ::target-id]
+          :opt-un [::arrive
+                   ::depart]))
+
+(def Flight
+  (s/merge Unit
+           (s/keys :req [::airbase
+                         ::aircraft
+                         ::loadouts
+                         ::mission
+                         ::package
+                         ::squadron
+                         ::squadron-image
+                         ::waypoints])))
+
+(def Carrier
+  (s/merge Unit
+           (s/keys :req [::location
+                         ::status
+                         ::squadrons
+                         ::image
+                         ::name])))
+
+(def ArmyBase
+  (s/merge AugmentedObjective
+           (s/keys :req-un [::base-flags
+                            ::camp-id
+                            ::entity-type
+                            ::f-status
+                            ::first-owner
+                            ::fuel
+                            :map/id
+                            ::last-repair
+                            ::links
+                            ::losses
+                            ::name-id
+                            ::obj-flags
+                            ::objective-type
+                            ::owner
+                            ::parent
+                            ::priority
+                            ::radar-data
+                            ::spot-time
+                            ::spotted
+                            ::supply
+                            ::x
+                            ::y
+                            ::z]
+                   :req [::features
+                         ::image
+                         ::location
+                         ::name
+                         ::squadrons
+                         ::status])))
+
+(def AugmentedFeature
+  (s/keys :req-un [::entity-class
+                   ::facing
+                   ::flags
+                   ::index
+                   ::offset
+                   ::value]
+          :req [::class-info
+                ::index
+                ::status]))
+
+(def PrePlannedThreat
+  (s/keys :req-un [:ppt/id
+                   ::radius-ft
+                   ::description]))
+
+(def ScenarioFiles
+  (s/keys :req-un [::campaign-info
+                   ::persistent-objects
+                   ::events
+                   ::teams
+                   ::objective-deltas
+                   :raw/objectives
+                   ::victory-conditions
+                   ::weather
+                   ::units
+                   ::version
+                   ::pilots]))
+
+(def Mission
+  (s/keys :req-un [::campaign-info
+                   ::candidate-installs
+                   ::class-table
+                   ::events
+                   ::feature-class-data
+                   ::feature-entry-data
+                   ::image-ids
+                   ::installation
+                   ::installs
+                   ::map-image
+                   ::mission-name
+                   ::names
+                   ::objective-class-data
+                   ::objective-deltas
+                   :raw/objectives
+                   ::path
+                   ::persistent-objects
+                   ::pilots
+                   ::point-header-data
+                   ::ppt-data
+                   ::primary-objectives
+                   ::scenario-files
+                   ::strings
+                   ::teams
+                   ::theater
+                   ::unit-class-data
+                   ::units
+                   ::user-ids
+                   ::vehicle-class-data
+                   ::version
+                   ::weapon-class-data]
+          :req [::airbases
+                ::army-bases
+                ::carriers
+                ::flights
+                ::objectives
+                ::squadrons
+                ::weapons]))
+
+;; Lots of the keywords get used in more than one context with more
+;; than one specification, hence the or's below. I could consider
+;; using more than one namespace instead.
+(s/def ::3d-data-dir Dir)
+(s/def ::action integer?)
+(s/def ::airbase
+  (s/keys :req-un [::name]))
+(s/def ::airbases (s/coll-of Airbase))
+(s/def ::angle number?)
+(s/def ::arrive CampaignTime)
+(s/def ::army-bases (s/coll-of ArmyBase))
+(s/def ::art-dir Dir)
+(s/def ::base Path)
+(s/def ::base-flags integer?)
+(s/def ::bitmap Path)
+(s/def ::blast-radius integer?)
+(s/def ::callsign-index integer?)
+(s/def ::callsign-slots integer?)
+(s/def ::camp-id integer?)
+(s/def ::campaign-info CampaignInfo)
+(s/def ::campaign-dir Dir)
+(s/def ::candidate-installs Installs)
+(s/def ::cargo-id VuId)
+(s/def ::carriers (s/coll-of Carrier))
+(s/def ::center (s/coll-of integer? :count 2))
+(s/def ::class integer?)
+(s/def ::class-table (s/coll-of Falcon4EntityFields))
+(s/def ::class-info (s/or :class-info ClassInfo :class-info-2 ClassInfo2))
+(s/def ::collective integer?)
+(s/def ::collidable integer?)
+(s/def ::collision-radius number?)
+(s/def ::collision-type integer?)
+(s/def ::cos-heading number?)
+(s/def ::costs (s/coll-of integer? :count c/MOVEMENT_TYPES))
+(s/def ::count integer?)
+(s/def ::create-priority integer?)
+(s/def ::creator integer?)
+(s/def ::cruise-alt integer?)
+(s/def ::current-wp integer?)
+(s/def ::damage-mod (s/or :multiple (s/coll-of integer? :count (inc c/OtherDam)) :singular integer?))
+(s/def ::damage-speed integer?)
+(s/def ::damage-type integer?)
+(s/def ::data integer?)
+(s/def ::data-dir Dir)
+(s/def ::data-pointer integer?)
+(s/def ::data-rate integer?)
+(s/def ::data-type integer?)
+(s/def ::day integer?)
+(s/def ::deag-distance integer?)
+(s/def ::desc string?)
+(s/def ::depart CampaignTime)
+(s/def ::description string?)
+(s/def ::destination-x integer?)
+(s/def ::destination-y integer?)
+(s/def ::detect-ratio (s/coll-of number? :count c/NUM_RADAR_ARCS))
+(s/def ::detection (s/or :multiple (s/coll-of integer? :count c/MOVEMENT_TYPES) :singular integer?))
+(s/def ::domain integer?)
+(s/def ::doubleres2dmap Todo)
+(s/def ::drag-index integer?)
+(s/def ::empty-wt integer?)
+(s/def ::engine-sound integer?)
+(s/def ::entity-class (s/coll-of integer? :count 8))
+(s/def ::entity-type integer?)
+(s/def ::events Events)
+(s/def ::f-status (s/coll-of integer?))
+(s/def ::facing integer?)
+(s/def :raw/features (s/or :single integer? :multiple (s/coll-of integer? :count c/MAX_FEAT_DEPEND)))
+(s/def ::features (s/coll-of AugmentedFeature))
+(s/def ::feature-class-data (s/coll-of FeatureClassData))
+(s/def ::feature-entry-data (s/coll-of FeatureEntryData))
+(s/def ::fine-update-force-range number?)
+(s/def ::fine-update-multiplier number?)
+(s/def ::fine-update-range number?)
+(s/def ::fire-rate integer?)
+(s/def ::first integer?)
+(s/def ::first-feature integer?)
+(s/def ::first-owner integer?)
+(s/def ::flags (s/or :integer integer? :set (s/coll-of (s/or :keyword keyword? :integer integer?) :kind set?)))
+(s/def ::flights (s/coll-of Flight))
+(s/def ::formation integer?)
+(s/def ::fuel integer?)
+(s/def ::fuel-econ integer?)
+(s/def ::fuel-wt integer?)
+(s/def ::global integer?)
+(s/def ::grid-x integer?)
+(s/def ::grid-y integer?)
+(s/def ::guidance-flags integer?)
+(s/def ::has-radar-data integer?)
+(s/def ::haves Haves)
+(s/def ::height integer?)
+(s/def ::high-alt integer?)
+(s/def ::hit-chance (s/or :multiple (s/coll-of integer? :count c/MOVEMENT_TYPES) :singular integer?))
+(s/def ::hit-points integer?) ;; Similar to ::hitpoints
+(s/def ::hitpoints integer?)  ;; Similar to ::hit-points
+(s/def ::hour integer?)
+(s/def ::icon-index integer?)
+(s/def ::id->name (s/map-of integer? string?))
+(s/def ::idx-modified integer?)
+(s/def ::idx-size integer?)
+(s/def ::im/id string?)
+(s/def :ppt/id string?)
+(s/def :int/id integer?)
+(s/def :vu/id VuId)
+(s/def ::image-id string?)
+(s/def ::image-data ImageData)
+(s/def ::image (s/nilable ImageDescriptor))
+(s/def ::image-offset integer?)
+(s/def ::image-ids IdList)
+(s/def ::index NonNegativeInt)
+(s/def ::installation Installation)
+(s/def ::installs Installs)
+(s/def ::install-dir Dir)
+(s/def ::last-check CampaignTime)
+(s/def ::last-repair CampaignTime)
+(s/def ::links (s/coll-of ObjectiveLink))
+(s/def ::location (s/keys :req-un [::x ::y]))
+(s/def ::losses integer?)
+(s/def ::low-alt integer?)
+(s/def ::ltrt integer?)
+(s/def ::magneticdeclination Todo)
+(s/def ::major-revision-number integer?)
+(s/def ::management-domain integer?)
+(s/def ::map-image ImageDescriptor)
+(s/def ::max-alt integer?)
+(s/def ::max-range integer?)
+(s/def ::max-speed integer?)
+(s/def ::max-wt integer?)
+(s/def ::millisecond integer?)
+(s/def ::minor-revision-number integer?)
+(s/def ::minute integer?)
+(s/def ::mintacan Todo)
+(s/def ::misc-text-dir Dir)
+(s/def ::mission
+  (s/keys :req-un [::name
+                   ::category]))
+(s/def ::mission-name string?)
+(s/def ::moved integer?)
+(s/def ::movement-speed integer?)
+(s/def ::movement-type integer?)
+(s/def ::name string?)
+(s/def ::names (s/fspec :args (s/cat :idx NonNegativeInt)
+                        :ret (s/nilable string?)))
+(s/def :int/name integer?)
+(s/def ::name->id (s/map-of string? integer?))
+(s/def ::name-id integer?)
+(s/def ::nctr string?)
+(s/def ::next-header integer?)
+(s/def ::num-elements (s/coll-of integer? :count c/VEHICLE_GROUPS_PER_UNIT))
+(s/def ::number-of-pilots integer?)
+(s/def ::obj-flags integer?)
+(s/def ::obj-id integer?)
+(s/def ::object-dir Dir)
+(s/def ::objective-deltas (s/coll-of ObjectiveDelta))
+(s/def ::objective-class-data (s/coll-of ObjectiveClassData))
+(s/def ::objective-type integer?)
+(s/def :raw/objectives (s/coll-of Objective))
+(s/def ::objectives (s/coll-of AugmentedObjective))
+(s/def ::offset Vector3)
+(s/def ::owner integer?)
+(s/def ::package
+  (s/keys :req-un [::name]))
+(s/def ::palette-offset integer?)
+(s/def ::palette-size integer?)
+(s/def ::parent VuId)
+(s/def ::path Path)
+(s/def ::persistent integer?)
+(s/def ::persistent-objects PersistentObjects)
+(s/def ::pilots Pilots)
+(s/def ::point-header-data (s/coll-of PointHeaderData))
+(s/def ::ppt-data (s/coll-of PrePlannedThreat))
+(s/def ::primary-objectives PrimaryObjectives)
+(s/def ::priority integer?)
+(s/def ::private integer?)
+(s/def ::pt-data-index integer?)
+(s/def ::rack-flags integer?)
+(s/def ::radar-data (s/keys :req-un [::has-radar-data] :opt-un [::detect-ratio]))
+(s/def ::radar-feature integer?)
+(s/def ::radar-type integer?)
+(s/def ::radar-vehicle integer?)
+(s/def ::radius-ft number?)
+(s/def ::range (s/or :multiple (s/coll-of integer? :count c/MOVEMENT_TYPES) :singular integer?))
+(s/def ::rariety integer?)
+(s/def ::rate integer?)
+(s/def ::rcs-factor number?)
+(s/def ::reinforcement integer?)
+(s/def ::repair-time integer?)
+(s/def ::resource string?)
+(s/def ::role integer?)
+(s/def ::roster integer?)
+(s/def ::rsc-modified integer?)
+(s/def ::rsc-size integer?)
+(s/def ::runway-num integer?)
+(s/def ::scenario-files ScenarioFiles)
+(s/def ::second integer?)
+(s/def ::scores (s/coll-of integer? :count c/MAXIMUM_ROLES))
+(s/def ::sim-data-dir Dir)
+(s/def ::sim-data-idx integer?)
+(s/def ::simweap-index integer?)
+(s/def ::sin-heading number?)
+(s/def ::size (s/coll-of integer? :count 2))
+(s/def ::sound-dir Dir)
+(s/def ::special-index integer?)
+(s/def ::spot-time CampaignTime)
+(s/def ::spotted integer?)
+(s/def ::sptype integer?)
+(s/def ::squadron
+  (s/keys :req-un [::name]))
+(s/def ::squadrons
+  (s/or :map (s/map-of VuId (s/coll-of Squadron))
+        :seq (s/nilable (s/coll-of Squadron))))
+(s/def ::squadron-image ImageDescriptor)
+(s/def ::status integer?) ;; Could constrain to 0-100
+(s/def ::strength (s/or :multiple (s/coll-of integer? :count c/MOVEMENT_TYPES) :singular integer?))
+(s/def ::strings StringsData)
+(s/def ::stype integer?)
+(s/def ::supply integer?)
+(s/def ::tactic integer?)
+(s/def ::tangible integer?)
+(s/def ::target-building integer?)
+(s/def ::target-id VuId)
+(s/def ::teams Teams)
+(s/def ::terrain-dir Dir)
+(s/def ::tex-idx integer?)
+(s/def ::theater Theater)
+(s/def ::theaters (s/coll-of Theater))
+(s/def ::transferable integer?)
+(s/def ::type integer?)
+(s/def ::units Units)
+(s/def ::unit-flags UnitFlags)
+(s/def ::unit-class-data (s/coll-of UnitClassData))
+(s/def ::update-rate integer?)
+(s/def ::update-tolerance integer?)
+(s/def ::user-ids IdList)
+(s/def ::value integer?)
+(s/def ::vehicle-class (s/coll-of integer? :count c/VEHICLE_GROUPS_PER_UNIT))
+(s/def ::vehicle-class-data (s/coll-of VehicleClassData))
+(s/def ::vehicle-data-index integer?)
+(s/def ::vehicle-type (s/coll-of integer? :count c/VEHICLE_GROUPS_PER_UNIT))
+(s/def ::version Version)
+(s/def ::victory-conditions VictoryConditions)
+(s/def ::vis-type (s/coll-of integer? :count 7))
+(s/def ::visible-flags integer?)
+(s/def ::vu-class-data VuEntityFields)
+(s/def ::waypoints (s/coll-of Waypoint))
+(s/def ::weapon (s/coll-of integer? :count c/HARDPOINT_MAX))
+(s/def :vehicle/weapons (s/coll-of integer? :count c/HARDPOINT_MAX))
+(s/def ::weapons (s/coll-of Weapon))
+(s/def ::weapon-class-data (s/coll-of WeaponClassData))
+(s/def ::weather Weather)
+(s/def ::weight integer?)
+(s/def ::x number?)
+(s/def ::y number?)
+(s/def ::z number?)
 
 ;;; Database accessors
 
@@ -337,6 +1099,10 @@
                     (count strings)
                     (nth indices (inc idx))))))))))
 
+(s/fdef read-strings-file
+  :args (s/cat :campaign-dir Dir)
+  :ret StringsData)
+
 ;; Ref campstr.cpp(129)
 (defn read-strings-file
   "Reads the strings.idx/wch file from the campaign directory and
@@ -596,6 +1362,11 @@
         dir
         (recur (fs/parent dir))))))
 
+(s/fdef campaign-dir
+  :args (s/alt :single-arity (s/cat :mission Todo)
+               :two-arity (s/cat :installation Installation :theater Theater))
+  :ret Dir)
+
 (defn campaign-dir
   "Return the path to the campaign directory."
   ([mission]
@@ -631,6 +1402,10 @@
     (-> theater :art-dir str/lower-case (not= "art"))
     (update :art-dir fs/path-combine "Art")))
 
+(s/fdef read-theater-def
+  :args (s/cat :data-dir Dir :path Path)
+  :ret Theater)
+
 (defn read-theater-def
   "Reads the theater TDF from the given path, relative to `data-dir`."
   [data-dir path]
@@ -661,6 +1436,11 @@
                               :3ddatadir :3d-data-dir
                               :sounddir :sound-dir})
             adjust-art-dir)))))
+
+
+(s/fdef read-theater-defs
+  :args (s/cat :data-dir Dir)
+  :ret (s/coll-of Theater))
 
 (defn read-theater-defs
   "Read, parse, and return information about the installled theaters
@@ -699,6 +1479,10 @@
                                        :path path)
                             nil))]))))
 
+(s/fdef read-id-list
+  :args (s/cat :installation Installation :id string?)
+  :ret IdList)
+
 (defn read-id-list
   "Read in the id list file with `id`"
   [installation id]
@@ -713,17 +1497,29 @@
     {:name->id (zipmap (map first pairs) (map second pairs))
      :id->name (zipmap (map second pairs) (map first pairs))}))
 
+(s/fdef read-image-ids
+  :args (s/cat :installation Installation)
+  :ret IdList)
+
 (defn read-image-ids
   "Read in the image IDs in this installation. Returns a map with
   keys :id->name and :name->id mapping in each direction."
   [installation]
   (read-id-list installation "IMAGEIDS"))
 
+(s/fdef read-user-ids
+  :args (s/cat :installation Installation)
+  :ret IdList)
+
 (defn read-user-ids
   "Read in the user IDs in this installation. Returns a map with
   keys :id->name and :name->id mapping in each direction."
   [installation]
   (read-id-list installation "USERIDS"))
+
+(s/fdef load-installation
+  :args (s/cat :install-dir Dir)
+  :ret Installation)
 
 (defn load-installation
   "Return information about the installed theaters."
@@ -736,6 +1532,10 @@
      :art-dir art-dir
      :object-dir object-dir
      :theaters (read-theater-defs data-dir)}))
+
+(s/fdef find-theater
+  :args (s/cat :installation Installation :path Path)
+  :ret Theater)
 
 (defn find-theater
   "Given the path to a mission file, return the theater it's in."
@@ -750,6 +1550,10 @@
   "Returns the display name of the theater as given in the theaterdef file."
   [mission]
   (get-in mission [:theater :name]))
+
+(s/fdef load-initial-database
+  :args (s/cat :installation Installation :theater Theater)
+  :ret InitialDatabase)
 
 (defn load-initial-database
   "Load the files in known locations needed to process a mission in a
@@ -782,7 +1586,7 @@
                :image-ids            (read-image-ids installation)
                :user-ids             (read-user-ids installation)})))
 
-(defn read-embedded-files
+(defn- read-embedded-files
   "Reads and parses a .tac/.cmp file, returning a map from the
   embedded file type to its contents."
   [path database]
@@ -1695,6 +2499,10 @@
                     {:id          id
                      :radius-ft   (util/str->float radius)
                      :description description}))))))
+
+(s/fdef read-mission
+  :args (s/cat :installs Installs :path Path)
+  :ret Mission)
 
 ;; TODO: Consider renaming this read-database, and referring to the resulting object
 ;; as the database.

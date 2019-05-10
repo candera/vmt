@@ -1,11 +1,8 @@
 (def project 'vmt)
 
 (merge-env!
- :dependencies '[[org.clojure/clojure       "1.9.0-alpha19"]
-                 ;; Can't update Clojure beyond 1.9.0-alpha19 due to
-                 ;; compliation problem with ClojureScript. Update
-                 ;; both later when it's fixed.
-                 [org.clojure/clojurescript "1.9.562"]
+ :dependencies '[[org.clojure/clojure       "1.10.0"]
+                 [org.clojure/clojurescript "1.10.520"]
                  [adzerk/boot-cljs          "2.0.0"]
                  [adzerk/boot-reload        "0.5.1"]
                  ;; [adzerk/boot-cljs-repl     "0.3.3"]
@@ -44,6 +41,8 @@
                  [quil "2.6.0"]
 
                  [binaryage/devtools "0.9.9" :scope "test"]
+                 [expound "0.7.2" :scope "test"]
+                 [org.clojure/test.check "0.10.0-alpha4" :scope "test"]
                  ;;[io.nervous/cljs-nodejs-externs "0.2.0"]
                  ;;[cljsjs/nodejs-externs "1.0.4-1"]
                  ]
@@ -75,6 +74,16 @@
 (clojure.tools.namespace.repl/set-refresh-dirs "src" "dev")
 
 (alter-var-root #'*print-length* (constantly 1000))
+
+(deftask rebl
+  []
+  (with-pass-thru _
+    (merge-env! :source-paths #{"rebl"}
+                :dependencies '[[org.openjfx/javafx-fxml     "11.0.1"]
+                                [org.openjfx/javafx-controls "11.0.1"]
+                                [org.openjfx/javafx-swing    "11.0.1"]
+                                [org.openjfx/javafx-base     "11.0.1"]
+                                [org.openjfx/javafx-web      "11.0.1"]])))
 
 (deftask dev
   "Build and serve WeatherGen for local development."

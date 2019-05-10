@@ -87,6 +87,7 @@
 (defn file-buf
   "Returns a ByteBuffer wrapping the contents of the file at `path`."
   [path]
+  (log/info "file-buf: " path)
   (-> path
       ->path
       java.nio.file.Files/readAllBytes
@@ -95,6 +96,7 @@
 (defn file-buffer
   "Returns a byte array wrapping the cntents of the file at `path`"
   [path]
+  (log/info "file-buffer:" path)
   (-> path
       ->path
       java.nio.file.Files/readAllBytes))
@@ -102,6 +104,7 @@
 (defn file-text
   "Returns a string with the contents of the file at `path`."
   [path]
+  (log/info "file-text:" path)
   (-> path normalize slurp))
 
 (defn identical?

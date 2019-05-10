@@ -3,10 +3,12 @@
             [clojure.pprint :as pprint :refer [pprint]]
             [clojure.repl :refer :all]
             [clojure.set :as set]
-            ;; [clojure.spec :as s]
+            [clojure.spec.alpha :as s]
+            [clojure.spec.test.alpha :as stest]
             [clojure.string :as str]
             [clojure.tools.namespace.repl :refer [refresh]]
             [cognitect.transit :as transit]
+            [expound.alpha :as expound]
             [garden.core :refer [css]]
             [garden.selectors :as css-sel]
             [lsobot.acmi :as acmi]
@@ -130,6 +132,15 @@
      (log/debug "Done reading.")
      mission)))
 
+(def m434
+  (delay
+   (log/debug "Reading 4.34 mission...")
+   (let [mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.34/Data/Campaign/MantisAtDawn-Day  1 18 30 05.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
 (defn smoke-test
   []
   (map :mission-name [@balkans @ito @wnpu @te-new @stratus-te @save2 @smpu @smpu-old]))
@@ -169,4 +180,18 @@
        util/csv-ize
        (spit (fs/path-combine dir "unit-classes.csv"))))
 
+(defn expound-explainer
+  [data]
+  (if (nil? data)
+    (println "Success!")
+    (expound/printer data)))
 
+#_(defn rebl
+  []
+  (require '[cognitect.rebl])
+  (cognitect.rebl/ui))
+
+#_(set! s/*explain-out* expound/printer)
+#_(alter-var-root #'s/*explain-out* expound-explainer)
+
+#_(stest/instrument)

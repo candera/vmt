@@ -3327,3 +3327,81 @@ stage
                                   build)))
 
 (run-now (.show @stage))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; 4.34 support
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(let [;; path         "/Users/candera/falcon/4.34/Data/Campaign/MantisAtDawn-Day  1 18 30 05.cam"
+      path          "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 23 55 48.cam"
+      install-dir   (mission/find-install-dir path)
+      installation  (mission/load-installation install-dir)
+      theater       (mission/find-theater installation path)
+      campaign-dir  (mission/campaign-dir installation theater)
+      strings       (mission/read-strings-file campaign-dir)
+      database      (assoc (mission/load-initial-database installation theater)
+                           :strings strings)
+      mission-files (mission/read-embedded-files path database)]
+  (s/explain mission/EmbeddedFiles mission-files))
+
+(set! s/*explain-out* (fn [data] (println "explain: " data)))
+(set! s/*explain-out* expound-explainer)
+
+(stest/instrument)
+
+(s/explain ::mission/class-table (->> @smpu :class-table (take 1)))
+(s/explain ::mission/unit-class-data (->> @smpu :unit-class-data (take 1)))
+(s/explain ::mission/objective-class-data (->> @smpu :objective-class-data (take 1)))
+(s/explain ::mission/vehicle-class-data (->> @smpu :vehicle-class-data (take 1)))
+(s/explain ::mission/weapon-class-data (->> @smpu :weapon-class-data (take 1)))
+(s/explain ::mission/feature-class-data (->> @smpu :feature-class-data (take 1)))
+(s/explain ::mission/feature-entry-data (->> @smpu :feature-entry-data (take 1)))
+(s/explain ::mission/point-header-data (->> @smpu :point-header-data (take 1)))
+(s/explain ::mission/user-ids (->> @smpu :user-ids))
+(s/explain ::mission/image-ids (->> @smpu :image-ids))
+
+(-> @smpu :user-ids :name->id keys)
+
+(s/explain mission/Mission @smpu)
+
+(let [spec-for (fn [k]
+                 (condp = k
+                   :objectives :raw/objectives
+                   (keyword (namespace ::mission/foo) (name k))))]
+ (doseq [[k v] @smpu]
+   (print k ":")
+   (if-let [data (s/explain-data (spec-for k)
+                                 (if (sequential? v)
+                                   (take 2 v)
+                                   v))]
+     (do
+       (spit (str "/tmp/" (name k) ".edn")
+             (with-out-str
+               (pprint data)))
+       (println "FAIL"))
+     (println "OK"))))
+
+(:installs @smpu)
+
+(pprint (keys @smpu))
+
+(-> @smpu ::mission/army-bases first ::mission/image :idx-size)
+
+(pprint
+ (s/explain (s/fspec :args (s/cat :idx integer?)
+                                 :ret (s/nilable string?))
+            (:names @smpu)))
+
+((:names @smpu) -1)
+
+(do
+  (println "Starting")
+  (if-let [data (s/explain-data mission/Mission @smpu)]
+    (do
+      (spit (str "/tmp/mission.edn")
+            (with-out-str
+              (pprint data)))
+      (println "FAIL"))
+    (println "OK")))
