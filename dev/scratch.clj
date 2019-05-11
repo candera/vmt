@@ -3370,18 +3370,18 @@ stage
                  (condp = k
                    :objectives :raw/objectives
                    (keyword (namespace ::mission/foo) (name k))))]
- (doseq [[k v] @smpu]
-   (print k ":")
-   (if-let [data (s/explain-data (spec-for k)
-                                 (if (sequential? v)
-                                   (take 2 v)
-                                   v))]
-     (do
-       (spit (str "/tmp/" (name k) ".edn")
-             (with-out-str
-               (pprint data)))
-       (println "FAIL"))
-     (println "OK"))))
+  (doseq [[k v] (sort @smpu)]
+    (print k ":")
+    (if-let [data (s/explain-data (spec-for k)
+                                  (if (sequential? v)
+                                    (take 2 v)
+                                    v))]
+      (do
+        (spit (str "/tmp/" (name k) ".edn")
+              (with-out-str
+                (pprint data)))
+        (println "FAIL"))
+      (println "OK"))))
 
 (:installs @smpu)
 
@@ -3398,10 +3398,12 @@ stage
 
 (do
   (println "Starting")
-  (if-let [data (s/explain-data mission/Mission @smpu)]
+  (if-let [data (s/explain-data mission/Mission @m434)]
     (do
       (spit (str "/tmp/mission.edn")
             (with-out-str
               (pprint data)))
       (println "FAIL"))
     (println "OK")))
+
+(-> @smpu :scenario-files :campaign-info keys sort pprint)

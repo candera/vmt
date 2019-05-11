@@ -22,7 +22,7 @@
 
 ;;; Specs
 
-(def Todo (constantly true))
+(def Todo (constantly false))
 (def NonNegativeInt (s/and integer? #(<= 0 %)))
 (def Path string?)
 (def Dir string?)
@@ -335,8 +335,85 @@
   (s/merge InitialDatabase
            (s/keys :req-un [::strings])))
 
-(def CampaignInfo Todo)
-(def Objectives (s/coll-of Objective))
+(def EventNode
+  (s/keys :req-un [::x
+                   ::y
+                   ::time
+                   ::flags
+                   ::team
+                   ::event-text
+                   ::ui-event-node]))
+
+(def SquadronInfo
+  (s/keys :req-un [::airbase-icon
+                   ::airbase-name
+                   ::country
+                   ::current-strength
+                   ::description-index
+                   :vu/id
+                   ::name-id
+                   ::specialty
+                   ::squadron-patch
+                   ::x
+                   ::y]))
+
+(def TeamBasicInfo
+  (s/keys :req-un [::color
+                   ::flag
+                   ::motto
+                   ::name]))
+
+(def CampaignInfo
+  (s/keys ::req-un [::active-team
+                    ::air-defense-ratio
+                    ::air-ratio
+                    ::brief
+                    ::bullseye-name
+                    ::bullseye-x
+                    ::bullseye-y
+                    ::creation-rand
+                    ::creation-time
+                    ::creator-ip
+                    ::current-day
+                    ::current-time
+                    ::day-zero
+                    ::endgame-result
+                    ::enemy-ad-exp
+                    ::enemy-air-exp
+                    ::ground-ratio
+                    ::group
+                    ::last-index-num
+                    ::last-major-event
+                    ::last-reinforcement
+                    :int/last-repair
+                    ::last-resupply
+                    ::map
+                    ::naval-ratio
+                    ::player-squadron-id
+                    ::priority-event-entries
+                    ::recent-event-entries
+                    ::save-file
+                    ::scenario
+                    ::situation
+                    ::squadron-info
+                    ::te-flags
+                    ::te-num-aircraft
+                    ::te-num-f16s
+                    ::te-num-teams
+                    ::te-start
+                    ::te-team
+                    ::te-team-points
+                    ::te-time-limit
+                    ::te-type
+                    ::te-victory-points
+                    ::team-info
+                    ::tempo
+                    ::theater-name
+                    ::theater-size-x
+                    ::theater-size-y
+                    ::time-stamp
+                    ::ui-name]))
+
 (def ObjectiveDelta
   (s/keys :req-un [::f-status
                    ::fuel
@@ -345,17 +422,149 @@
                    ::losses
                    ::owner
                    ::supply]))
-(def Units Todo)
-(def Teams Todo)
-(def Events NotImplemented)
-(def PrimaryObjectives Todo)
-(def Pilots Todo)
-(def PersistentObjects Todo)
-(def Weather Todo)
-(def Version Todo)
-(def VictoryConditions Todo)
 
-(def EmbeddedFileEntry Todo)
+(def TaskingManager
+  (s/keys :req-un [:vu/id
+                   ::entity-type
+                   ::manager-flags
+                   ::owner]))
+
+(def AtmAirbase
+  (s/keys :req-un [:vu/id
+                   ::schedule]))
+
+(def MissionRequest
+  (s/keys :req-un [::requester
+                   ::tawrget
+                   ::secondary
+                   ::pak
+                   ::who
+                   ::vs
+                   ::tot
+                   ::tx
+                   ::ty
+                   ::flags
+                   ::caps
+                   ::target-num
+                   ::speed
+                   ::match-strength
+                   ::priority
+                   ::tot-type
+                   ::action-type
+                   :mission-request/mission
+                   ::aircraft
+                   ::context
+                   ::roe-check
+                   ::delayed
+                   ::start-block
+                   ::final-block
+                   ::slots
+                   ::min-to
+                   ::max-to]))
+
+(def AirTaskingManager
+  (s/merge TaskingManager
+           (s/keys :req-un [:atm/airbases
+                            ::average-ca-strength
+                            ::average-ca-missions
+                            ::cycle
+                            ::flags
+                            ::mission-requests
+                            ::sample-cycles])))
+
+(def GroundTaskingManager
+  (s/merge TaskingManager
+           (s/keys :req-un [::flags])))
+
+(def NavalTaskingManager
+  (s/merge TaskingManager
+           (s/keys :req-un [::flags])))
+
+(def TeamStatus
+  (s/keys :req-un [::air-defence-vehicles ; buf/uint16
+                   :team-status/airbases ; buf/uint16
+                   :team-status/aircraft ; buf/uint16
+                   ::fuel ; buf/uint16
+                   ::fuel-level ; buf/ubyte
+                   ::ground-vehicles ; buf/uint16
+                   ::ships ; buf/uint16
+                   ::supply ; buf/uint16
+                   ::supply-level ; buf/ubyte
+                   ]))
+
+(def TeamAirAction
+  (s/keys :req-un [::last-objective ; vu-id
+                   ::objective ; vu-id
+                   ::start ; campaign-time
+                   ::stop ; campaign-time
+                   ::type ; buf/ubyte
+                   ]))
+
+(def TeamGroundAction
+  (s/keys :req-un [::objective ; vu-id
+                   ::points ; buf/ubyte
+                   ::tempo ; buf/ubyte
+                   ::time ; campaign-time
+                   ::timeout ; campaign-time
+                   ::type ; buf/ubyte
+                   ]))
+
+(def TeamTeam
+  (s/keys :req-un [
+                   ::air-defense-experience ; buf/ubyte
+                   ::air-experience ; buf/ubyte
+                   ::bonus-objs ; (buf/repeat 20 vu-id)
+                   ::bonus-time ; (buf/repeat 20 buf/uint32)
+                   ::c-team ; buf/ubyte
+                   ::current-stats ; team-status
+                   ::defensive-air-action ; team-air-actionp
+                   ::entity-type ; buf/uint16
+                   ::equipment ; buf/ubyte
+                   ::first-colonel ; buf/int16
+                   ::first-commander ; buf/int16
+                   ::first-wingman ; buf/int16
+                   ::flags ; buf/uint16
+                   ::fuel-available ; buf/uint16
+                   ::ground-action ; team-ground-action
+                   ::ground-experience ; buf/ubyte
+                   :vu/id ; vu-id
+                   ::initiatve ; buf/int16
+                   ::last-player-mission ; campaign-time
+                   ::last-wingman ; buf/int16
+                   ::max-vehicle ; (buf/repeat 4 buf/ubyte)
+                   ::members ; (buf/repeat 8 buf/ubyte)
+                   ::mission-priority ; (buf/repeat 41 buf/ubyte)
+                   ::motto ; (fixed-string 200)
+                   ::name ; (fixed-string 20)
+                   ::naval-experience ; buf/ubyte
+                   ::obj-type-priority ; (buf/repeat 36 buf/ubyte)
+                   ::offensive-air-action ; team-air-action
+                   ::player-rating ; buf/float
+                   ::reinforcement ; buf/int16
+                   ::replacements-available ; buf/uint16
+                   ::stance ; (buf/repeat 8 buf/int16)
+                   ::start-stats ; team-status
+                   ::supply-available ; buf/uint16
+                   ::team-color ; buf/ubyte
+                   ::team-flag ; buf/ubyte
+                   ::unit-type-priority ; (buf/repeat 20 buf/ubyte)
+                   ::who ; buf/ubyte
+    ]))
+
+(def Team
+  (s/keys :req-un [::air-tasking-manager
+                   ::ground-tasking-manager
+                   ::naval-tasking-manager
+                   :team/team]))
+
+(def Events NotImplemented)
+(def PrimaryObjectives NotImplemented)
+(def Pilots NotImplemented)
+(def PersistentObjects NotImplemented)
+(def Weather NotImplemented)
+(def Version
+  (s/keys :req-un [:database/version]))
+(def VictoryConditions string?)
 
 (def Buffer bytes?)
 
@@ -384,6 +593,11 @@
                             ::unit-flags
                             ::waypoints])))
 
+(def GroundUnit
+  (s/keys :req-un [::aobj
+                   ::division
+                   ::orders]))
+
 (def UnitFlags
   (s/coll-of (s/or :integer integer? :keyword keyword?)
              :kind set?))
@@ -406,6 +620,10 @@
                    ::target-id]
           :opt-un [::arrive
                    ::depart]))
+
+(def Aircraft
+  (s/keys :req-un [::airframe
+                   ::quantity]))
 
 (def Flight
   (s/merge Unit
@@ -531,24 +749,49 @@
 ;; than one specification, hence the or's below. I could consider
 ;; using more than one namespace instead.
 (s/def ::3d-data-dir Dir)
+(s/def ::aobj VuId)
 (s/def ::action integer?)
+(s/def ::action-type integer?)
+(s/def ::active-team integer?)
 (s/def ::airbase
   (s/keys :req-un [::name]))
+(s/def :atm/airbases (s/coll-of AtmAirbase))
+(s/def :team-status/airbases integer?)
 (s/def ::airbases (s/coll-of Airbase))
+(s/def ::airbase-icon integer?)
+(s/def ::airbase-name string?)
+(s/def ::air-defense-experience integer?)
+(s/def ::air-defense-ratio integer?)
+(s/def ::air-defence-vehicles integer?)
+(s/def ::air-experience integer?)
+(s/def ::air-ratio integer?)
+(s/def ::aircraft Aircraft)
+(s/def :team-status/aircraft integer?)
+(s/def ::airframe string?)
 (s/def ::angle number?)
 (s/def ::arrive CampaignTime)
 (s/def ::army-bases (s/coll-of ArmyBase))
 (s/def ::art-dir Dir)
+(s/def ::average-ca-missions integer?)
+(s/def ::average-ca-strength integer?)
 (s/def ::base Path)
 (s/def ::base-flags integer?)
 (s/def ::bitmap Path)
 (s/def ::blast-radius integer?)
+(s/def ::bonus-objs (s/coll-of VuId :count 20))
+(s/def ::bonus-time (s/coll-of integer? :count 20))
+(s/def ::brief integer?)
+(s/def ::bullseye-name integer?)
+(s/def ::bullseye-x integer?)
+(s/def ::bullseye-y integer?)
+(s/def ::c-team integer?)
 (s/def ::callsign-index integer?)
 (s/def ::callsign-slots integer?)
 (s/def ::camp-id integer?)
 (s/def ::campaign-info CampaignInfo)
 (s/def ::campaign-dir Dir)
 (s/def ::candidate-installs Installs)
+(s/def ::caps integer?)
 (s/def ::cargo-id VuId)
 (s/def ::carriers (s/coll-of Carrier))
 (s/def ::center (s/coll-of integer? :count 2))
@@ -559,13 +802,24 @@
 (s/def ::collidable integer?)
 (s/def ::collision-radius number?)
 (s/def ::collision-type integer?)
+(s/def ::color integer?)
+(s/def ::context integer?)
 (s/def ::cos-heading number?)
 (s/def ::costs (s/coll-of integer? :count c/MOVEMENT_TYPES))
 (s/def ::count integer?)
+(s/def ::country integer?)
 (s/def ::create-priority integer?)
+(s/def ::creation-rand integer?)
+(s/def ::creation-time integer?)
 (s/def ::creator integer?)
+(s/def ::creator-ip integer?)
 (s/def ::cruise-alt integer?)
+(s/def ::current-day integer?)
+(s/def ::current-stats TeamStatus)
+(s/def ::current-strength integer?)
+(s/def ::current-time CampaignTime)
 (s/def ::current-wp integer?)
+(s/def ::cycle integer?)
 (s/def ::damage-mod (s/or :multiple (s/coll-of integer? :count (inc c/OtherDam)) :singular integer?))
 (s/def ::damage-speed integer?)
 (s/def ::damage-type integer?)
@@ -575,21 +829,31 @@
 (s/def ::data-rate integer?)
 (s/def ::data-type integer?)
 (s/def ::day integer?)
+(s/def ::day-zero integer?)
 (s/def ::deag-distance integer?)
+(s/def ::defensive-air-action TeamAirAction)
+(s/def ::delayed integer?)
 (s/def ::desc string?)
 (s/def ::depart CampaignTime)
 (s/def ::description string?)
+(s/def ::description-index integer?)
 (s/def ::destination-x integer?)
 (s/def ::destination-y integer?)
 (s/def ::detect-ratio (s/coll-of number? :count c/NUM_RADAR_ARCS))
 (s/def ::detection (s/or :multiple (s/coll-of integer? :count c/MOVEMENT_TYPES) :singular integer?))
+(s/def ::division integer?)
 (s/def ::domain integer?)
-(s/def ::doubleres2dmap Todo)
+(s/def ::doubleres2dmap string?)
 (s/def ::drag-index integer?)
 (s/def ::empty-wt integer?)
+(s/def ::endgame-result integer?)
+(s/def ::enemy-ad-exp integer?)
+(s/def ::enemy-air-exp integer?)
 (s/def ::engine-sound integer?)
 (s/def ::entity-class (s/coll-of integer? :count 8))
 (s/def ::entity-type integer?)
+(s/def ::equipment integer?)
+(s/def ::event-text string?)
 (s/def ::events Events)
 (s/def ::f-status (s/coll-of integer?))
 (s/def ::facing integer?)
@@ -597,22 +861,35 @@
 (s/def ::features (s/coll-of AugmentedFeature))
 (s/def ::feature-class-data (s/coll-of FeatureClassData))
 (s/def ::feature-entry-data (s/coll-of FeatureEntryData))
+(s/def ::final-block integer?)
 (s/def ::fine-update-force-range number?)
 (s/def ::fine-update-multiplier number?)
 (s/def ::fine-update-range number?)
 (s/def ::fire-rate integer?)
 (s/def ::first integer?)
+(s/def ::first-colonel integer?)
+(s/def ::first-commander integer?)
 (s/def ::first-feature integer?)
 (s/def ::first-owner integer?)
+(s/def ::first-wingman integer?)
+(s/def ::flag integer?)
 (s/def ::flags (s/or :integer integer? :set (s/coll-of (s/or :keyword keyword? :integer integer?) :kind set?)))
 (s/def ::flights (s/coll-of Flight))
 (s/def ::formation integer?)
 (s/def ::fuel integer?)
+(s/def ::fuel-available integer?)
 (s/def ::fuel-econ integer?)
+(s/def ::fuel-level integer?)
 (s/def ::fuel-wt integer?)
 (s/def ::global integer?)
 (s/def ::grid-x integer?)
 (s/def ::grid-y integer?)
+(s/def ::ground-action TeamGroundAction)
+(s/def ::ground-experience integer?)
+(s/def ::ground-ratio integer?)
+(s/def ::ground-tasking-manager GroundTaskingManager)
+(s/def ::ground-vehicles integer?)
+(s/def ::group integer?)
 (s/def ::guidance-flags integer?)
 (s/def ::has-radar-data integer?)
 (s/def ::haves Haves)
@@ -636,39 +913,62 @@
 (s/def ::image-offset integer?)
 (s/def ::image-ids IdList)
 (s/def ::index NonNegativeInt)
+(s/def ::initiatve integer?)
 (s/def ::installation Installation)
 (s/def ::installs Installs)
 (s/def ::install-dir Dir)
 (s/def ::last-check CampaignTime)
+(s/def ::last-index-num integer?)
+(s/def ::last-major-event integer?)
+(s/def ::last-player-mission CampaignTime)
+(s/def ::last-objective VuId)
+(s/def ::last-reinforcement integer?)
+(s/def :int/last-repair integer?)
 (s/def ::last-repair CampaignTime)
+(s/def ::last-resupply integer?)
+(s/def ::last-wingman integer?)
 (s/def ::links (s/coll-of ObjectiveLink))
 (s/def ::location (s/keys :req-un [::x ::y]))
 (s/def ::losses integer?)
 (s/def ::low-alt integer?)
 (s/def ::ltrt integer?)
-(s/def ::magneticdeclination Todo)
+(s/def ::magneticdeclination string?)
 (s/def ::major-revision-number integer?)
 (s/def ::management-domain integer?)
+(s/def ::manager-flags integer?)
+(s/def ::map (s/coll-of integer?))
 (s/def ::map-image ImageDescriptor)
+(s/def ::match-strength integer?)
 (s/def ::max-alt integer?)
 (s/def ::max-range integer?)
 (s/def ::max-speed integer?)
+(s/def ::max-to integer?)
+(s/def ::max-vehicle (s/coll-of integer? :count 4))
 (s/def ::max-wt integer?)
+(s/def ::members (s/coll-of integer? :count 8))
 (s/def ::millisecond integer?)
+(s/def ::min-to integer?)
 (s/def ::minor-revision-number integer?)
 (s/def ::minute integer?)
-(s/def ::mintacan Todo)
+(s/def ::mintacan string?)
 (s/def ::misc-text-dir Dir)
+(s/def :mission-request/mission integer?)
 (s/def ::mission
   (s/keys :req-un [::name
                    ::category]))
 (s/def ::mission-name string?)
+(s/def ::mission-priority (s/coll-of integer? :count 41))
+(s/def ::mission-requests (s/coll-of MissionRequest))
+(s/def ::motto string?)
 (s/def ::moved integer?)
 (s/def ::movement-speed integer?)
 (s/def ::movement-type integer?)
 (s/def ::name string?)
 (s/def ::names (s/fspec :args (s/cat :idx NonNegativeInt)
                         :ret (s/nilable string?)))
+(s/def ::naval-experience integer?)
+(s/def ::naval-ratio integer?)
+(s/def ::naval-tasking-manager NavalTaskingManager)
 (s/def :int/name integer?)
 (s/def ::name->id (s/map-of string? integer?))
 (s/def ::name-id integer?)
@@ -678,16 +978,21 @@
 (s/def ::number-of-pilots integer?)
 (s/def ::obj-flags integer?)
 (s/def ::obj-id integer?)
+(s/def ::obj-type-priority (s/coll-of integer? :count 36))
 (s/def ::object-dir Dir)
+(s/def ::objective VuId)
 (s/def ::objective-deltas (s/coll-of ObjectiveDelta))
 (s/def ::objective-class-data (s/coll-of ObjectiveClassData))
 (s/def ::objective-type integer?)
 (s/def :raw/objectives (s/coll-of Objective))
 (s/def ::objectives (s/coll-of AugmentedObjective))
+(s/def ::orders integer?)
+(s/def ::offensive-air-action TeamAirAction)
 (s/def ::offset Vector3)
 (s/def ::owner integer?)
 (s/def ::package
   (s/keys :req-un [::name]))
+(s/def ::pak VuId)
 (s/def ::palette-offset integer?)
 (s/def ::palette-size integer?)
 (s/def ::parent VuId)
@@ -695,12 +1000,17 @@
 (s/def ::persistent integer?)
 (s/def ::persistent-objects PersistentObjects)
 (s/def ::pilots Pilots)
+(s/def ::player-rating number?)
+(s/def ::player-squadron-id VuId)
 (s/def ::point-header-data (s/coll-of PointHeaderData))
+(s/def ::points integer?)
 (s/def ::ppt-data (s/coll-of PrePlannedThreat))
 (s/def ::primary-objectives PrimaryObjectives)
 (s/def ::priority integer?)
+(s/def ::priority-event-entries (s/coll-of EventNode))
 (s/def ::private integer?)
 (s/def ::pt-data-index integer?)
+(s/def ::quantity integer?)
 (s/def ::rack-flags integer?)
 (s/def ::radar-data (s/keys :req-un [::has-radar-data] :opt-un [::detect-ratio]))
 (s/def ::radar-feature integer?)
@@ -711,24 +1021,37 @@
 (s/def ::rariety integer?)
 (s/def ::rate integer?)
 (s/def ::rcs-factor number?)
+(s/def ::recent-event-entries (s/coll-of EventNode))
 (s/def ::reinforcement integer?)
 (s/def ::repair-time integer?)
+(s/def ::replacements-available integer?)
+(s/def ::requester VuId)
 (s/def ::resource string?)
+(s/def ::roe-check integer?)
 (s/def ::role integer?)
 (s/def ::roster integer?)
 (s/def ::rsc-modified integer?)
 (s/def ::rsc-size integer?)
 (s/def ::runway-num integer?)
+(s/def ::save-file string?)
+(s/def ::scenario string?)
 (s/def ::scenario-files ScenarioFiles)
+(s/def ::schedule (s/coll-of integer? :count c/ATM_MAX_CYCLES))
 (s/def ::second integer?)
+(s/def ::secondary VuId)
 (s/def ::scores (s/coll-of integer? :count c/MAXIMUM_ROLES))
+(s/def ::ships integer?)
 (s/def ::sim-data-dir Dir)
 (s/def ::sim-data-idx integer?)
 (s/def ::simweap-index integer?)
 (s/def ::sin-heading number?)
 (s/def ::size (s/coll-of integer? :count 2))
+(s/def ::situation integer?)
+(s/def ::slots (s/coll-of integer? :count 4))
 (s/def ::sound-dir Dir)
 (s/def ::special-index integer?)
+(s/def ::specialty integer?)
+(s/def ::speed integer?)
 (s/def ::spot-time CampaignTime)
 (s/def ::spotted integer?)
 (s/def ::sptype integer?)
@@ -738,25 +1061,64 @@
   (s/or :map (s/map-of VuId (s/coll-of Squadron))
         :seq (s/nilable (s/coll-of Squadron))))
 (s/def ::squadron-image ImageDescriptor)
+(s/def ::squadron-info (s/coll-of SquadronInfo))
+(s/def ::squadron-patch integer?)
+(s/def ::stance (s/coll-of integer? :count 8))
+(s/def ::start CampaignTime)
+(s/def ::start-block integer?)
+(s/def ::start-status TeamStatus)
 (s/def ::status integer?) ;; Could constrain to 0-100
+(s/def ::stop CampaignTime)
 (s/def ::strength (s/or :multiple (s/coll-of integer? :count c/MOVEMENT_TYPES) :singular integer?))
 (s/def ::strings StringsData)
 (s/def ::stype integer?)
 (s/def ::supply integer?)
+(s/def ::supply-available integer?)
+(s/def ::supply-level integer?)
 (s/def ::tactic integer?)
 (s/def ::tangible integer?)
 (s/def ::target-building integer?)
+(s/def ::target VuId)
 (s/def ::target-id VuId)
-(s/def ::teams Teams)
+(s/def ::target-num integer?)
+(s/def ::te-flags integer?)
+(s/def ::te-num-aircraft (s/coll-of integer? :count 8))
+(s/def ::te-num-f16s (s/coll-of integer? :count 8))
+(s/def ::te-num-teams integer?)
+(s/def ::te-start CampaignTime)
+(s/def ::te-team integer?)
+(s/def ::te-team-points (s/coll-of integer? :count 8))
+(s/def ::te-time-limit CampaignTime)
+(s/def ::te-type integer?)
+(s/def ::te-victory-points integer?)
+(s/def ::team integer?)
+(s/def :team/team TeamTeam)
+(s/def ::team-color integer?)
+(s/def ::team-flag integer?)
+(s/def ::team-info (s/coll-of TeamBasicInfo :count 8))
+(s/def ::teams (s/coll-of Team))
+(s/def ::tempo integer?)
 (s/def ::terrain-dir Dir)
 (s/def ::tex-idx integer?)
 (s/def ::theater Theater)
+(s/def ::theater-name string?)
+(s/def ::theater-size-x integer?)
+(s/def ::theater-size-y integer?)
 (s/def ::theaters (s/coll-of Theater))
+(s/def ::time CampaignTime)
+(s/def ::time-stamp integer?)
+(s/def ::timeout CampaignTime)
+(s/def ::tot integer?)
+(s/def ::tot-type integer?)
 (s/def ::transferable integer?)
+(s/def ::tx integer?)
+(s/def ::ty integer?)
 (s/def ::type integer?)
-(s/def ::units Units)
+(s/def ::ui-name string?)
+(s/def ::units (s/coll-of Unit))
 (s/def ::unit-flags UnitFlags)
 (s/def ::unit-class-data (s/coll-of UnitClassData))
+(s/def ::unit-type-priority (s/coll-of integer? :count 20))
 (s/def ::update-rate integer?)
 (s/def ::update-tolerance integer?)
 (s/def ::user-ids IdList)
@@ -765,6 +1127,7 @@
 (s/def ::vehicle-class-data (s/coll-of VehicleClassData))
 (s/def ::vehicle-data-index integer?)
 (s/def ::vehicle-type (s/coll-of integer? :count c/VEHICLE_GROUPS_PER_UNIT))
+(s/def :database/version integer?)
 (s/def ::version Version)
 (s/def ::victory-conditions VictoryConditions)
 (s/def ::vis-type (s/coll-of integer? :count 7))
@@ -777,6 +1140,8 @@
 (s/def ::weapon-class-data (s/coll-of WeaponClassData))
 (s/def ::weather Weather)
 (s/def ::weight integer?)
+(s/def ::who integer?)
+(s/def ::vs integer?)
 (s/def ::x number?)
 (s/def ::y number?)
 (s/def ::z number?)
