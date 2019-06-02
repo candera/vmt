@@ -1300,6 +1300,15 @@
     (-> weapon-class-data
         (nth id))))
 
+(defn- sim-weapon-data-entry
+  "Returns the sim weapon data record for a given weapon."
+  [mission weapon]
+  (as-> weapon ?
+      (:index ?)
+    (nth (:class-table mission) ?)
+    (:vehicle-data-index ?)
+    (nth (:sim-weapon-data mission) ?)))
+
 (defn active-units
   "Return a seq of the units in `mission` that are not inactive."
   [mission]
@@ -1744,6 +1753,20 @@
             :next-header buf/int16 ; Index of next header, if any
             ))
 
+(def sim-weapon-data
+  (buf/spec :flags             buf/int32
+            :drag-coefficient  buf/float
+            :weight            buf/float
+            :surface-area      buf/float
+            :ejection-velocity (buf/spec :x buf/float
+                                         :y buf/float
+                                         :z buf/float)
+            :sms-mnemonic      (fixed-string 8)
+            :sms-weapon-class  buf/int32
+            :sms-weapon-domain buf/int32
+            :sms-weapon-type   buf/int32
+            :data-index        buf/int32))
+
 (defn extension
   [file-name]
   (let [i (str/last-index-of file-name ".")]
@@ -2002,8 +2025,9 @@
   [mission]
   (get-in mission [:theater :name]))
 
-
-(defn- load-xml-initial-database
+(defn load-xml-initial-database
+  "Load the files in known locations needed to process a mission in a
+  given theater."
   [installation theater opts]
   (->> (for [[type k] [["ct" :class-table]
                        ["ucd" :unit-class-data]
@@ -2012,18 +2036,19 @@
                        ["WCD" :weapon-class-data]
                        ["FCD" :feature-class-data]
                        ["fed" :feature-entry-data]
-                       ["PHD" :point-header-data]]]
+                       ["PHD" :point-header-data]
+                       ["SWD" :sim-weapon-data]]]
          (let [path (fs/path-combine
                      (object-dir installation theater)
                      (str "FALCON4_" type ".xml"))
-               _ (log/info "XML file path" path)
-               xml (fs/file-text path)]
+               _    (log/info "XML file path" path)
+               xml  (fs/file-text path)]
            [k (xml/parse xml k)]))
        (into {})
        (merge { ;; These next couple might need to be generalized, like to a map
                ;; from the type to the ids in it.
-               :image-ids            (read-image-ids installation)
-               :user-ids             (read-user-ids installation)})))
+               :image-ids (read-image-ids installation)
+               :user-ids  (read-user-ids installation)})))
 
 (s/fdef load-initial-database
   :args (s/cat :installation Installation :theater Theater)
@@ -2901,8 +2926,8 @@
       (->> mission
            :weapon-class-data
            (mapv #(assoc %
-                         ::name (:name %)))))))
-
+                         ::name (:name %)
+                         ::sim-weapon-data (sim-weapon-data-entry mission %)))))))
 
 (defn- report-airbases-with-invalid-owner
   "Throw an error if an airbase has an invalid owner."

@@ -94,7 +94,7 @@
                "RightDestroyed"
                "BothDestroyed"]]    (field :int   [:vis-type])
              "MoverDefinitionData"  (field :int   [:vehicle-data-index]) ; ?
-             "EntityType"           (field :int   [:data-type])          ; ?
+             "EntityType"           (field :int   [:data-type])   ; ?
              "EntityIdx"            (field :int   [:data-pointer] ; ?
                                            )}}
    :unit-class-data
@@ -289,7 +289,27 @@
               "RunwayTexture"            (field :int [:tex-idx])
               "RunwayNumber"             (field :int [:runway-num])
               "LandingPattern"           (field :int [:ltrt])
-              "NextHeaderIdx"            (field :int [:next-header])}}})
+              "NextHeaderIdx"            (field :int [:next-header])}}
+
+   :sim-weapon-data
+   {:form    :vector
+    :root    "SWDRecords"
+    :item    "SWD"
+    :index   "Num"
+    :missing {}
+    :fields  {"Flags"     (field :int [:flags])
+              "Drag"      (field :float [:drag-coefficient])
+              "Weight"    (field :float [:weight])
+              "Area"      (field :float [:surface-area])
+              ;; Consider making these a tuple
+              "EjectX"    (field :float [:ejection-velocity :x])
+              "EjectY"    (field :float [:ejection-velocity :y])
+              "EjectZ"    (field :float [:ejection-velocity :z])
+              "WpnName"   (field :string [:sms-mnemonic])
+              "WpnClass"  (field :int [:sms-weapon-class])
+              "Domain"    (field :int [:sms-weapon-domain])
+              "WpnType"   (field :int [:sms-weapon-type])
+              "WpnDatIdx" (field :int [:data-index])}}})
 
 
 (defn- coerce

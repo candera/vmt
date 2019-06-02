@@ -4,6 +4,13 @@
 #+TITLE:
 
 * Change Log
+** v058-8 [2019-06-02 Sun]
+
+ALPHA Release! Weather generation does not work yet!
+
+- Fixed bug where weapons list in the damage computer was missing
+  weapons.
+
 ** v058-6 [2019-06-02 Sun]
 - ALPHA Release: Update to support 4.34
   - Weather non-functional
