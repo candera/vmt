@@ -1,7 +1,8 @@
-(page "forecast.html"
+(ns ^{:hoplon/page "forecast.html"} vmt.pages.forecast
   (:require [clojure.string :as str]
             [cljsjs.pako]
             [goog.crypt.base64 :as base64]
+            [javelin.core :refer [formula-of]]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
@@ -14,7 +15,7 @@
             [weathergen.ui :as ui])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-time #_formula-of]]))
 
 (let [{:keys [weather-params
               display-params

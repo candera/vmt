@@ -89,7 +89,7 @@
 
 (defn larray
   "Octet spec for a length prefixed array."
-  [length-spec item-spec]
+  [length-spec item-spec & [{:keys [limit] :as opts}]]
   (let [len-size (buf/size length-spec)]
     (reify
       #?@(:clj
@@ -107,9 +107,16 @@
       (read [_ buff pos]
         (let [n (buf/read buff length-spec
                           {:offset pos})
+              n* (if (and limit
+                           (< limit n))
+                   (do
+                     (log/debug "Limiting read in larray spec at" pos "to" limit
+                                ". Originally read value was" n)
+                     limit)
+                   n)
               ;;_ (log/debug "larray" :n n :pos pos)
               [datasize data] (buf/read* buff
-                                         (buf/repeat n item-spec)
+                                         (buf/repeat n* item-spec)
                                          {:offset (+ pos len-size)})]
           [(+ datasize len-size) data]))
 
@@ -118,6 +125,32 @@
         (let [n (count value)]
           (+ (buf/write! buff n length-spec {:offset pos})
              (buf/write! buff value (buf/repeat n item-spec) {:offset (+ pos len-size)})))))))
+
+(defn debug-spec
+  "Returns a spec that passes through to `spec` but reports on various
+  aspects when used."
+  ([spec] (debug-spec {} spec))
+  ([{msg :msg level :level :or {level :debug} :as opts} spec]
+   (reify
+     #?@(:clj
+         [clojure.lang.IFn
+          (invoke [s] (.invoke spec))]
+         :cljs
+         [cljs.core/IFn
+          (-invoke [s] (-invoke spec))])
+
+     octet.spec/ISpecDynamicSize
+     (size* [_ data]
+       (octet.spec/size* spec data))
+
+     octet.spec/ISpec
+     (read [_ buff pos]
+       (when (not= level :off)
+         (log/log level (or msg "debug-spec/read") pos #?(:clj (format "(0x%x)" pos))))
+       (octet.spec/read spec buff pos))
+
+     (write [_ buff pos value]
+       (octet.spec/write spec buff pos value)))))
 
 (defn enum
   "Returns a spec that decodes from read values via the mapping in m."

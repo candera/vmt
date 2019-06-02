@@ -2,7 +2,12 @@
   "A layer for displaying what's in an ACMI file."
   (:require [clojure.set :as set]
             [clojure.string :as str]
+            [hoplon.core :refer [a datalist defelem div do-watch fieldset for-tpl h4
+                                 i if-tpl img input label legend li
+                                 option pre select span style
+                                 table tbody td thead tr ul when-tpl with-timeout]]
             [hoplon.svg :as svg]
+            [javelin.core :refer [cell cell? cell= cell-let dosync formula-of lens with-let]]
             [lsobot.acmi :as acmi]
             [weathergen.coordinates :as coords]
             [weathergen.falcon.files.mission :as mission]

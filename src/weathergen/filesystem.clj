@@ -87,7 +87,7 @@
 (defn file-buf
   "Returns a ByteBuffer wrapping the contents of the file at `path`."
   [path]
-  (log/info "file-buf: " path)
+  (log/info "file-buf: " (pr-str path))
   (-> path
       ->path
       java.nio.file.Files/readAllBytes

@@ -1,12 +1,16 @@
-(page "test.html"
-  (:require [clojure.pprint :refer [pprint]]
+(ns ^{:hoplon/page "test.html"} vmt.pages.test
+  (:require [clojure.browser.repl :as repl]
+            [clojure.pprint :refer [pprint]]
             [clojure.string :as str]
             ;; [cljsjs.pako]
             [goog.crypt.base64 :as base64]
             [goog.string :as gstring]
             [goog.string.format]
+            [hoplon.jquery]
             [hoplon.storage-atom :refer [local-storage]]
+            [hoplon.core :refer [a body div html textarea]]
             [hoplon.svg :as svg]
+            [javelin.core :refer [cell cell= defc formula-of]]
             [weathergen.coordinates :as coords]
             [weathergen.database :as db]
             [weathergen.falcon.install :as install]
@@ -25,7 +29,7 @@
             [weathergen.ui.textarea :as ta])
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]
-   [weathergen.cljs.macros :refer [with-key-lenses with-time formula-of keyed-for-tpl]]))
+   [weathergen.cljs.macros :refer [with-key-lenses with-time #_formula-of keyed-for-tpl]]))
 
 ;; (reset! ui/max-time {:day 2 :hour 2 :minute 2})
 
@@ -137,29 +141,65 @@
 
 (html
  (ui/head)
- (let [b (body)]
+ (let [b (body)
+       c (cell {"foo" true
+                "bar" false
+                "quux" true})
+       value (cell :a)
+       choices [{:value :a
+                 :label "A"}
+                {:value :b
+                 :label "B"}]
+       disabled? (cell false)]
    (b
+    (buttons/a-button
+     :click (fn [_]
+              (repl/connect "http://localhost:9000/repl")
+              (enable-console-print!))
+     "Start REPL")
+    (buttons/a-button
+     :disabled? disabled?
+     "Click me")
+    (buttons/a-button
+     :click (fn [_] (swap! disabled? not))
+     "Invert")
+    (comm/pre-cell "disabled?" disabled?)
     (div
      :id "outer"
-     (comm/when-dom*
-       (div "hi")
-       (fn []
-         (.log js/console "triggered")))
+     #_(buttons/a-button :click (fn [_] (swap! c update "foo" not)) "Click me")
+     #_(a :class (cell= (comm/classes-str c))
+        "Wut?")
+     #_(comm/dropdown :value value
+                    :choices choices)
+     (div (cell= (str value)))
+     (comm/select2 :choices choices
+                   :value value)
+     (comm/color-picker2 :value (cell "#000000"))
+     (let [val (cell "red")]
+       (div
+        (comm/color-picker2
+         :value val
+         :alpha? true)
+        (div val)))
+     #_(comm/when-dom*
+        (div "hi")
+        (fn []
+          (.log js/console "triggered")))
      #_(let [annotations (cell {1 {:text "something"}})]
-       (keyed-for-tpl key [[k _] annotations]
-         (let [annotation (comm/map-lens annotations k)]
-           (with-key-lenses annotation [text]
-             (div
-              :id "inner"
-              (div "Value: " (cell= (pr-str text)))
-              ;; (div "Interim: " (cell= (pr-str interim)))
-              (buttons/a-button
-               :click #(reset! text "This is a\ntext.")
-               "Reset")
-              (ta/textarea2
-               :value text
-               :css {:font-family "monospace"}
-               :change (fn [v] (reset! text v))
-               :placeholder "Enter some text")
-              (textarea
-               "This is a bunch of \n multiline text in a normal textarea for comparison."))))))))))
+         (keyed-for-tpl key [[k _] annotations]
+           (let [annotation (comm/map-lens annotations k)]
+             (with-key-lenses annotation [text]
+               (div
+                :id "inner"
+                (div "Value: " (cell= (pr-str text)))
+                ;; (div "Interim: " (cell= (pr-str interim)))
+                (buttons/a-button
+                 :click #(reset! text "This is a\ntext.")
+                 "Reset")
+                (ta/textarea2
+                 :value text
+                 :css {:font-family "monospace"}
+                 :change (fn [v] (reset! text v))
+                 :placeholder "Enter some text")
+                (textarea
+                 "This is a bunch of \n multiline text in a normal textarea for comparison."))))))))))

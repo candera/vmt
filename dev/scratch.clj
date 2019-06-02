@@ -3396,6 +3396,31 @@ stage
 
 ((:names @smpu) -1)
 
+
+(-> @smpu :scenario-files :campaign-info keys sort pprint)
+
+(let [ ;; path         "/Users/candera/falcon/4.34/Data/Campaign/MantisAtDawn-Day  1 18 30 05.cam"
+      path          "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 23 55 48.cam"
+      version       (-> (@#'mission/read-embedded-files path nil {::file-types #{:version}})
+                        :version
+                        :version)
+      ;; install-dir   (mission/find-install-dir path)
+      ;; installation  (mission/load-installation install-dir)
+      ;; theater       (mission/find-theater installation path)
+      ;; campaign-dir  (mission/campaign-dir installation theater)
+      ;; strings       (mission/read-strings-file campaign-dir)
+      ;; database      (assoc (mission/load-initial-database installation theater)
+      ;;                      :strings strings)
+      ;; mission-files (mission/read-embedded-files path database)
+      ]
+  ;; (s/explain mission/EmbeddedFiles mission-files)
+  version
+  )
+
+"a b c"
+
+"a b  c"
+
 (do
   (println "Starting")
   (if-let [data (s/explain-data mission/Mission @m434)]
@@ -3406,4 +3431,322 @@ stage
       (println "FAIL"))
     (println "OK")))
 
-(-> @smpu :scenario-files :campaign-info keys sort pprint)
+(require '[weathergen.falcon.files.mission.xml :as xml])
+
+(let [xml (fs/file-text "/tmp/ct.xml")]
+  (xml/parse xml :class-table))
+
+
+(let [xml (fs/file-text "/tmp/ct.xml")
+      parsed (clojure.data.xml/parse-str xml)
+      mapping (get xml/mappings :class-table)
+      content-map (->> parsed
+                       :content
+                       (filter clojure.data.xml/element?)
+                       first
+                       :content
+                       (filter clojure.data.xml/element?)
+                       (reduce (fn [m subelem]
+                                 (assoc m
+                                        (name (:tag subelem))
+                                        (reduce str (:content subelem)))
+                                 )
+                               {}))]
+  #_(@#'xml/parse-field "CollisionRadius" :float content-map)
+  (pprint (reduce-kv (fn [m from to]
+                       (let [{:keys [coersion path]} to]
+                         (println from coersion path)
+                         (assoc-in m path
+                                   (@#'xml/parse-field from coersion content-map))))
+                     {}
+                     (:fields mapping)))
+  )
+
+(let [data (xml/parse (fs/file-text "/tmp/ct.xml") :class-table)]
+  (if-let [problems (s/explain ::mission/class-table data)]
+    (println "FAIL")
+    (println "PASS")))
+
+(util/str->float nil)
+
+(@#'xml/coerce :float "0")
+
+(let [spec-for (fn [k]
+                 (condp = k
+                   :objectives :raw/objectives
+                   (keyword (namespace ::mission/foo) (name k))))]
+  (doseq [[k v] (sort @smpu)]
+    (print k ":")
+    (if-let [data (s/explain-data (spec-for k)
+                                  (if (sequential? v)
+                                    (take 2 v)
+                                    v))]
+      (do
+        (spit (str "/tmp/" (name k) ".edn")
+              (with-out-str
+                (pprint data)))
+        (println "FAIL"))
+      (println "OK"))))
+
+(def r
+  (let [path "/Users/candera/falcon/4.34/Data/Campaign/-BMS 000- Benchmark Test.tac"
+;;path         "/Users/candera/falcon/4.34/Data/Campaign/MantisAtDawn-Day  1 18 30 05.cam"
+        ;; path         "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 23 55 48.cam"
+        mission-buf  (fs/file-buf path)
+        version      (-> (@#'mission/read-embedded-files mission-buf nil {::mission/file-types #{:version}})
+                         :version
+                         :version)
+        install-dir  (mission/find-install-dir path)
+        installation (mission/load-installation install-dir)
+        theater      (mission/find-theater installation path)
+        campaign-dir (mission/campaign-dir installation theater)
+        strings      (mission/read-strings-file campaign-dir)
+        database     (assoc (mission/load-initial-database installation theater {:database/version version})
+                            :strings strings)
+        ;;mission-files (mission/read-embedded-files path database)
+        ]
+    ;; (s/explain mission/EmbeddedFiles mission-files)
+    ;; version
+    database
+    (cognitect.rebl/inspect database)
+    ))
+
+"a b  c"
+
+
+(doseq [k [:class-table
+           :unit-class-data
+           :objective-class-data
+           :vehicle-class-data
+           :weapon-class-data
+           :feature-class-data
+           :feature-entry-data
+           :point-header-data
+           ]]
+  (println "Starting" k)
+  (if-let [problems (s/explain-data
+                     (keyword (namespace ::mission/foo)
+                              (name k))
+                     (k r))]
+    (do
+      (spit (str "/tmp/" (name k) ".edn")
+            (with-out-str
+              (pprint problems)))
+      (println "FAIL"))
+    (println "PASS")))
+
+(-> r :feature-entry-data rand-nth pprint)
+
+(nil? (s/explain-data ::mission/unit-class-data (:unit-class-data r)))
+
+(-> r :unit-class-data rand-nth :damage)
+
+(let [data (clojure.data.xml/parse-str (fs/file-text "/tmp/ct.xml"))]
+  (-> data :content second :attrs))
+
+(-> r :weapon-class-data rand-nth pprint)
+
+(let [mission m434
+      spec-for (fn [k]
+                 (condp = k
+                   :objectives :raw/objectives
+                   (keyword (namespace ::mission/foo) (name k))))]
+  (doseq [[k v] (sort @mission)]
+    (print k ":")
+    (if-let [data (s/explain-data (spec-for k)
+                                  (if (sequential? v)
+                                    (take 2 v)
+                                    v))]
+      (do
+        (spit (str "/tmp/" (name k) ".edn")
+              (with-out-str
+                (pprint data)))
+        (println "FAIL"))
+      (println "OK"))))
+
+
+(->
+ (def r
+   (let [ ;; path         "/Users/candera/falcon/4.34/Data/Campaign/MantisAtDawn-Day  1 18 30 05.cam"
+         ;; path         "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 23 55 48.cam"
+         path "/Users/candera/falcon/4.34/Data/Campaign/-BMS 000- Benchmark Test.tac"
+         mission-buf  (fs/file-buf path)
+         version      (-> (@#'mission/read-embedded-files mission-buf nil {::mission/file-types #{:version}})
+                          :version
+                          :version)
+         install-dir  (mission/find-install-dir path)
+         installation (mission/load-installation install-dir)
+         theater      (mission/find-theater installation path)
+         campaign-dir (mission/campaign-dir installation theater)
+         strings      (mission/read-strings-file campaign-dir)
+         database     (assoc (mission/load-initial-database installation theater {:database/version version})
+                             :strings strings)
+         ;; mission-files (@#'mission/read-embedded-files mission-buf database
+         ;;                {::mission/file-types #{:units}})
+         ]
+     (binding [octet.buffer/*byte-order* :little-endian]
+       ;; TODO: Make this whole thing into a spec
+       (let [dir-offset (buf/read mission-buf buf/uint32)
+             dir-file-count (buf/read mission-buf buf/uint32 {:offset dir-offset})
+             directory (buf/read mission-buf (buf/repeat dir-file-count mission/directory-entry)
+                                 {:offset (+ dir-offset 4)})
+             _ (println "entries" (map (comp mission/file-type :file-name) directory))
+             files (for [entry directory
+                         :let [type (-> entry :file-name mission/file-type)]]
+                     (assoc entry
+                            :type type
+                            :entry entry
+                            :data mission-buf))
+             entry (->> files (filter #(= :units (:type %))) first)
+             {:keys [offset length]} entry
+             class-table (:class-table database)]
+         (let [header-spec (buf/spec :compressed-size buf/int32
+                                     :num-units buf/int16
+                                     :uncompressed-size buf/int32)
+               {:keys [compressed-size
+                       num-units
+                       uncompressed-size]} (buf/read mission-buf
+                                                     header-spec
+                                                     {:offset offset})
+               _ (println num-units "units")
+               data (lzss/expand mission-buf
+                                 (+ offset (buf/size header-spec))
+                                 (- length 6)
+                                 uncompressed-size)]
+           ;; Oddly, there can be entries in the table where the unit type
+           ;; is zero. That'll return a nil unit when read, which we throw
+           ;; away.
+           #_(log/debug "read-embedded-file* (:units)"
+                        :num-units num-units
+                        :compressed-size compressed-size
+                        :uncompressed-size uncompressed-size)
+           (->> (buf/read
+                 data
+                 (buf/repeat 6 (mission/unit-record database)))
+                ;; last
+                ;; (mission/unit-name database)
+                cognitect.rebl/inspect
+                #_(remove nil?)
+                #_(mapv (fn [unit]
+                          (assoc unit :name (mission/unit-name database unit)))))))))))
+
+(-> r :units )
+
+java.nio.file.File
+
+(let [file (java.io.File. "/tmp/out-433.bin")
+      stream (java.io.FileOutputStream. file false)
+      chan (.getChannel stream)]
+  (doto chan
+    (.write r)
+    (.close)))
+
+(class @m434)
+
+;; Package has camp ID at offset 0x06a4, so it starts at 0x06a4 - 0x1d = 0x0687 (1671). Since the type ID takes up two bytes, the length of the squadron record that preceeds is is 0x0685, which is 1669. But we're reading from 1270, so we're missing something big...
+
+
+
+;; Pilots
+;;   1 0x01: Col Klemmick
+;; 180 0xB4: Lt. Fitzpatrick
+;; 179 0xB3: Lt. Gatterer
+;; 178 0xB2: Lt. Ray
+
+;; 0x0788 looks like fuel (7162) four times then laser codes (1688) four times. Next byte is 00e8
+
+;; First byte of any unit is its class ID. The unit after the flight is a package with class 530 (0x0212), so it looks like the third unit starts at 0x8a9.
+
+;; Starts:
+;; Unit 0 - squadron - 0x0000
+;; Unit 1 - flight - 0x0687
+;; Unit 3 - package - 0x08a9
+
+;; SQUADRONS
+;; Squadron stores size raise from 600 to 999
+;; Squadron patch changed from byte to int
+
+;; FLIGHT
+;; Initial fuel for each AC
+;; Laser code for each AC
+
+(let [mission m434
+      spec-for (fn [k]
+                 (condp = k
+                   :objectives :raw/objectives
+                   (keyword (namespace ::mission/foo) (name k))))]
+  (doseq [[k v] (sort @mission)]
+    (print k ":")
+    (if-let [data (s/explain-data (spec-for k)
+                                  (if (sequential? v)
+                                    (take 2 v)
+                                    v))]
+      (do
+        (spit (str "/tmp/" (name k) ".edn")
+              (with-out-str
+                (pprint data)))
+        (println "FAIL"))
+      (println "OK"))))
+
+
+(do
+  (def r
+    (let [path         "/Users/candera/falcon/4.34/Data/Campaign/MantisAtDawn-Day  1 18 30 05.cam"
+          ;; path         "/Users/candera/falcon/4.33.3/Data/Add-On Korea EM1989 v2/Campaign/SMPU-Day  1 23 55 48.cam"
+          ;; path          "/Users/candera/falcon/4.34/Data/Campaign/-BMS 000- Benchmark Test.tac"
+          mission-buf   (fs/file-buf path)
+          version       (-> (@#'mission/read-embedded-files mission-buf nil {::mission/file-types #{:version}})
+                            :version
+                            :version)
+          install-dir   (mission/find-install-dir path)
+          installation  (mission/load-installation install-dir)
+          theater       (mission/find-theater installation path)
+          campaign-dir  (mission/campaign-dir installation theater)
+          strings       (mission/read-strings-file campaign-dir)
+          database      (assoc (mission/load-initial-database installation theater {:database/version version})
+                               :strings strings)
+          mission-files (@#'mission/read-embedded-files mission-buf database
+                         {::mission/file-types #{:units}})]
+      {:database      database
+       :mission-files mission-files}))
+  (cognitect.rebl/inspect r))
+
+(rebl)
+
+(->> r :mission-files :units (filter #(-> % :id :name (= 8407))) cognitect.rebl/inspect)
+
+(->> @m434 :teams (filter #(-> % :flags (util/has-flag? 1))) cognitect.rebl/inspect)
+
+(util/has-flag? 23 1)
+
+(-> @m434 :teams cognitect.rebl/inspect)cpf
+
+(-> @m434 cognitect.rebl/inspect)
+
+(-> @m434 mission/order-of-battle  cognitect.rebl/inspect)
+
+(require
+  '[cljs.repl :as repl]
+  '[cljs.repl.node :as node])
+
+(repl/repl* (node/repl-env)
+  {:output-dir "out"
+   :optimizations :none
+   :cache-analysis true
+   :source-map true})
+
+(require
+  '[cljs.repl :as repl]
+  '[cljs.repl.browser :as browser])
+
+(repl/repl* (browser/repl-env)
+  {:output-dir "out"
+   :optimizations :none
+   :cache-analysis true
+   :source-map true})
+
+(->> @m434
+     ::mission/airbases
+     (filter (fn [airbase]
+               (-> airbase ::mission/image nil?)))
+     cognitect.rebl/inspect)

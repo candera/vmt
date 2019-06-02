@@ -1,4 +1,4 @@
-(page "mission.html"
+(ns ^{:hoplon/page "mission.html"} vmt.pages.mission
   (:require [weathergen.ipc :as ipc]
             [weathergen.progress :as progress]
             [weathergen.ui :as ui]

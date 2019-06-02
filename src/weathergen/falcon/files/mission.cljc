@@ -10,9 +10,10 @@
                                 spy get-env log-env)]
             [weathergen.coordinates :as coords]
             [weathergen.falcon.constants :as c]
-            [weathergen.falcon.files :refer [larray fixed-string lstring bitflags
+            [weathergen.falcon.files :refer [debug-spec larray fixed-string lstring bitflags
                                              constant read-> read-trace spec-if]]
             [weathergen.falcon.files.images :as im]
+            [weathergen.falcon.files.mission.xml :as xml]
             [weathergen.filesystem :as fs]
             [weathergen.lzss :as lzss]
             [weathergen.math :as math]
@@ -194,7 +195,6 @@
                     ::flags
                     ::name
                     ::movement
-                    ::movement
                     ::max
                     ::fuel
                     ::rate
@@ -205,10 +205,17 @@
                     ::strength
                     ::range
                     ::detection
-                    ::damage
+                    ::damage-mod
                     ::radar
                     ::special
-                    ::icon]))
+                    ::icon
+                    ::description
+                    ::element-decal-index
+                    ::element-flags
+                    ::element-hull-number
+                    ::element-name-prefix
+                    ::element-name
+                    ::element-text-set-index]))
 
 
 (def ObjectiveClassData
@@ -566,7 +573,7 @@
   (s/keys :req-un [:database/version]))
 (def VictoryConditions string?)
 
-(def Buffer bytes?)
+(def Buffer #?(:clj bytes? :cljs NotImplemented))
 
 (def AugmentedObjective
   (s/merge Objective
@@ -625,16 +632,50 @@
   (s/keys :req-un [::airframe
                    ::quantity]))
 
+(def Loadout
+  (s/keys :req-un [:loadout/id
+                   :loadout/count]))
+
+(def VmtLoadout
+  (s/coll-of
+   (s/keys :req-un [::name
+                    ::quantity])))
+
 (def Flight
   (s/merge Unit
-           (s/keys :req [::airbase
+           (s/keys :req-un [::initial-fuel
+                            :flight/type
+                            ::pos-z
+                            ::fuel-burnt
+                            ::laser-codes
+                            ::last-move
+                            ::last-combat
+                            ::time-on-target
+                            ::mission-over-time
+                            ::mission-target
+                            :flight/loadouts
+                            :flight/mission
+                            ::old-mission
+                            ::last-direction
+                            ::priority
+                            ::mission-id
+                            ::eval-flags
+                            ::mission-context
+                            :flight/package
+                            :flight/squadron
+                            ::requester
+                            ::slots
+                            :flight/pilots
+                            ::plane-stats
+                            ::player-slots
+                            ::last-player-slot
+                            ::callsign-id
+                            ::callsign-num
+                            ::refuel-quantity]
+                   :req [::airbase
                          ::aircraft
                          ::loadouts
-                         ::mission
-                         ::package
-                         ::squadron
-                         ::squadron-image
-                         ::waypoints])))
+                         ::squadron-image])))
 
 (def Carrier
   (s/merge Unit
@@ -785,7 +826,9 @@
 (s/def ::bullseye-x integer?)
 (s/def ::bullseye-y integer?)
 (s/def ::c-team integer?)
+(s/def ::callsign-id integer?)
 (s/def ::callsign-index integer?)
+(s/def ::callsign-num integer?)
 (s/def ::callsign-slots integer?)
 (s/def ::camp-id integer?)
 (s/def ::campaign-info CampaignInfo)
@@ -796,7 +839,9 @@
 (s/def ::carriers (s/coll-of Carrier))
 (s/def ::center (s/coll-of integer? :count 2))
 (s/def ::class integer?)
-(s/def ::class-table (s/coll-of Falcon4EntityFields))
+(s/def ::class-table (s/coll-of (s/merge
+                                 Falcon4EntityFields
+                                 (s/keys :req [::index]))))
 (s/def ::class-info (s/or :class-info ClassInfo :class-info-2 ClassInfo2))
 (s/def ::collective integer?)
 (s/def ::collidable integer?)
@@ -807,6 +852,7 @@
 (s/def ::cos-heading number?)
 (s/def ::costs (s/coll-of integer? :count c/MOVEMENT_TYPES))
 (s/def ::count integer?)
+(s/def :loadout/count (s/coll-of integer? :count 16))
 (s/def ::country integer?)
 (s/def ::create-priority integer?)
 (s/def ::creation-rand integer?)
@@ -821,7 +867,7 @@
 (s/def ::current-wp integer?)
 (s/def ::cycle integer?)
 (s/def ::damage-mod (s/or :multiple (s/coll-of integer? :count (inc c/OtherDam)) :singular integer?))
-(s/def ::damage-speed integer?)
+(s/def ::damage-speed integer?)         ; Might supposed to be damage-seed
 (s/def ::damage-type integer?)
 (s/def ::data integer?)
 (s/def ::data-dir Dir)
@@ -845,6 +891,12 @@
 (s/def ::domain integer?)
 (s/def ::doubleres2dmap string?)
 (s/def ::drag-index integer?)
+(s/def ::element-decal-index (s/coll-of integer?))
+(s/def ::element-flags (s/coll-of integer?))
+(s/def ::element-hull-number (s/coll-of integer?))
+(s/def ::element-name-prefix (s/coll-of string?))
+(s/def ::element-name (s/coll-of string?))
+(s/def ::element-text-set-index (s/coll-of integer?))
 (s/def ::empty-wt integer?)
 (s/def ::endgame-result integer?)
 (s/def ::enemy-ad-exp integer?)
@@ -853,6 +905,7 @@
 (s/def ::entity-class (s/coll-of integer? :count 8))
 (s/def ::entity-type integer?)
 (s/def ::equipment integer?)
+(s/def ::eval-flags integer?)
 (s/def ::event-text string?)
 (s/def ::events Events)
 (s/def ::f-status (s/coll-of integer?))
@@ -877,6 +930,7 @@
 (s/def ::flights (s/coll-of Flight))
 (s/def ::formation integer?)
 (s/def ::fuel integer?)
+(s/def ::fuel-burnt integer?)
 (s/def ::fuel-available integer?)
 (s/def ::fuel-econ integer?)
 (s/def ::fuel-level integer?)
@@ -904,6 +958,7 @@
 (s/def ::idx-modified integer?)
 (s/def ::idx-size integer?)
 (s/def ::im/id string?)
+(s/def :loadout/id (s/coll-of integer? :count 16))
 (s/def :ppt/id string?)
 (s/def :int/id integer?)
 (s/def :vu/id VuId)
@@ -914,13 +969,19 @@
 (s/def ::image-ids IdList)
 (s/def ::index NonNegativeInt)
 (s/def ::initiatve integer?)
+(s/def ::initial-fuel (s/coll-of integer? :count 4))
 (s/def ::installation Installation)
 (s/def ::installs Installs)
 (s/def ::install-dir Dir)
+(s/def ::laser-codes (s/coll-of integer? :count 4))
 (s/def ::last-check CampaignTime)
+(s/def ::last-combat CampaignTime)
+(s/def ::last-direction integer?)
 (s/def ::last-index-num integer?)
 (s/def ::last-major-event integer?)
+(s/def ::last-move CampaignTime)
 (s/def ::last-player-mission CampaignTime)
+(s/def ::last-player-slot integer?)
 (s/def ::last-objective VuId)
 (s/def ::last-reinforcement integer?)
 (s/def :int/last-repair integer?)
@@ -928,6 +989,8 @@
 (s/def ::last-resupply integer?)
 (s/def ::last-wingman integer?)
 (s/def ::links (s/coll-of ObjectiveLink))
+(s/def ::loadouts (s/coll-of VmtLoadout))
+(s/def :flight/loadouts (s/coll-of Loadout))
 (s/def ::location (s/keys :req-un [::x ::y]))
 (s/def ::losses integer?)
 (s/def ::low-alt integer?)
@@ -956,7 +1019,12 @@
 (s/def ::mission
   (s/keys :req-un [::name
                    ::category]))
+(s/def :flight/mission integer?)
+(s/def ::mission-context integer?)
+(s/def ::mission-id integer?)
 (s/def ::mission-name string?)
+(s/def ::mission-target integer?)
+(s/def ::mission-over-time CampaignTime)
 (s/def ::mission-priority (s/coll-of integer? :count 41))
 (s/def ::mission-requests (s/coll-of MissionRequest))
 (s/def ::motto string?)
@@ -989,9 +1057,11 @@
 (s/def ::orders integer?)
 (s/def ::offensive-air-action TeamAirAction)
 (s/def ::offset Vector3)
+(s/def ::old-mission integer?)
 (s/def ::owner integer?)
 (s/def ::package
   (s/keys :req-un [::name]))
+(s/def :flight/package VuId)
 (s/def ::pak VuId)
 (s/def ::palette-offset integer?)
 (s/def ::palette-size integer?)
@@ -1000,10 +1070,14 @@
 (s/def ::persistent integer?)
 (s/def ::persistent-objects PersistentObjects)
 (s/def ::pilots Pilots)
+(s/def :flight/pilots (s/coll-of integer? :count 4))
+(s/def ::plane-stats (s/coll-of integer? :count 4))
 (s/def ::player-rating number?)
+(s/def ::player-slots (s/coll-of integer? :count 4))
 (s/def ::player-squadron-id VuId)
 (s/def ::point-header-data (s/coll-of PointHeaderData))
 (s/def ::points integer?)
+(s/def ::pos-z number?)
 (s/def ::ppt-data (s/coll-of PrePlannedThreat))
 (s/def ::primary-objectives PrimaryObjectives)
 (s/def ::priority integer?)
@@ -1022,6 +1096,7 @@
 (s/def ::rate integer?)
 (s/def ::rcs-factor number?)
 (s/def ::recent-event-entries (s/coll-of EventNode))
+(s/def ::refuel-quantity integer?)
 (s/def ::reinforcement integer?)
 (s/def ::repair-time integer?)
 (s/def ::replacements-available integer?)
@@ -1057,6 +1132,7 @@
 (s/def ::sptype integer?)
 (s/def ::squadron
   (s/keys :req-un [::name]))
+(s/def :flight/squadron VuId)
 (s/def ::squadrons
   (s/or :map (s/map-of VuId (s/coll-of Squadron))
         :seq (s/nilable (s/coll-of Squadron))))
@@ -1106,6 +1182,7 @@
 (s/def ::theater-size-y integer?)
 (s/def ::theaters (s/coll-of Theater))
 (s/def ::time CampaignTime)
+(s/def ::time-on-target CampaignTime)
 (s/def ::time-stamp integer?)
 (s/def ::timeout CampaignTime)
 (s/def ::tot integer?)
@@ -1114,6 +1191,7 @@
 (s/def ::tx integer?)
 (s/def ::ty integer?)
 (s/def ::type integer?)
+(s/def :flight/type #{:flight})
 (s/def ::ui-name string?)
 (s/def ::units (s/coll-of Unit))
 (s/def ::unit-flags UnitFlags)
@@ -1163,8 +1241,15 @@
   "Retrieves the unit class info (the most important elements of which
   are things like domain and type) for a given unit type."
   [{:keys [class-table] :as mission} type-id]
-  (let [class-entry (nth class-table
-                         (- type-id c/VU_LAST_ENTITY_TYPE))]
+  (let [class-entry (try
+                      (nth class-table
+                           (- type-id c/VU_LAST_ENTITY_TYPE))
+                      (catch #?(:clj IndexOutOfBoundsException :cljs js/Error) x
+                        (throw (ex-info "class-info index out of bounds"
+                                        {:reason :index-out-of-bounds
+                                         ;; ::mission mission
+                                         ::type-id type-id
+                                         ::index (- type-id c/VU_LAST_ENTITY_TYPE)}))))]
     (-> class-entry
         :vu-class-data
         :class-info)))
@@ -1833,6 +1918,7 @@
        str/split-lines
        (map str/trim)
        (remove str/blank?)
+       (remove #(.startsWith % "#"))
        ;; The equals is because one of the files uses it, I think
        ;; mistakenly
        (map #(str/split % whitespace))
@@ -1916,6 +2002,29 @@
   [mission]
   (get-in mission [:theater :name]))
 
+
+(defn- load-xml-initial-database
+  [installation theater opts]
+  (->> (for [[type k] [["ct" :class-table]
+                       ["ucd" :unit-class-data]
+                       ["OCD" :objective-class-data]
+                       ["VCD" :vehicle-class-data]
+                       ["WCD" :weapon-class-data]
+                       ["FCD" :feature-class-data]
+                       ["fed" :feature-entry-data]
+                       ["PHD" :point-header-data]]]
+         (let [path (fs/path-combine
+                     (object-dir installation theater)
+                     (str "FALCON4_" type ".xml"))
+               _ (log/info "XML file path" path)
+               xml (fs/file-text path)]
+           [k (xml/parse xml k)]))
+       (into {})
+       (merge { ;; These next couple might need to be generalized, like to a map
+               ;; from the type to the ids in it.
+               :image-ids            (read-image-ids installation)
+               :user-ids             (read-user-ids installation)})))
+
 (s/fdef load-initial-database
   :args (s/cat :installation Installation :theater Theater)
   :ret InitialDatabase)
@@ -1923,57 +2032,64 @@
 (defn load-initial-database
   "Load the files in known locations needed to process a mission in a
   given theater."
-  [installation theater]
-  (->> (for [[file k spec] [["FALCON4.ct" :class-table (apply buf/spec falcon4-entity-fields)]
-                            ["FALCON4.UCD" :unit-class-data unit-class-data]
-                            ["FALCON4.OCD" :objective-class-data objective-class-data]
-                            ["FALCON4.VCD" :vehicle-class-data vehicle-class-data]
-                            ["FALCON4.WCD" :weapon-class-data weapon-class-data]
-                            ["FALCON4.FCD" :feature-class-data feature-class-data]
-                            ["falcon4.fed" :feature-entry-data feature-entry-data]
-                            ["FALCON4.PHD" :point-header-data point-header-data]]]
-         (let [path (fs/path-combine
-                     (object-dir installation theater)
-                     file)
-               buf  (fs/file-buf path)]
-           [k
-            (binding [octet.buffer/*byte-order* :little-endian]
-              (vec
-               (map-indexed (fn [i v]
-                              (assoc v ::index i))
-                            (buf/read (->> file
-                                           (fs/path-combine (object-dir installation theater))
-                                           fs/file-buf)
-                                      (larray buf/uint16 spec)))))]))
-       (into {})
-       (merge { ;; These next couple might need to be generalized, like to a map
-               ;; from the type to the ids in it.
-               :image-ids            (read-image-ids installation)
-               :user-ids             (read-user-ids installation)})))
+  [installation theater & [{version :database/version :as opts}]]
+  (if (>= version 100)
+    (load-xml-initial-database installation theater opts)
+    (throw (ex-info "This version of VMT does not work with versions of BMS prior to 4.34. Use an older version of VMT to work with missions from older versions of BMS."
+                    {:omit-stack-trace? true
+                     :version           version}))
+    #_(->> (for [[file k spec] [["FALCON4.ct" :class-table (apply buf/spec falcon4-entity-fields)]
+                                ["FALCON4.UCD" :unit-class-data unit-class-data]
+                                ["FALCON4.OCD" :objective-class-data objective-class-data]
+                                ["FALCON4.VCD" :vehicle-class-data vehicle-class-data]
+                                ["FALCON4.WCD" :weapon-class-data weapon-class-data]
+                                ["FALCON4.FCD" :feature-class-data feature-class-data]
+                                ["falcon4.fed" :feature-entry-data feature-entry-data]
+                                ["FALCON4.PHD" :point-header-data point-header-data]]]
+             (let [path (fs/path-combine
+                         (object-dir installation theater)
+                         file)
+                   buf  (fs/file-buf path)]
+             [k
+              (binding [octet.buffer/*byte-order* :little-endian]
+                (vec
+                 (map-indexed (fn [i v]
+                                (assoc v ::index i))
+                              (buf/read (->> file
+                                             (fs/path-combine (object-dir installation theater))
+                                             fs/file-buf)
+                                        (larray buf/uint16 spec)))))]))
+           (into {})
+           (merge { ;; These next couple might need to be generalized, like to a map
+                   ;; from the type to the ids in it.
+                   :image-ids (read-image-ids installation)
+                   :user-ids  (read-user-ids installation)}))))
 
 (defn- read-embedded-files
-  "Reads and parses a .tac/.cmp file, returning a map from the
-  embedded file type to its contents."
-  [path database]
-  (let [buf (fs/file-buf path)]
-    (binding [octet.buffer/*byte-order* :little-endian]
-      ;; TODO: Make this whole thing into a spec
-      (let [dir-offset (buf/read buf buf/uint32)
-            dir-file-count (buf/read buf buf/uint32 {:offset dir-offset})
-            directory (buf/read buf (buf/repeat dir-file-count directory-entry)
-                                {:offset (+ dir-offset 4)})
-            files (for [entry directory
-                        :let [type (-> entry :file-name file-type)]]
-                    (assoc entry
-                           :type type
-                           :data (read-embedded-file type entry buf database)))]
-        ;; Ensure that there's exactly one file per type
-        (assert (->> files
-                     (map :type)
-                     distinct
-                     count
-                     (= (count files))))
-        (zipmap (map :type files) (map :data files))))))
+  "Reads and parses a .tac/.cmp file, returning a map from the embedded
+  file type to its contents. Opts includes `::file-types`, a set of
+  keywords limiting the file types to be read."
+  [buf database & [{file-types ::file-types :as opts}]]
+  (binding [octet.buffer/*byte-order* :little-endian]
+    ;; TODO: Make this whole thing into a spec
+    (let [dir-offset (buf/read buf buf/uint32)
+          dir-file-count (buf/read buf buf/uint32 {:offset dir-offset})
+          directory (buf/read buf (buf/repeat dir-file-count directory-entry)
+                              {:offset (+ dir-offset 4)})
+          files (for [entry directory
+                      :let [type (-> entry :file-name file-type)]
+                      :when (or (nil? file-types)
+                                (file-types type))]
+                  (assoc entry
+                         :type type
+                         :data (read-embedded-file type entry buf database)))]
+      ;; Ensure that there's exactly one file per type
+      (assert (->> files
+                   (map :type)
+                   distinct
+                   count
+                   (= (count files))))
+      (zipmap (map :type files) (map :data files)))))
 
 (defn merge-objective-deltas
   "Given objectives and objective deltas, merge the deltas and return
@@ -2273,10 +2389,11 @@
                                    (map :owner)
                                    distinct
                                    set)
-        active-team-nums      (into teams-with-units teams-with-objectives)
+        ;; active-team-nums      (into teams-with-units teams-with-objectives)
         active-teams          (->> mission
                                    :teams
-                                   (filter #(-> % team-number active-team-nums)))
+                                   (filter #(-> % :team :flags (has-flag? c/TEAM_ACTIVE)))
+                                   #_(filter #(-> % team-number active-team-nums)))
         first-team-num        (->> active-teams first :team :who)]
     (sort-by #(team-priority mission first-team-num (-> % :team :who)) active-teams)))
 
@@ -2334,24 +2451,29 @@
 (defn squadron-aircraft
   "Returns a map of `:airframe` and `:quantity` for a squadron."
   [mission squadron]
-  {:airframe (-> squadron
-                 :type-id
-                 (- 100)
-                 (->> (nth (:class-table mission)))
-                 :data-pointer
-                 (->> (nth (:unit-class-data mission)))
-                 :vehicle-type
-                 first
-                 (->> (nth (:class-table mission)))
-                 :data-pointer
-                 (->> (nth (:vehicle-class-data mission)))
-                 :name)
-   :quantity (reduce +
-                     (for [i (range 16)]
-                       (-> squadron
-                           :roster
-                           (bit-shift-right (* i 2))
-                           (bit-and 0x03))))})
+  (try
+    {:airframe (-> squadron
+                   :type-id
+                   (- 100)
+                   (->> (nth (:class-table mission)))
+                   :data-pointer
+                   (->> (nth (:unit-class-data mission)))
+                   :vehicle-type
+                   first
+                   (->> (nth (:class-table mission)))
+                   :data-pointer
+                   (->> (nth (:vehicle-class-data mission)))
+                   :name)
+     :quantity (reduce +
+                       (for [i (range 16)]
+                         (-> squadron
+                             :roster
+                             (bit-shift-right (* i 2))
+                             (bit-and 0x03))))}
+    (catch #?(:clj Throwable
+              :cljs :default) x
+      (log/error "error looking up squadron aircraft" :squadron-id (:id squadron))
+      (throw x))))
 
 ;; Status algorithm at objectiv.cpp(2455)
 (defn airbase-status
@@ -2536,7 +2658,7 @@
                              "dark")
                         (get-in image-ids [:id->name icon-index]))))
 
-(defn- squadron-type
+(defn squadron-type
   "Returns a string describing the type of the squadron - Fighter,
   Attack, etc."
   [mission squadron]
@@ -2690,19 +2812,28 @@
     (fn []
       (let [airbase-classes (->> mission
                                  :class-table
+                                 ;; ((fn [x] (log/info "A" (count x)) x))
                                  (util/filter= #(get-in % [:vu-class-data :class-info :domain])
-                                               c/DOMAIN_LAND)
+                                               c/DOMAIN_LAND  ; 3
+                                               )
+                                 ;; ((fn [x] (log/info "B" (count x)) x))
                                  (util/filter= #(get-in % [:vu-class-data :class-info :class])
-                                               c/CLASS_OBJECTIVE)
-                                 (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}
+                                               c/CLASS_OBJECTIVE ; 4
+                                               )
+                                 ;; ((fn [x] (log/info "C" (count x)) x))
+                                 (filter #(#{c/TYPE_AIRBASE c/TYPE_AIRSTRIP}  ; 1 & 2
                                            (get-in % [:vu-class-data :class-info :type])))
-                                 ;;  Carrier airbases have subtype 7 and specific type 7.
+                                 ;; ((fn [x] (log/info "D" (count x)) x))
+                                 ;;  Carrier airbases have subtype 255 (7 in BMS 4.33) and specific type 7.
                                  (remove (fn [cls]
-                                           (= [7 7]
+                                           (= [255 7]
                                               [(get-in cls [:vu-class-data :class-info :stype])
                                                (get-in cls [:vu-class-data :class-info :sptype])])))
+                                 ;; ((fn [x] (log/info "E" (count x)) x))
                                  (map ::index)
+                                 ;; ((fn [x] (log/info "F" (count x)) x))
                                  set)]
+        #_(log/info "airbase-classes" airbase-classes)
         (->> mission
              ::objectives
              (filterv (fn [objective]
@@ -2875,7 +3006,14 @@
   "Given a path to a mission (.cam/.tac/.trn) file, read,
   parse, and return it."
   [installs path]
-  (let [install-dir   (progress/with-step "Locating installation directory"
+  (let [mission-buf   (progress/with-step (str "Loading mission file into memory from " path)
+                        #(fs/file-buf path))
+        version       (progress/with-step "Reading mission database version"
+                        #(-> (read-embedded-files mission-buf nil {::file-types #{:version}})
+                             :version
+                             :version))
+        _             (log/debug "Version is " version)
+        install-dir   (progress/with-step "Locating installation directory"
                         #(find-install-dir path))
         installation  (progress/with-step (str "Scanning Falcon installation at " install-dir)
                         #(load-installation install-dir))
@@ -2885,10 +3023,10 @@
         strings       (progress/with-step "Reading theater strings"
                         #(read-strings-file campaign-dir))
         database      (progress/with-step "Reading theater data"
-                        #(assoc (load-initial-database installation theater)
+                        #(assoc (load-initial-database installation theater {:database/version version})
                                 :strings strings))
-        mission-files (progress/with-step (str "Reading mission files from " path)
-                        #(read-embedded-files path database))
+        mission-files (progress/with-step "Parsing mission info"
+                        #(read-embedded-files mission-buf database))
 
         {:keys [theater-name scenario]} (->> mission-files :campaign-info)
 
@@ -2898,7 +3036,8 @@
         scenario-path  (fs/path-combine (fs/parent path) scenario-file)
         scenario-files (progress/with-step (str "Reading scenario file: "
                                                 scenario-file)
-                         #(read-embedded-files scenario-path database))
+                         #(let [buf (fs/file-buf scenario-path)]
+                            (read-embedded-files buf database)))
         ppt-data       (read-ppt-data installation theater)
         mission        (merge database
                               mission-files
@@ -2925,6 +3064,7 @@
                                :mission-name       (fs/basename path)
                                :theater            theater
                                :ppt-data           ppt-data})]
+    (log/debug "Candidate installs" (:candidate-installs mission))
     (postprocess-mission mission)))
 
 (defn mission->briefing
@@ -2941,7 +3081,7 @@
 
 (defn briefing->mission
   "Loads a mission given a briefing (see `mission->briefing`)."
-  [installs briefing]
+  [installs briefing & [{database-version :database/version :as opts}]]
   (let [{:keys [theaterdef-name
                 install-id]} briefing
         ;; This is to handle a bug that I fixed in 20bf6b0
@@ -2970,20 +3110,18 @@
                                                 :install-dir     install-dir
                                                 :theaterdef-name theaterdef-name})))
         strings              (read-strings-file (campaign-dir installation theater))
-        database             (assoc (load-initial-database installation theater)
+        database             (assoc (load-initial-database installation theater opts)
                                     :strings strings)
         {:keys [theater-name
                 scenario]}   (->> briefing :campaign-info)
         names                (read-strings (campaign-dir installation theater)
                                            theater-name)
-        database             (assoc (load-initial-database installation theater)
-                                    :strings strings)
         scenario-file        (str scenario (:extension briefing))
         scenario-path        (fs/path-combine (campaign-dir installation theater)
                                               scenario-file)
         scenario-files       (progress/with-step (str "Reading scenario file: " scenario-file)
-                               (fn []
-                                 (read-embedded-files scenario-path database)))
+                               #(let [buf (fs/file-buf scenario-path)]
+                                  (read-embedded-files buf database)))
         mission              (merge database
                                     briefing
                                     ;; TODO: Figure out if we need to merge persistent objects
@@ -3479,12 +3617,22 @@
                [:type              (constant :flight)
                 :pos-z             buf/float
                 :fuel-burnt        buf/int32
-                :last-move         campaign-time
+                :initial-fuel      (buf/repeat 4 buf/uint32)
+                :laser-codes       (buf/repeat 4 buf/uint16)
+                :last-move         (debug-spec
+                                    {:level :off
+                                     :msg "last-move"}
+                                    campaign-time)
                 :last-combat       campaign-time
                 :time-on-target    campaign-time
                 :mission-over-time campaign-time
-                :mission-target    buf/int16
-                :loadouts          (larray buf/ubyte loadout)
+                :mission-target    (debug-spec
+                                    {:level :off
+                                     :msg "mission-target"}
+                                    buf/int16)
+                :loadouts          (debug-spec
+                                    {:level :off}
+                                    (larray buf/ubyte loadout))
                 :mission           buf/ubyte
                 :old-mission       buf/ubyte
                 :last-direction    buf/ubyte
@@ -3496,7 +3644,10 @@
                 :squadron          vu-id
                 :requester         vu-id
                 :slots             (buf/repeat 4 buf/ubyte)
-                :pilots            (buf/repeat 4 buf/ubyte)
+                :pilots            (debug-spec
+                                    {:level :off
+                                     :msg "pilots"}
+                                    (buf/repeat 4 buf/ubyte))
                 :plane-stats       (buf/repeat 4 buf/ubyte)
                 :player-slots      (buf/repeat 4 buf/ubyte)
                 :last-player-slot  buf/ubyte
@@ -3511,7 +3662,8 @@
                [:type           (constant :squadron)
                 :fuel           buf/int32
                 :specialty      buf/ubyte
-                :stores         (buf/repeat 600 buf/ubyte)
+                ;; :stores         (buf/repeat 400 buf/ubyte) 4.33
+                :stores         (buf/repeat 1000 buf/ubyte)
                 :pilots         (buf/repeat 48 pilot)
                 :schedule       (buf/repeat 16 buf/int32)
                 :airbase-id     vu-id
@@ -3525,7 +3677,7 @@
                 :mission-score  buf/int16
                 :total-losses   buf/ubyte
                 :pilot-losses   buf/ubyte
-                :squadron-patch buf/ubyte])))
+                :squadron-patch buf/int16])))
 
 (def package
   (let [package-common (apply buf/spec
@@ -3630,10 +3782,10 @@
       (let [type-id (buf/read buf buf/int16 {:offset pos})]
         #_(log/debug "unit-record reading"
                    :pos pos
-                   :unit-type unit-type)
+                   :unit-type type-id)
         (if (zero? type-id)
           (do
-            #_(log/debug "unit-record: found zero unit-type entry..")
+            (log/debug "unit-record: found zero unit-type entry..")
             [2 nil])
           (let [{:keys [domain type]} (class-info
                                        database
@@ -3643,12 +3795,30 @@
                 ;;              :domain domain
                 ;;              :type type)
                 spc (condp = [domain type]
-                      [c/DOMAIN_AIR  c/TYPE_FLIGHT] flight
-                      [c/DOMAIN_AIR  c/TYPE_PACKAGE] package
-                      [c/DOMAIN_AIR  c/TYPE_SQUADRON] squadron
-                      [c/DOMAIN_LAND c/TYPE_BATTALION] battalion
-                      [c/DOMAIN_LAND c/TYPE_BRIGADE] brigade
-                      [c/DOMAIN_SEA  c/TYPE_TASKFORCE] task-force)
+                      [c/DOMAIN_AIR  c/TYPE_FLIGHT]
+                      (do
+                        ;; (log/debug "Unit is flight")
+                        flight)
+                      [c/DOMAIN_AIR  c/TYPE_PACKAGE]
+                      (do
+                        ;; (log/debug "Unit is package")
+                        package)
+                      [c/DOMAIN_AIR  c/TYPE_SQUADRON]
+                      (do
+                        ;; (log/debug "Unit is squadron")
+                        squadron)
+                      [c/DOMAIN_LAND c/TYPE_BATTALION]
+                      (do
+                        ;; (log/debug "Unit is battalion")
+                        battalion)
+                      [c/DOMAIN_LAND c/TYPE_BRIGADE]
+                      (do
+                        ;; (log/debug "Unit is brigade")
+                        brigade)
+                      [c/DOMAIN_SEA  c/TYPE_TASKFORCE]
+                      (do
+                        ;; (log/debug "Unit is task-force")
+                        task-force))
                 [datasize data] (try
                                   (buf/read* buf
                                              spc
@@ -3696,6 +3866,8 @@
                    :num-units num-units
                    :compressed-size compressed-size
                    :uncompressed-size uncompressed-size)
+      #?(:clj (.write (java.io.FileOutputStream. "/tmp/units.raw")
+                      (.array data)))
       (->> (buf/read
             data
             (buf/repeat num-units (unit-record database)))

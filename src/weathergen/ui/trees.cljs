@@ -1,6 +1,10 @@
 (ns weathergen.ui.trees
   "A library for rendering collapsable trees of elements."
   (:require [cljs.pprint :refer [pprint]]
+            [hoplon.core :refer [a datalist defelem div do-watch fieldset for-tpl h4
+                                 i if-tpl img input label legend li
+                                 ol option pre select span style ul when-tpl with-timeout]]
+            [javelin.core :refer [cell cell? cell= cell-let dosync formula-of lens with-let]]
             [weathergen.ui.common :as comm :refer [inl px pct rinl styled]]
             [rum.core :as rum]
             [taoensso.timbre :as log
@@ -8,7 +12,7 @@
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)])
   (:require-macros
-   [weathergen.cljs.macros :refer [formula-of]]))
+   [weathergen.cljs.macros :refer [#_formula-of]]))
 
 ;; (set! *warn-on-infer* true)
 

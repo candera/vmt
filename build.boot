@@ -3,21 +3,33 @@
 (merge-env!
  :dependencies '[[org.clojure/clojure       "1.10.0"]
                  [org.clojure/clojurescript "1.10.520"]
-                 [adzerk/boot-cljs          "2.0.0"]
-                 [adzerk/boot-reload        "0.5.1"]
-                 ;; [adzerk/boot-cljs-repl     "0.3.3"]
-                 ;;[hoplon/javelin "3.9.0"]
-                 [hoplon "7.0.3"]
+                 ;;[hoplon "7.2.0"]
+                 [jumblerg/hoplon "7.0.4"] ; Official release broken in several ways...
 
-                 [org.clojure/core.async "0.3.465" :exclusions [[org.clojure/tools.reader]]]
+                 ;; [hoplon/boot-hoplon "0.3.0" :scope "test"]
+                 [adzerk/boot-cljs          "2.1.5"]
+                 [adzerk/boot-reload        "0.6.0"]
+
+                 ;; cljs-repl
+                 [adzerk/boot-cljs-repl     "0.4.0" :scope "test"]
+                 [cider/piggieback "0.3.9" :scope "test"]
+                 [nrepl "0.4.5" :scope "test"]
+
+                 ;;[hoplon/javelin "3.9.0"]
+
+                 [org.clojure/core.async "0.4.490" :exclusions [[org.clojure/tools.reader]]]
                  ;; [tailrecursion/boot-jetty  "0.1.3"]
+                 ;; [cljsjs/jquery "3.4.0-0"]
                  [cljsjs/jquery-ui "1.11.4-0"]
                  [org.clojure/data.csv "0.1.4"]
                  [org.clojure/data.json "0.2.6"]
+                 [org.clojure/data.xml "0.0.8"]  ; Boot dep, unfortunately
+                 ;; [org.clojure/data.xml "0.2.0-alpha6"]
+                 [funcool/tubax "0.2.0"]
 
-                 [rum "0.10.8"]
-                 [com.cognitect/transit-cljs "0.8.243"]
-                 [com.cognitect/transit-clj "0.8.300" :scope "test"]
+                 [rum "0.11.3"]
+                 [com.cognitect/transit-cljs "0.8.256"]
+                 [com.cognitect/transit-clj "0.8.313" :scope "test"]
                  [com.taoensso/timbre "4.10.0"]
                  [hiccups "0.3.0"]
                  ;;[secretary "1.2.3"]
@@ -32,15 +44,15 @@
                  ;; Had to download as the cljsjs one is pretty far out of date
                  ;;[cljsjs/jszip "2.5.0-0"]
                  [cljsjs/pako "0.2.7-0"]
-                 [cljsjs/tinycolor "1.3.0-0"]
+                 [cljsjs/tinycolor "1.4.1-0"]
                  [cljsjs/select2 "4.0.3-1"]
-                 [garden "1.3.3"]
-                 [funcool/octet "1.0.1"]
-                 [org.clojure/core.match "0.3.0-alpha5"]
+                 [garden "1.3.9"]
+                 [funcool/octet "1.1.2"]
+                 [org.clojure/core.match "0.3.0"]
                  [org.clojure/tools.namespace "0.2.11" :scope "test"]
-                 [quil "2.6.0"]
+                 [quil "3.0.0"]
 
-                 [binaryage/devtools "0.9.9" :scope "test"]
+                 [binaryage/devtools "0.9.10" :scope "test"]
                  [expound "0.7.2" :scope "test"]
                  [org.clojure/test.check "0.10.0-alpha4" :scope "test"]
                  ;;[io.nervous/cljs-nodejs-externs "0.2.0"]
@@ -56,7 +68,7 @@
 
 (require
  '[adzerk.boot-cljs         :refer [cljs]]
-;; '[adzerk.boot-cljs-repl    :refer [cljs-repl start-repl]]
+ '[adzerk.boot-cljs-repl    :refer [cljs-repl start-repl]]
  '[adzerk.boot-reload       :refer [reload]]
  '[hoplon.boot-hoplon       :refer [hoplon prerender]]
  ;; '[tailrecursion.boot-jetty :refer [serve]]
@@ -108,7 +120,7 @@
    (cljs :ids #{"index.html" "mission.html" "test.html"}
          :optimizations :none
          ;; :optimizations :whitespace
-         :compiler-options {;;:target :nodejs
+         :compiler-options { ;;:target :nodejs
                             :hashbang false
                             :parallel-build false
                             ;;:externs ["js/slickgrid/slickgrid.ext.js"]
@@ -123,7 +135,7 @@
    (cljs :ids #{"worker"}
          ;; :optimizations :none
          :optimizations :whitespace
-         :compiler-options {;;:target :nodejs
+         :compiler-options { ;;:target :nodejs
                             :hashbang false
                             :parallel-build false
                             ;;:externs ["js/slickgrid/slickgrid.ext.js"]
@@ -145,6 +157,17 @@
                             :pretty-print true
                             :pseudo-names true}
          :source-map (boolean source-maps))
+   #_(cljs :ids #{"repl"}
+         :optimizations :simple
+         :compiler-options { ;; :asset-path "target/main.out"
+                            ;; :closure-defines {'app.main/dev? true}
+                            :externs ["externs.ext.js"]
+                            :target :nodejs
+                            :hashbang false
+                            :parallel-build true
+                            :pretty-print true
+                            :pseudo-names true}
+         :source-map source-maps)
    (fixup-source-maps)
    (target)))
 
@@ -210,7 +233,7 @@
      ;;                          :hashbang false})
      (target (or target-dir "target")))))
 
-#_(deftask dev-repl
+(deftask dev-repl
   []
   (comp
    (watch)

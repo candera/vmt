@@ -20,7 +20,7 @@
      (.timeEnd js/console timer-name#)
      result#))
 
-(defmacro formula-of
+#_(defmacro formula-of
   "Emits a form that will produce a cell using the formula over the
   specified input cells. Avoids some of the code-walking problems of
   the Hoplon macros. Cells can be either a vector, in which case the

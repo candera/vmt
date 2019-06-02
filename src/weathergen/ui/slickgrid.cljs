@@ -2,13 +2,14 @@
   "Encapsulates the SlickGrid control."
   (:require #_[jquery.event.drag]
             #_[slick.core]
+            [javelin.core :refer [formula-of]]
             [slick.grid]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-time #_formula-of]]))
 
 ;; (set! *warn-on-infer* true)
 

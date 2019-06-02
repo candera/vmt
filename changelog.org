@@ -4,6 +4,11 @@
 #+TITLE:
 
 * Change Log
+** v058-6 [2019-06-02 Sun]
+- ALPHA Release: Update to support 4.34
+  - Weather non-functional
+  - Other bugs likely present
+  - 4.33 no longer supported: use v058 or prior
 ** v058-2 [2018-09-20 Thu]
 - Remove highlight from flight when closing flight tab.
 - Make tools tab always visible.

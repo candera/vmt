@@ -9,6 +9,7 @@
     },
     "dependencies": {
         "@claviska/jquery-minicolors": "^2.2.6",
+        "tinycolor2": "^1.4.1",
         "winreg": "^1.2.3"
     }
 }

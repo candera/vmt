@@ -1,8 +1,10 @@
-(page "index.html"
+(ns ^{:hoplon/page "index.html"} vmt.pages.index
   (:require [cljs.pprint :refer [pprint]]
             ;; [quiescent.core :as q]
             ;; [quiescent.dom :as d]
+            [hoplon.core :refer [body case-tpl cond-tpl elem if-tpl div html span when-tpl with-timeout]]
             [hoplon.storage-atom :refer [local-storage]]
+            [javelin.core :refer [cell cell= defc dosync formula-of with-let]]
             [weathergen.ipc :as ipc]
             [weathergen.ui :as ui]
             [weathergen.ui.buttons :as buttons]
@@ -14,7 +16,7 @@
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-bbox with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-bbox with-time #_formula-of]]))
 
 (def electron (js/require "electron"))
 

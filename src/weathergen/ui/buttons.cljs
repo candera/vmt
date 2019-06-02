@@ -1,13 +1,17 @@
 (ns weathergen.ui.buttons
   "A library of button controls."
-  (:require [rum.core :as rum]
+  (:require [hoplon.core :refer [a datalist defelem div do-watch fieldset for-tpl h4
+                                 i if-tpl img input label legend
+                                 option pre select span style with-timeout]]
+            [javelin.core :refer [cell cell? cell= cell-let dosync formula-of lens with-let]]
+            [rum.core :as rum]
             [weathergen.ui.common :as comm]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
                                 spy get-env log-env)])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time]]))
 
 ;; (set! *warn-on-infer* true)
 

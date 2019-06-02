@@ -5,7 +5,12 @@
             [garden.stylesheet :as css]
             [goog.string :as gstring]
             [goog.string.format]
+            [hoplon.core :refer [a cond-tpl datalist defelem div do-watch fieldset for-tpl h4 hr
+                                 i if-tpl img input label legend li
+                                 option pre select span style
+                                 table text tbody td thead tr ul when-tpl with-timeout]]
             [hoplon.svg :as svg]
+            [javelin.core :refer [cell cell? cell= cell-let dosync formula-of lens with-let]]
             [taoensso.timbre :as log
              :include-macros true
              :refer (log trace debug info warn error fatal report
@@ -24,7 +29,7 @@
             [weathergen.ui.grids :as grids]
             [weathergen.util :as util :refer [has-flag?]])
   (:require-macros
-   [weathergen.cljs.macros :refer [keyed-for-tpl with-attr-bindings with-bbox with-time formula-of]]))
+   [weathergen.cljs.macros :refer [keyed-for-tpl with-attr-bindings with-bbox with-time #_formula-of]]))
 
 ;; (set! *warn-on-infer* true)
 

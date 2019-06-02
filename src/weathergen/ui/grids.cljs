@@ -2,7 +2,12 @@
   "Homegrown grid controls."
   (:require [garden.core :refer [css]]
             [garden.selectors :as css-sel]
+            [hoplon.core :refer [a datalist defelem div do-watch fieldset for-tpl h4
+                                 i if-tpl img input label legend li
+                                 option pre select span style
+                                 table tbody td thead tr ul when-tpl with-timeout]]
             [hoplon.svg :as svg]
+            [javelin.core :refer [cell cell? cell= cell-let dosync formula-of lens with-let]]
             [rum.core :as rum]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
@@ -12,7 +17,7 @@
             [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [inl px register-styles! rinl triangle]])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-time formula-of with-attr-bindings keyed-for-tpl]]))
+   [weathergen.cljs.macros :refer [with-time #_formula-of with-attr-bindings keyed-for-tpl]]))
 
 ;; (set! *warn-on-infer* true)
 

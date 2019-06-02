@@ -14,7 +14,7 @@
 (defn str->float
   "Convert a string to a floating point number. Returns nil when it can't be parsed."
   [s]
-  #?(:clj (try (Double. s) (catch NumberFormatException _ nil))
+  #?(:clj (try (when s (Double. s)) (catch NumberFormatException _ nil))
      :cljs (let [n (-> s js/Number. .valueOf)]
              (when-not (js/isNaN n)
                n))))

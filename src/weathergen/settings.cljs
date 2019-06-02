@@ -1,4 +1,4 @@
-        (ns weathergen.settings
+(ns weathergen.settings
   "Reads and writes the settings file."
   (:require [cljs.nodejs :as node]
             [cljs.reader :as reader]
@@ -15,7 +15,7 @@
 (def electron ^js/electron (node/require "electron"))
 (def remote ^js/remote (.-remote electron))
 
-(defn remote-if-necessary
+#_(defn remote-if-necessary
   [electron]
   (if (= "renderer" (.-type js/process))
     remote
@@ -23,7 +23,10 @@
 
 (defn ^js/app app
   []
-  (if (= "renderer" (.-type js/process))
+  (if (= js/undefined remote)
+    (.-app electron)
+    (.-app remote))
+  #_(if (= "renderer" (.-type js/process))
     (.-app remote)
     (.-app electron)))
 

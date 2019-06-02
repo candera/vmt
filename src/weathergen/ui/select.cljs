@@ -3,7 +3,11 @@
   (:require [clojure.string :as str]
             [garden.core :refer [css]]
             [garden.selectors :as css-sel]
+            [hoplon.core :refer [a datalist defelem div do-watch fieldset for-tpl h4
+                                 i if-tpl img input label legend li
+                                 option pre select span style ul with-timeout]]
             [hoplon.svg :as svg]
+            [javelin.core :refer [cell cell? cell= cell-let dosync formula-of lens with-let]]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
@@ -12,7 +16,7 @@
             [weathergen.ui.buttons :as buttons]
             [weathergen.ui.common :as comm :refer [inl pct pre-cell px register-styles! rinl triangle]])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-time formula-of with-attr-bindings keyed-for-tpl]]))
+   [weathergen.cljs.macros :refer [with-time #_formula-of with-attr-bindings keyed-for-tpl]]))
 
 (comm/register-class!
  ::hidden
@@ -164,7 +168,7 @@
            (div
             :debug "sets width"
             :css {:width width
-                  :margin-left (px -2) ; accounts for border
+                  :margin-left (px -2)  ; accounts for border
                   }
             )
            ;; something like this: http://jsfiddle.net/v7YTT/90/
@@ -254,8 +258,8 @@
                                   (change @item)))
                        (formatter item)))))))))))
          #_(div
-          (pre-cell "open?" open?)
-          (pre-cell "search-text" search-text)
-          (pre-cell "highlighted" highlighted)
-          #_(pre-cell "index-to-item" (cell= (:index-to-item matching-items)))
-          #_(pre-cell "key-to-index" (cell= (:key-to-index matching-items)))))))))
+            (pre-cell "open?" open?)
+            (pre-cell "search-text" search-text)
+            (pre-cell "highlighted" highlighted)
+            #_(pre-cell "index-to-item" (cell= (:index-to-item matching-items)))
+            #_(pre-cell "key-to-index" (cell= (:key-to-index matching-items)))))))))

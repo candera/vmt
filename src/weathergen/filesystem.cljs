@@ -101,9 +101,9 @@
       (js/DataView. ab (.-byteOffset buf) (.-byteLength buf)))
     (catch :default x
       (log/error x "Failed to open file" :path path)
-      (throw (ex-info "Failed to open file"
-                      {:reason :file-open-failed
-                       :path path})))))
+      (throw (ex-info (str "Failed to open file " path)
+                           {:reason :file-open-failed
+                            :path path})))))
 
 (defn file-buffer
   "Reads the contents of file at `path` as a Node Buffer."

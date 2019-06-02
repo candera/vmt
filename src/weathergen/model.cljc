@@ -444,6 +444,9 @@
 
 (defn upgrade
   [{:keys [revision] :as params} new-revision]
+  (when (< revision 8)
+    (throw (ex-info "This version of VMT cannot be used to load weather files from prior versions - file format changes in BMS 4.34 resulted in incompatibilities. You will need to ask the mission creator for a new briefing file."
+                    {:omit-stack-trace? true})))
   (cond-> params
     (< revision 7) upgrade-pressure-threshold
     :always (assoc :revision new-revision)))

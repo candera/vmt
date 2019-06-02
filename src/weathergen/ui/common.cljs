@@ -1,7 +1,7 @@
 (ns weathergen.ui.common
   "Things used across various UI libraries."
   (:require [cljsjs.select2]
-            [cljsjs.tinycolor]
+            ;; [cljsjs.tinycolor]
             [clojure.data]
             [clojure.pprint :as pp]
             [clojure.set :as set]
@@ -12,8 +12,13 @@
             [goog.dom :as gdom]
             [goog.string :as gstring]
             [goog.string.format]
+            [hoplon.core :refer [a datalist defelem div do-watch fieldset for-tpl h4
+                                 i if-tpl img input label legend
+                                 option pre select span style with-timeout]]
+            [hoplon.jquery]
             [hoplon.storage-atom :refer [local-storage]]
             [hoplon.svg :as svg]
+            [javelin.core :refer [cell cell? cell= cell-let dosync formula-of lens with-let]]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
@@ -25,11 +30,24 @@
             [weathergen.settings :refer [app-dir]]
             [weathergen.time :as time])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of hint-> hint]]))
+   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time #_formula-of hint-> hint]]))
 
 (def ^js/electron electron (js/require "electron")
   #_(when (= "nodejs" cljs.core/*target*)
       (js/require "electron")))
+
+;; Here's the old way I was doing it:
+
+#_(def ^js/tinycolor tinycolor js/tinycolor
+ ;; This is a massive hack that I had to do at one point, and I have no
+ ;; idea what we're going to do if some other library decides to say
+ ;; `module.exports` in its code.
+  #_ (.-exports js/module)
+  #_(if (= "nodejs" cljs.core/*target*)
+      (.-exports js/module)
+      js/tinycolor))
+
+(def ^js/tinycolor tinycolor (js/require "tinycolor2"))
 
 (defn parse-int
   "Parses an int from a string, returning the int, or nil if it cannot
@@ -132,16 +150,11 @@
   ;; The idea here is to dispatch to different implementations based
   ;; on what works best for a given scenario. At the moment there's
   ;; only one strategy.
-  (when-dom6 elem f))
+  (when-dom6 elem f)
+  elem)
 
 ;; (set! *warn-on-infer* true)
 
-;; This is a massive hack, and I have no idea what we're going to do if some other library decides to
-;; say `module.exports` in its code.
-(def ^js/tinycolor tinycolor (.-exports js/module)
-  #_(if (= "nodejs" cljs.core/*target*)
-    (.-exports js/module)
-    js/tinycolor))
 
 (defn measurement
   "Returns a measurement string, e.g. '2px'. Allows multiple
@@ -214,6 +227,18 @@
   (for [[class bool] m
         :when bool]
     class))
+
+;; At some point, it looks like Hoplon stopped allowing maps for
+;; values of the :class attribute.
+;; Later: turns out that's not
+;; actually true. I was just not requiring hoplon.jquery, where the
+;; event handlers that result in all that working get set up.
+#_(defn classes-str
+  "Given a map, return a space-separated concatenation of the strings
+  where the values are logically true. Keys must be nameable."
+  [m]
+  (str/join " " (classes m)))
+
 
 (let [registered-styles (atom #{})
       pending           (atom {})]
@@ -307,10 +332,15 @@
                     (.setAlpha alpha)))))
 
 (defn to-rgba
-  "Converts a color to an rgba string."
+  "Converts a color to an rgba string. Eight-digit hex strings are
+  assumed to be in the format #AARRGGBB."
   [color]
-  (let [tc (-> color tinycolor .toRgb)]
-    (str "rgba(" (.-r tc) ", " (.-g tc) ", " (.-b tc) ", " (.-a tc) ")")))
+  (let [color* (if (and (string? color)
+                        (re-matches #"#[0-9A-Fa-f]{8}" color))
+                 (str "#" (subs color 3 9) (subs color 1 3))
+                 color)]
+    (let [tc (-> color* tinycolor .toRgb)]
+      (str "rgba(" (.-r tc) ", " (.-g tc) ", " (.-b tc) ", " (.-a tc) ")"))))
 
 (defelem styled
   "Creates an element which is a scope for a set of CSS rules,
@@ -445,8 +475,8 @@
       (div
        :click change-visibility
        :class (formula-of [visible]
-                          {:toggle true
-                           :visible visible})
+                {:toggle true
+                 :visible visible})
        "")
       (span
        (:title attributes)))
@@ -794,7 +824,7 @@
         (set! (fn []
                 (->> reader
                      .-result
-                     js/Buffer.
+                     js/Buffer.from
                      (fs/save-data path))
                 ;; Might need this - no idea what it does.
                 ;;   deferred.resolve();
@@ -854,6 +884,9 @@
 (defn get-image
   "Return a URL for the image identified by `image-descriptor`."
   [mission image-descriptor]
+  (when-not (:base image-descriptor)
+    (log/warn "Trying to load an image with no base in its descriptor"
+              :image-descriptor image-descriptor))
   (let [path (image-cache-path image-descriptor)]
     (if (fs/exists? path)
       path
@@ -882,7 +915,7 @@
                    (save-blob-async blob path)))
         (.toDataURL canvas)))))
 
-(defn- centered-image
+(defn centered-image
   "Renders an image centered in width and height."
   [mission image size]
   (let [dims (formula-of [image]
@@ -1136,7 +1169,7 @@
         (s
          (assoc attrs
                 :value (formula-of [value]
-                         (->> indexed
+                         (->> by-index
                               vals
                               (filter #(= value (:value %)))
                               first
@@ -1575,3 +1608,4 @@
 
                                 :else
                                 (gdom/appendChild frag v)))))))))))))
+

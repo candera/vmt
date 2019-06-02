@@ -1,11 +1,15 @@
 (ns weathergen.ui.textarea
   "Controls for editing text."
   (:require [clojure.string :as str]
+            [hoplon.core :refer [a datalist defelem div do-watch fieldset for-tpl h4
+                                 i if-tpl img input label legend li
+                                 option pre select span style ul with-timeout]]
+            [javelin.core :refer [cell cell? cell= cell-let dosync formula-of lens with-let]]
             [weathergen.ui.common :as comm :refer [colors control-section
                                                    format-heading format-distance format-speed format-mach format-time
                                                    inl pre-cell pct px styled team-color]])
   (:require-macros
-   [weathergen.cljs.macros :refer [keyed-for-tpl with-attr-bindings with-bbox with-time formula-of]]))
+   [weathergen.cljs.macros :refer [keyed-for-tpl with-attr-bindings with-bbox with-time #_formula-of]]))
 
 (defelem textarea2
   "Like textarea, but better."

@@ -1,8 +1,12 @@
 (ns weathergen.ui.tabs
   "Homegrown tab controls."
-  (:require [weathergen.ui.common :as comm :refer [inl pct px keyed-loop-tpl*]])
+  (:require [weathergen.ui.common :as comm :refer [inl pct px keyed-loop-tpl*]]
+            [hoplon.core :refer [a datalist defelem div do-watch fieldset for-tpl h4
+                                 i if-tpl img input label legend li
+                                 option pre select span style ul with-timeout]]
+            [javelin.core :refer [cell cell? cell= cell-let dosync formula-of lens with-let]])
   (:require-macros
-   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time formula-of]]))
+   [weathergen.cljs.macros :refer [with-attr-bindings with-bbox with-time #_formula-of]]))
 
 ;; (set! *warn-on-infer* true)
 

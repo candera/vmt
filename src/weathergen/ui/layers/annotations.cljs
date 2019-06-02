@@ -6,7 +6,12 @@
             [clojure.string :as str]
             [goog.string :as gstring]
             [goog.string.format]
+            [hoplon.core :refer [a case-tpl datalist defelem div do-watch fieldset for-tpl h4
+                                 i if-tpl img input label legend li
+                                 option pre select span style
+                                 table tbody td thead tr ul when-tpl with-timeout]]
             [hoplon.svg :as svg]
+            [javelin.core :refer [cell cell? cell= cell-let dosync formula-of lens with-let]]
             [weathergen.compression :refer [decompress]]
             [weathergen.coordinates :as coords]
             [weathergen.encoding :refer [decode encode]]
@@ -133,9 +138,10 @@
                    (/ edge-width 200)))]
         {:stroke           (cell= (comm/to-rgba edge-color))
          :stroke-width     bw
-         :fill             (cell= (if (and (not open?) filled?)
-                                    (comm/to-rgba fill-color)
-                                    "none"))
+         :fill             (formula-of [open? filled? fill-color]
+                             (if (and (not open?) filled?)
+                               (comm/to-rgba fill-color)
+                               "none"))
          :stroke-dasharray (formula-of [edge-style edge-dash-length edge-dash-spacing]
                              (when (= edge-style :dashed)
                                (let [dash-length (linear->exp edge-dash-length

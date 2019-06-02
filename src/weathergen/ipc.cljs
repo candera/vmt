@@ -24,9 +24,12 @@
     (.apply send wc (->> args (map encode) (into [channel type]) clj->js))))
 
 (def ipc
-  (if (= "renderer" (.-type js/process))
+  (if (= js/undefined (.-ipcMain electron))
     (.-ipcRenderer electron)
-    (.-ipcMain electron)))
+    (.-ipcMain electron))
+  #_(if (= "renderer" (.-type js/process))
+      (.-ipcRenderer electron)
+      (.-ipcMain electron)))
 
 (.on ipc
      channel

@@ -21,6 +21,7 @@
             [weathergen.fmap :as fmap]
             [weathergen.falcon.constants :as c]
             [weathergen.falcon.files.mission :as mission]
+            [weathergen.falcon.files.mission.xml :as xml]
             [weathergen.falcon.files.resources :as resources]
             [weathergen.filesystem :as fs]
             [weathergen.falcon.files.images :as im]
@@ -186,10 +187,17 @@
     (println "Success!")
     (expound/printer data)))
 
-#_(defn rebl
+(defn rebl
   []
   (require '[cognitect.rebl])
-  (cognitect.rebl/ui))
+  (let [f (resolve 'cognitect.rebl/ui)]
+    (f)))
+
+(defn inspect
+  [x]
+  (require '[cognitect.rebl])
+  (let [f (resolve 'cognitect.rebl/inspect)]
+    (f x)))
 
 #_(set! s/*explain-out* expound/printer)
 #_(alter-var-root #'s/*explain-out* expound-explainer)
