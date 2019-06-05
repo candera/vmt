@@ -2977,7 +2977,8 @@
   [mission]
   (progress/with-step "Verifying mission integrity"
     (fn []
-      (report-squadrons-without-airbases mission)
+      ;; Tentatively reported that this is no longer a concern in 4.34
+      #_(report-squadrons-without-airbases mission)
       (report-airbases-with-invalid-owner mission)
       mission)))
 
