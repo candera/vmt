@@ -3796,3 +3796,95 @@ java.nio.file.File
      (pprint))
 
 
+(-> @tiger-spirit
+    cognitect.rebl/inspect)
+
+(->> @tiger-spirit
+     :teams
+     (map :team)
+     (map #(select-keys % [:who :flags :c-team :name]))
+     pprint)
+
+(->> @iron-fortress
+     :teams
+     (map :team)
+     (map #(select-keys % [:who :flags :c-team :name]))
+     pprint)
+
+()
+
+(-> @tiger-spirit cognitect.rebl/inspect)
+
+;; Mantis:
+
+({:who 0, :flags 4, :c-team 0, :name "XX"}
+ {:who 1, :flags 23, :c-team 1, :name "U.S."} ;; green
+ {:who 2, :flags 6, :c-team 1, :name "ROK"} ;; green
+ {:who 3, :flags 6, :c-team 1, :name "Japan"} ;; green
+ {:who 4, :flags 4, :c-team 4, :name "CIS"}
+ {:who 5, :flags 4, :c-team 5, :name "PRC"}
+ {:who 6, :flags 4, :c-team 6, :name "DPRK"}
+ {:who 7, :flags 7, :c-team 7, :name "NATO"}  ;l blue
+)
+
+;; Tiger:
+
+({:who 0, :flags 4, :c-team 0, :name "XX"}
+ {:who 1, :flags 6, :c-team 2, :name "U.S."} ; Blue
+ {:who 2, :flags 7, :c-team 2, :name "ROK"}  ; Blue 
+ {:who 3, :flags 7, :c-team 3, :name "Japan"} ; orange
+ {:who 4, :flags 7, :c-team 4, :name "CIS"}  ; orange2 
+ {:who 5, :flags 6, :c-team 6, :name "PRC"}  ; red
+ {:who 6, :flags 21, :c-team 6, :name "DPRK"} ; red
+ {:who 7, :flags 4, :c-team 7, :name "NATO"})
+
+;; Double Dragon:
+
+({:who 0, :flags 4, :c-team 0, :name "XX"}
+ {:who 1, :flags 6, :c-team 2, :name "U.S."} ; blue
+ {:who 2, :flags 7, :c-team 2, :name "ROK"} ; blue
+ {:who 3, :flags 6, :c-team 2, :name "Japan"} ; blue
+ {:who 4, :flags 7, :c-team 4, :name "CIS"} ; orange
+ {:who 5, :flags 7, :c-team 5, :name "PRC"} ; yellow
+ {:who 6, :flags 5, :c-team 6, :name "DPRK"} ; red
+ {:who 7, :flags 4, :c-team 7, :name "NATO"})
+
+;; Bear Trap:
+
+({:who 0, :flags 4, :c-team 0, :name "XX"}
+ {:who 1, :flags 4, :c-team 1, :name "U.S."}
+ {:who 2, :flags 23, :c-team 2, :name "ROK"} ; blue
+ {:who 3, :flags 4, :c-team 3, :name "Japan"}
+ {:who 4, :flags 7, :c-team 4, :name "CIS"} ; orange
+ {:who 5, :flags 4, :c-team 5, :name "PRC"}
+ {:who 6, :flags 4, :c-team 6, :name "DPRK"}
+ {:who 7, :flags 4, :c-team 7, :name "NATO"})
+
+
+;; Rolling Fire:
+
+({:who 0, :flags 4, :c-team 0, :name "XX"}
+ {:who 1, :flags 6, :c-team 2, :name "U.S."} ; blue
+ {:who 2, :flags 23, :c-team 2, :name "ROK"} ; blue
+ {:who 3, :flags 6, :c-team 2, :name "Japan"} ; blue
+ {:who 4, :flags 7, :c-team 4, :name "CIS"} ; orange
+ {:who 5, :flags 7, :c-team 5, :name "PRC"} ; yellow
+ {:who 6, :flags 5, :c-team 6, :name "DPRK"} ; red
+ {:who 7, :flags 4, :c-team 7, :name "NATO"})
+
+;; Iron Fortress:
+
+({:who 0, :flags 4, :c-team 0, :name "XX"}
+ {:who 1, :flags 6, :c-team 2, :name "U.S."} ; blue
+ {:who 2, :flags 7, :c-team 2, :name "ROK"} ; blue
+ {:who 3, :flags 7, :c-team 3, :name "Japan"} ; orange1
+ {:who 4, :flags 7, :c-team 4, :name "CIS"} ; orange2
+ {:who 5, :flags 7, :c-team 5, :name "PRC"} ; yellow
+ {:who 6, :flags 5, :c-team 6, :name "DPRK"} ; red
+ {:who 7, :flags 4, :c-team 7, :name "NATO"})
+
+(->> @bear-trap
+     mission/teams
+     (map :team)
+     (map :name))
+

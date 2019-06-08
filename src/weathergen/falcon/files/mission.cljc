@@ -2404,22 +2404,17 @@
 (defn teams
   "Returns a seq of the teams."
   [mission]
-  (let [teams-with-units      (->> mission
-                                   :units
-                                   (map :owner)
-                                   distinct
-                                   set)
-        teams-with-objectives (->> mission
-                                   :objectives
-                                   (map :owner)
-                                   distinct
-                                   set)
-        ;; active-team-nums      (into teams-with-units teams-with-objectives)
-        active-teams          (->> mission
-                                   :teams
-                                   (filter #(-> % :team :flags (has-flag? c/TEAM_ACTIVE)))
-                                   #_(filter #(-> % team-number active-team-nums)))
-        first-team-num        (->> active-teams first :team :who)]
+  (let [active?        (->> mission
+                            :teams
+                            (map :team)
+                            (map (fn [t] [(:who t) (has-flag? (:flags t) c/TEAM_ACTIVE)]))
+                            (into {}))
+        ;; A team is active if the c-team it belongs to has the active flag
+        active-teams   (->> mission
+                            :teams
+                            (filter #(-> % :team :c-team active?))
+                            #_(filter #(-> % team-number active-team-nums)))
+        first-team-num (->> active-teams first :team :who)]
     (sort-by #(team-priority mission first-team-num (-> % :team :who)) active-teams)))
 
 (defn last-player-team

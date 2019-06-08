@@ -133,12 +133,67 @@
      (log/debug "Done reading.")
      mission)))
 
-(def m434
+(def mantis
   (delay
    (log/debug "Reading 4.34 mission...")
    (let [mission (mission/read-mission
                   installs
                   "/Users/candera/falcon/4.34/Data/Campaign/MantisAtDawn-Day  1 18 30 05.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+(def tiger-spirit
+  (delay
+   (log/debug "Reading 4.34 mission...")
+   (let [mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.34/Data/Campaign/Tiger Spirit-Day 1 08 15 42.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+(def iron-fortress
+  (delay
+   (log/debug "Reading 4.34 mission...")
+   (let [mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.34/Data/Campaign/Iron Fortress-Day  1 08 00 04.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+(def rolling-fire
+  (delay
+   (log/debug "Reading 4.34 mission...")
+   (let [mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.34/Data/Campaign/Rolling Fire-Day  1 05 00 07.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+
+(def bear-trap
+  (delay
+   (log/debug "Reading 4.34 mission...")
+   (let [mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.34/Data/Campaign/Bear Trap-Day  1 12 00 04.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+(def double-dragon
+  (delay
+   (log/debug "Reading 4.34 mission...")
+   (let [mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.34/Data/Campaign/Double Dragon-Day  1 16 00 04.cam")]
+     (log/debug "Done reading.")
+     mission)))
+
+(def generic-te
+  (delay
+   (log/debug "Reading 4.34 mission...")
+   (let [mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.34/Data/Campaign/generic.tac")]
      (log/debug "Done reading.")
      mission)))
 

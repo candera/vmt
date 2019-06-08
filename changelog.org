@@ -4,6 +4,13 @@
 #+TITLE:
 
 * Change Log
+** v058-10 [2019-06-08 Sat]
+
+ALPHA Release! Weather generation does not work yet! Everything else
+should, but please report bugs.
+
+- Fixed bug where active teams were not computed correctly.
+
 ** v058-9 [2019-06-02 Sun]
 
 ALPHA Release! Weather generation does not work yet! Everything else
