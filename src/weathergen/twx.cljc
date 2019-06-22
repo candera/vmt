@@ -5,6 +5,10 @@
 
 (def buffer-size 764)
 
+;; This is the value of :model that indicates the map weather model is
+;; in use, which is pretty much the only thing we support
+(def map-model 3)
+
 (def color (buf/spec :r buf/float
                      :g buf/float
                      :b buf/float

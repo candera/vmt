@@ -4,6 +4,14 @@
             [weathergen.math :as math]
             [org.craigandera.weathergen.pattern-space :as pat]))
 
+;; (defprotocol WeatherProvider
+;;   (forecast [...])
+;;   (jump-to-time [...])
+;;   (step [...])
+;;   (set-time [...])
+;;   (weather-grid [...])
+;;   (upgrade [...]))
+
 (defn mmhg->inhg
   [mmhg]
   (-> mmhg
@@ -24,25 +32,22 @@
 
 (defn mix
   [x fade type-params min-pressure max-pressure]
-  (let [pressure-span     (- max-pressure min-pressure)
-        i                 (/ (- (get-in type-params [:inclement :pressure])
-                                min-pressure)
-                             pressure-span)
-        p                 (/ (- (get-in type-params [:poor :pressure])
-                                min-pressure)
-                             pressure-span)
-        f                 (/ (- (get-in type-params [:fair :pressure])
-                                min-pressure)
-                             pressure-span)
-        s                 1
-        contour           [[0                           [1 0 0 0]]
-                           [(* (- 1 fade) i)            [1 0 0 0]]
-                           [(math/interpolate i p fade) [0 1 0 0]]
-                           [(math/interpolate p i fade) [0 1 0 0]]
-                           [(math/interpolate p f fade) [0 0 1 0]]
-                           [(math/interpolate f p fade) [0 0 1 0]]
-                           [(- 1 fade)                  [0 0 0 1]]
-                           [1                           [0 0 0 1]]]
+  (let [i          (get-in type-params [:inclement :weight])
+        p          (get-in type-params [:poor :weight])
+        f          (get-in type-params [:fair :weight])
+        s          (get-in type-params [:sunny :weight])
+        total-weight      (+ i p f s)
+        i*                (/ i total-weight)
+        p*                (/ (+ i p) total-weight)
+        f*                (/ (+ i p f) total-weight)
+        contour           [[0                             [1 0 0 0]]
+                           [(* (- 1 fade) i*)             [1 0 0 0]]
+                           [(math/interpolate i* p* fade) [0 1 0 0]]
+                           [(math/interpolate p* i* fade) [0 1 0 0]]
+                           [(math/interpolate p* f* fade) [0 0 1 0]]
+                           [(math/interpolate f* p* fade) [0 0 1 0]]
+                           [(- 1 fade)                    [0 0 0 1]]
+                           [1                             [0 0 0 1]]]
         [[x1 v1] [x2 v2]] (->> contour
                                (partition 2 1)
                                (filter (fn [[[low] [high]]] (<= low x high)))
@@ -64,15 +69,29 @@
   [x y t seed zoom]
   #_(println "smoothed-noise-field" :x x :y y :t t :seed seed :zoom zoom)
   (let [t* (long (Math/floor (+ t seed)))]
-    (math/interpolate (math/fractal-field x
-                                          y
-                                          zoom
-                                          (+ t* 0.01) 1)
-                      (math/fractal-field x
-                                          y
-                                          zoom
-                                          (+ t* 1.01) 1)
-                      (mod (math/frac t) 1.0))))
+    ;; For reasons I don't understand, this does not average to 0.5
+    ;; without the manipulations I have added.
+    ;;
+    ;; Also: blah. The inexactness of floats means that sometimes when
+    ;; we add t* to both 0.01 and 1.01, we wind up on nonadjacent
+    ;; fields, which makes for momentary discontinuities. Not sure how
+    ;; to fix that.
+    (math/clamp
+     0 1
+     (-> (math/interpolate (math/fractal-field x
+                                               y
+                                               zoom
+                                               (- t* 0.01)
+                                               1)
+                           (math/fractal-field x
+                                               y
+                                               zoom
+                                               (+ t* 1.01)
+                                               1)
+                           (mod (math/frac t) 1.0))
+         (#?(:clj Math/pow :cljs js/Math.pow) 1.25)
+         (+ 0.1)
+         #_(* 1.6)))))
 
 (defn perturb
   "Returns the perturbed coordinates of a point given:
@@ -240,51 +259,60 @@
            temp-uniformity
            pressure
            feature-size]
-    :as params}]
-  (let [[origin-x origin-y] origin
-        x* (/ (+ origin-x x) feature-size)
-        y* (/ (+ origin-y y) feature-size)
+    :as   params}]
+  (let [[origin-x origin-y]      origin
+        x*                       (/ (+ origin-x x) feature-size)
+        y*                       (/ (+ origin-y y) feature-size)
         ;; These next two values get computed over and over again. I
         ;; used to precompute them and pass them in, but that made for
         ;; a confusing API. Might need to find a way to have an
         ;; efficient precomputation mechanism during an optimization
         ;; pass.
         {:keys [offset current]} time
-        t (+ offset (time/campaign-time->minutes current))
+        t                        (+ offset (time/campaign-time->minutes current))
         ;; TODO: Why do we need this 10 here?
-        t* (/ t evolution 10)
-        max-pressure (:max pressure)
-        min-pressure (:min pressure)
-        params* (assoc params
-                       ::pat/x x*
-                       ::pat/y y*
-                       ::pat/t t*)
+        t*                       (/ t evolution 10)
+        max-pressure             (:max pressure)
+        min-pressure             (:min pressure)
+        params*                  (assoc params
+                                        ::pat/x x*
+                                        ::pat/y y*
+                                        ::pat/t t*)
         ;; TODO: Introduce some sort of vector/matrix abstraction
         ;; Although meh: just make it run on the GPU
-        p         (perturb params*)
-        value     (override params (pressure-pattern p))
-        wind-dir  (wind-direction p value params*)
-        pressure  (->> value
-                       (* (- max-pressure min-pressure))
-                       (+ min-pressure)
-                       (math/clamp min-pressure max-pressure))
-        mixture   (mix value
-                       crossfade
-                       categories
-                       min-pressure
-                       max-pressure)
-        wind-var  (math/reject-tails wind-uniformity
-                                     (smoothed-noise-field (* x* feature-size)
-                                                           (* y* feature-size)
-                                                           t*
-                                                           (+ seed 17)
-                                                           32))
-        temp-var (math/reject-tails temp-uniformity
-                                    (smoothed-noise-field (* x* feature-size)
-                                                          (* y* feature-size)
-                                                          t*
-                                                          (+ seed 18)
-                                                          32))]
+        p                        (perturb params*)
+        value                    (override params (pressure-pattern p))
+        wind-dir                 (wind-direction p value params*)
+        pressure-t               (/ t (:speed pressure) 4)
+        pressure-variance        (:variance pressure)
+        mean-pressure            (/ (+ max-pressure min-pressure) 2)
+        theater-min-pressure     (math/interpolate
+                                  min-pressure
+                                  (- max-pressure pressure-variance)
+                                  (math/fractal-field pressure-t 1234 32 seed 1.0))
+        theater-max-pressure     (+ theater-min-pressure pressure-variance)
+        pressure                 (->> value
+                                      (* pressure-variance)
+                                      (+ theater-min-pressure)
+                                      ;; Should not be necessary
+                                      #_(math/clamp min-pressure max-pressure))
+        mixture                  (mix value
+                                      crossfade
+                                      categories
+                                      theater-min-pressure
+                                      theater-max-pressure)
+        wind-var                 (math/reject-tails wind-uniformity
+                                                    (smoothed-noise-field (* x* feature-size)
+                                                                          (* y* feature-size)
+                                                                          t*
+                                                                          (+ seed 17)
+                                                                          32))
+        temp-var                 (math/reject-tails temp-uniformity
+                                                    (smoothed-noise-field (* x* feature-size)
+                                                                          (* y* feature-size)
+                                                                          t*
+                                                                          (+ seed 18)
+                                                                          32))]
     {:value       value
      :pressure    (math/nearest pressure 0.01)
      :mixture     mixture
@@ -293,7 +321,7 @@
      ;;:info        info
      :wind        (stabilize-wind params*
                                   {:heading (math/heading wind-dir)
-                                   :speed (wind-speed categories mixture wind-var)})
+                                   :speed   (wind-speed categories mixture wind-var)})
      :wind-var    wind-var
      :wind-vec    wind-dir
      :p           p}))

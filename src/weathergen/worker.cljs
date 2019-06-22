@@ -8,6 +8,7 @@
 
 (defn main
   []
+  (.debug js/console "Generated weather worker is initializing")
   (set! js/onmessage
         (fn [msg]
           (let [val (->> msg .-data decode)]

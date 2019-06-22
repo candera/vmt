@@ -96,17 +96,19 @@
    :sections [:flights-section {}]}
   {:title    "Weather"
    :id       :weather
-   :sections [:serialization-controls {}
+   :sections [;; :weather-source-controls {}
+              :serialization-controls {}
               :step-controls {}
               :weather-display-controls {}
               :weather-parameters {}
               :forecast-section {:forecast-link? false}
               ;;:flight-path-controls {}
               :weather-type-configuration {}
-              :cloud-controls {}
+              :atmosphere-controls {}
               :wind-stability-parameters {}
               :weather-override-parameters {}
-              :advanced-controls {}]}
+              :advanced-controls {}
+              ]}
   #_{:title  "ACMI"
      :id       :acmi
      :sections [:acmi-controls {}]}

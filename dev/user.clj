@@ -251,8 +251,13 @@
 (defn inspect
   [x]
   (require '[cognitect.rebl])
-  (let [f (resolve 'cognitect.rebl/inspect)]
-    (f x)))
+  (eval `(cognitect.rebl/inspect ~x)))
+
+(defmacro inspect
+  [x]
+  `(do
+     (require '[cognitect.rebl])
+     (cognitect.rebl/inspect ~x)))
 
 #_(set! s/*explain-out* expound/printer)
 #_(alter-var-root #'s/*explain-out* expound-explainer)

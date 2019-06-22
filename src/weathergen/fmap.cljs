@@ -68,3 +68,4 @@
             :let [w (get data [x y])]]
       (->> w f (op bw)))
     (blob bw)))
+

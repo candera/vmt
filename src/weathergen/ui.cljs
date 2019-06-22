@@ -35,6 +35,7 @@
             [goog.string.format]
             [goog.style :as gstyle]
             [octet.core :as buf]
+            [vmt.fmap :as fmap2]
             [weathergen.canvas :as canvas]
             [weathergen.compression :refer [compress decompress]]
             [weathergen.coordinates :as coords]
@@ -163,83 +164,94 @@
                         (.height window)]))))
 
 (def default-weather-params
-  {:temp-uniformity 0.7
-   :pressure        {:min 29 :max 31}
+  {:temp-uniformity      0.7
+   :pressure             {:min 28 :max 31 :variance 1.2 :speed 100}
    ;; From Ahmed, cell count is a function of theater size:
    ;; #define CELLSIZE  57344
    ;; #define FMAP_CELLS_FROM_SIZE(s) round(floor((s*1000)*3.28084 / (double)CELLSIZE +1))
-   :cell-count      [59 59]
-   :feature-size    10
-   :categories      {:sunny     {:wind   {:min 5 :mean 10 :max 30}
-                                 :temp   {:min 20 :mean 22 :max 24}}
-                     :fair      {:pressure 30
-                                 :wind   {:min 0 :mean 7 :max 20}
-                                 :temp   {:min 18 :mean 21 :max 23}}
-                     :poor      {:pressure 29.85
-                                 :wind   {:min 10 :mean 15 :max 30}
-                                 :temp   {:min 15 :mean 18 :max 21}}
-                     :inclement {:pressure 29.40
-                                 :wind   {:min 15 :mean 25 :max 60}
-                                 :temp   {:min 12 :mean 14 :max 16}}}
-   :turbulence      {:size 1 :power 250}
-   :origin          [1000 1000]
-   :evolution       3600
-   :time            {:offset 1234
-                     :current {:day 1 :hour 5 :minute 0}
-                     :max nil}
-   :wind-uniformity 0.7
-   :crossfade       0.1
-   :prevailing-wind {:heading 325}
-   :seed            1234
-   :wind-stability-areas [#_{:bounds {:x 16
-                                      :y 39
-                                      :width 6
-                                      :height 4}
-                             :wind {:speed 5
-                                    :heading 0}
-                             :index 0
+   :cell-count           [59 59]
+   :feature-size         10
+   :categories           {:sunny     {:weight     50
+                                      :wind       {:min 5 :mean 10 :max 30}
+                                      :temp       {:min 20 :mean 22 :max 24}
+                                      :visibility {:from 15 :to 30}}
+                          :fair      {:weight     50
+                                      :wind       {:min 0 :mean 7 :max 20}
+                                      :temp       {:min 18 :mean 21 :max 23}
+                                      :visibility {:from 10 :to 30}
+                                      :low-clouds {:base     {:from 3000 :to 10000}
+                                                   :size     {:from 0 :to 5}
+                                                   :coverage {:from :few :to :broken}}}
+                          :poor      {:weight     50
+                                      :wind       {:min 10 :mean 15 :max 30}
+                                      :temp       {:min 15 :mean 18 :max 21}
+                                      :visibility {:from 2 :to 10}
+                                      :low-clouds {:base     {:from 0 :to 10000}
+                                                   :size     {:from 0 :to 5}
+                                                   :coverage {:from :scattered
+                                                              :to   :overcast}}}
+                          :inclement {:weight     50
+                                      :wind       {:min 15 :mean 25 :max 60}
+                                      :temp       {:min 12 :mean 14 :max 16}
+                                      :visibility {:from 15 :to 30}
+                                      :low-clouds {:base     {:from 0 :to 10000}
+                                                   :size     {:from 0 :to 5}
+                                                   :coverage {:from :scattered
+                                                              :to   :overcast}}}}
+   :winds-aloft          {3000  {:speed {:from 2 :to 3}
+                                 :bias  0.1}
+                          6000  {:speed {:from 4 :to 6}
+                                 :bias  0.2}
+                          9000  {:speed {:from 7 :to 9}
+                                 :bias  0.3}
+                          12000 {:speed {:from 8 :to 12}
+                                 :bias  0.4}
+                          18000 {:speed {:from 11 :to 13}
+                                 :bias  0.5}
+                          24000 {:speed {:from 13 :to 17}
+                                 :bias  0.6}
+                          30000 {:speed {:from 16 :to 18}
+                                 :bias  0.7}
+                          40000 {:speed {:from 18 :to 22}
+                                 :bias  0.8}
+                          50000 {:speed {:from 20 :to 25}
+                                 :bias  0.9}}
+   :turbulence           {:size 1 :power 250}
+   :origin               [1000 1000]
+   :evolution            3600
+   :time                 {:offset  1234
+                          :current {:day 1 :hour 5 :minute 0}
+                          :max     nil}
+   :wind-uniformity      0.7
+   :crossfade            0.1
+   :prevailing-wind      {:heading 325}
+   :seed                 1234
+   :wind-stability-areas [#_{:bounds   {:x      16
+                                        :y      39
+                                        :width  6
+                                        :height 4}
+                             :wind     {:speed   5
+                                        :heading 0}
+                             :index    0
                              :editing? false}]
-   :weather-overrides [#_{:location {:x 22
-                                     :y 45}
-                          :radius 10
-                          :falloff 5
-                          :animate? false
-                          :begin {:day 1 :hour 5 :minute 0}
-                          :peak {:day 1 :hour 6 :minute 0}
-                          :taper {:day 1 :hour 8 :minute 0}
-                          :end {:day 1 :hour 9 :minute 0}
-                          :pressure 28.5
-                          :strength 1
-                          :show-outline? false
-                          :exclude-from-forecast? false
-                          :editing? false}]})
+   :weather-overrides    [#_{:location               {:x 22
+                                                      :y 45}
+                             :radius                 10
+                             :falloff                5
+                             :animate?               false
+                             :begin                  {:day 1 :hour 5 :minute 0}
+                             :peak                   {:day 1 :hour 6 :minute 0}
+                             :taper                  {:day 1 :hour 8 :minute 0}
+                             :end                    {:day 1 :hour 9 :minute 0}
+                             :pressure               28.5
+                             :strength               1
+                             :show-outline?          false
+                             :exclude-from-forecast? false
+                             :editing?               false}]})
 
 (defc weather-params nil)
 
-(def default-cloud-params
-  {:cumulus-density 5                   ; Percent: 5-50
-   :cumulus-size 0.98                   ; 0 (Thick) - 5.0 (Scattered)
-   :visibility {:sunny     30
-                :fair      20
-                :poor      10
-                :inclement 5}
-   :stratus-base {:sunny     35000
-                  :fair      30000
-                  :poor      11300
-                  :inclement 6300}
-   ;; Sunny and fair cannot have thick stratus layers, and poor and
-   ;; inclement must have the same top
-   :stratus-top 13300
-   :cumulus-base {:sunny     0
-                  :fair      8000
-                  :poor      7500
-                  :inclement 2000}
-   :contrails {:sunny     34000
-               :fair      28000
-               :poor      25000
-               :inclement 20000}})
-
-(defn random-int
+(defn- random-int
   ([from to] (random-int from to 1))
   ([from to step]
    (let [range (- to from)
@@ -250,60 +262,190 @@
          (* step)
          (+ from)))))
 
-(defn random-cloud-params
-  "Returns a plausible but random set of global weather paramaters."
+(defn- random-atmosphere-params
   []
-  (let [stratus-base (let [[i p f s] (sort (repeatedly
+  (let [[vis-i vis-p vis-f vis-s]     (->> (repeatedly
                                             4
                                             #(random-int
-                                              1500
-                                              40000
-                                              500)))]
-                       {:sunny s
-                        :fair f
-                        :poor p
-                        :inclement i})
-        stratus-top (+ (max (:poor stratus-base)
-                            (:inclement stratus-base))
-                       (random-int 500 10000 500))]
-    {:cumulus-density (random-int 5 50)
-     :cumulus-size (* 5.0 (rand))
-     :visibility (let [[i p f s] (sort (repeatedly
-                                        4
-                                        ;; Under 2, we allow a decimal point
-                                        #(let [r (random-int 0 30)]
-                                           (if (< r 2)
-                                             (/ (random-int 0 20) 10.0)
-                                             r))))]
-                   {:sunny s
-                    :fair f
-                    :poor p
-                    :inclement i})
-     :stratus-base stratus-base
-     :stratus-top stratus-top
-     ;; The BMS UI enforces that cumulus base must be at least 1000
-     ;; feet below the stratus top, so we do, too
-     :cumulus-base (let [[i p f] (sort (repeatedly
-                                        3
-                                        #(random-int 1000 22000 1000)))]
-                     {:sunny 0
-                      :fair (-> stratus-base
-                                :fair
-                                (- 1000)
-                                (min f))
-                      :poor (-> stratus-top
-                                (- 1000)
-                                (min p))
-                      :inclement (-> stratus-top
-                                     (- 1000)
-                                     (min i))})
-     :contrails (let [[i p f s] (sort (repeatedly
-                                       4
-                                       #(random-int 20000 40000 1000)))]
-                  {:sunny s
-                   :fair f
-                   :poor p
-                   :inclement i})}))
+                                              1
+                                              300))
+                                           (map #(/ % 10))
+                                           sort)
+        [visd-s visd-f visd-p visd-i] (->> (repeatedly
+                                            4
+                                            #(random-int
+                                              1
+                                              150))
+                                           (map #(/ % 10))
+                                           sort)
+        [base-i-from
+         base-p-from
+         base-f-from
+         base-i-to
+         base-p-to
+         base-f-to]                   (->> (repeatedly
+                                            6
+                                            #(random-int
+                                              0
+                                              10000
+                                              100))
+         sort)
+        [size-i-from size-i-to]       (->> (repeatedly
+                                            2
+                                            #(* (rand) 5))
+                                           sort)
+        [size-p-from size-p-to]       (->> (repeatedly
+                                            2
+                                            #(* (rand) 5))
+                                           sort)
+        [size-f-from size-f-to]       (->> (repeatedly
+                                            2
+                                            #(* (rand) 5))
+                                           sort)
+        coverages                     {1 :few
+                                       2 :scattered
+                                       3 :broken
+                                       4 :overcast}
+        [cover-i-from cover-i-to]     (->> (repeatedly
+                                            2
+                                            #(random-int 3 4))
+                                           sort
+                                           (map coverages))
+        [cover-p-from cover-p-to]     (->> (repeatedly
+                                            2
+                                            #(random-int 3 4))
+                                           sort
+                                           (map coverages))
+        [cover-f-from cover-f-to]     (->> (repeatedly
+                                            2
+                                            #(random-int 1 3))
+                                           sort
+                                           (map coverages))]
+    {:categories {:sunny     {:visibility {:from vis-s
+                                           :to   (math/clamp 0 30 (+ vis-s visd-s))}}
+                  :fair      {:visibility {:from vis-f
+                                           :to   (math/clamp 0 30 (+ vis-f visd-f))}
+                              :low-clouds {:base     {:from base-f-from
+                                                      :to   base-f-to}
+                                           :size     {:from size-f-from
+                                                      :to   size-f-to}
+                                           :coverage {:from cover-f-from
+                                                      :to   cover-f-to}}}
+                  :poor      {:visibility {:from vis-p
+                                           :to   (math/clamp 0 30 (+ vis-p visd-p))}
+                              :low-clouds {:base     {:from base-p-from
+                                                      :to   base-p-to}
+                                           :size     {:from size-p-from
+                                                      :to   size-p-to}
+                                           :coverage {:from cover-p-from
+                                                      :to   cover-p-to}}}
+                  :inclement {:visibility {:from vis-i
+                                           :to   (math/clamp 0 30 (+ vis-i visd-i))}
+                              :low-clouds {:base     {:from base-i-from
+                                                      :to   base-i-to}
+                                           :size     {:from size-i-from
+                                                      :to   size-i-to}
+                                           :coverage {:from cover-i-from
+                                                      :to   cover-i-to}}}}}))
+
+(defn- random-wind-params
+  []
+  (let [[wind-mean-s
+         wind-mean-f
+         wind-mean-p
+         wind-mean-i]                 (->> (repeatedly
+                                            4
+                                            #(random-int 0 25))
+         sort)]
+    {:categories {:sunny     {:wind       {:min  0
+                                           :mean wind-mean-s
+                                           :max  (random-int wind-mean-s 30)}}
+                  :fair      {:wind       {:min  0
+                                           :mean wind-mean-f
+                                           :max  (random-int wind-mean-f 30)}}
+                  :poor      {:wind       {:min  (random-int 0 wind-mean-p)
+                                           :mean wind-mean-p
+                                           :max  (random-int wind-mean-p 50)}}
+                  :inclement {:wind       {:min  (random-int 0 wind-mean-i)
+                                           :mean wind-mean-i
+                                           :max  (random-int wind-mean-i 55)}}}
+     :winds-aloft (let [alts [3000 6000 9000 12000 18000 24000 30000 40000 50000]
+                        deltas (repeatedly (count alts)
+                                           (fn []
+                                             {:speed-from (random-int -5 10)
+                                              :speed-to (random-int 1 5)
+                                              :bias (-> (rand) (- 0.1) (/ 4))}))
+                        cumulative (zipmap alts
+                                           (reductions (fn [a b]
+                                                         {:speed-from (+ (:speed-from a)
+                                                                         (:speed-from b))
+                                                          :speed-to (+ (:speed-from a)
+                                                                       (:speed-from b)
+                                                                       (:speed-to b))
+                                                          :bias (math/clamp 0 1
+                                                                            (+ (:bias a)
+                                                                               (:bias b)))})
+                                                       deltas))]
+                    (reduce-kv (fn [m k v]
+                                 (assoc m k
+                                        (let [{:keys [speed-from speed-to bias]} v]
+                                          {:speed {:from speed-from
+                                                   :to speed-to}
+                                           :bias (math/clamp 0 1 bias)})))
+                               {}
+                               cumulative))}))
+
+(defn- random-temp-params
+  []
+  (let [temp-mean-i                   (random-int -10 40)
+        [temp-mean-p
+         temp-mean-f
+         temp-mean-s]                 (->> (repeatedly
+                                            3
+                                            #(random-int 1 10))
+         sort
+         (map #(+ temp-mean-i)))]
+    {:categories {:sunny     {:temp       {:min  (- temp-mean-s (random-int 1 5))
+                                           :mean temp-mean-s
+                                           :max  (+ temp-mean-s (random-int 1 5))}}
+                  :fair      {:temp       {:min  (- temp-mean-f (random-int 1 5))
+                                           :mean temp-mean-f
+                                           :max  (+ temp-mean-f (random-int 1 5))}}
+                  :poor      {:temp       {:min  (- temp-mean-p (random-int 1 5))
+                                           :mean temp-mean-p
+                                           :max  (+ temp-mean-p (random-int 1 5))}}
+                  :inclement {:temp       {:min  (- temp-mean-i (random-int 1 5))
+                                           :mean temp-mean-i
+                                           :max  (+ temp-mean-i (random-int 1 5))}}}}))
+
+(def default-cloud-params
+  {:stratus-z-fair      43300
+   :stratus-z-inclement 33000
+   :contrails           {:sunny     34000
+                         :fair      28000
+                         :poor      25000
+                         :inclement 20000}})
+
+
+(defn- random-cloud-params
+  "Returns a plausible but random set of global weather paramaters."
+  []
+  (let [[stratus-inclement
+         stratus-fair] (sort (repeatedly
+                              2
+                              #(random-int
+                                16000
+                                40000
+                                500)))]
+    {:stratus-z-fair      stratus-fair
+     :stratus-z-inclement stratus-inclement
+     :contrails           (let [[i p f s] (sort (repeatedly
+                                                 4
+                                                 #(random-int 20000 40000 1000)))]
+                            {:sunny     s
+                             :fair      f
+                             :poor      p
+                             :inclement i})}))
 
 (defc cloud-params
   default-cloud-params)
@@ -612,7 +754,7 @@
     (set/intersection checked-airbases listed-airbases)))
 
 
-;;; Worker
+;;; Weather computation worker
 
 (def worker-count 4)
 
@@ -650,7 +792,7 @@
       #_(log/debug "Weather data sent to worker")
       ;; This is weird, but makes the compiler happy
       (post-message worker  (encode (assoc params
-                                 :cells cells))))
+                                           :cells cells))))
     (reset! computing true)
     (.time js/console "compute-weather")
     (with-time "Receive weather results"
@@ -680,10 +822,119 @@
   (go
     (async/>! command-ch [:compute-weather params])))
 
+;;; FMAP loader worker
+
+;; NOTE: Not done yet. I went down this road for a while, but realized
+;; I don't really want to spend time implementing this yet. So it's
+;; sort of half done. Maybe some day I'll come back to it.
+
+;; So, this is pretty hacky. Basically what's going on is that we pass
+;; messages to a worker, which accumulates state in the form of a
+;; potentially large number of FMAPs, because loading them on the main
+;; thread would make the UI stutter. Then we communicate with that
+;; thread by sending it messages when we want weather data. It turns
+;; out it's pretty quick to suck a file into memory as a Buffer and
+;; pass that by value, which is good, because as near as I can tell
+;; there's really no way to get the worker to actually load a file
+;; given a path.
+
+(defc fmap-load-state {:state :not-loaded})
+
+(def fmap-worker :disabled #_(js/Worker. "fmap-worker.js"))
+
+(defn- handle-fmap-worker-message
+  [data]
+  (let [[type & payload] data]
+    (swap! fmap-load-state update :maps-loaded inc)
+    (when (zero? (:maps-to-load @fmap-load-state))
+      (swap! fmap-load-state assoc :state :loaded))
+    #_(.debug js/console "Maps remaining" (- (:maps-to-load @fmap-load-state)
+                                           (:maps-loaded @fmap-load-state)))))
+
+(-> fmap-worker
+    .-onmessage
+    (set! (fn [e] (-> e (aget "data") handle-fmap-worker-message))))
+
+(defn- load-fmap
+  [fmap-map]
+  (when-not (empty? fmap-map)
+    (let [[k v] (first fmap-map)]
+      (.debug js/console "Dispatching load of fmap" v)
+      (post-message fmap-worker #js ["load-fmap" k v (fs/file-buf v)])
+      (with-timeout 0
+        (load-fmap (dissoc fmap-map k))))))
+
+(defn load-fmaps
+  "Asynchronously loads the fmaps for the mission, storing the data in
+  the worker for future computation."
+  []
+  (let [mission-path (:path @mission)
+        mission-time (mission/mission-time @mission)
+        mission-dir  (fs/parent mission-path)
+        mission-name (fs/basename mission-path {:omit-extension? true})
+        twx-path     (fs/path-combine mission-dir
+                                      (str mission-name ".twx"))
+        twx-data     (try
+                       (when (fs/exists? twx-path)
+                         (some-> twx-path fs/file-buf twx/parse))
+                       (catch :default _
+                         (.warn js/console "Could not parse TWX data at" twx-path)
+                         nil))
+        fmap-path    (fs/path-combine mission-dir
+                                      (str mission-name ".fmap"))
+        initial-fmap (when (and (fs/exists? fmap-path)
+                                (= twx/map-model (:model twx-data)))
+                       {(select-keys mission-time
+                                     [:day :hour :minute])
+                        fmap-path})
+        maps-dir     (fs/path-combine mission-dir "WeatherMapsUpdates")
+        fmap-list    (->> maps-dir
+                          fs/ls
+                          (map #(re-matches #"([1-9]?[0-9])([0-9]{2})([0-9]{2}).[fF][mM][aA][pP]" %))
+                          (remove nil?))
+        fmap-map    (reduce (fn [fmaps fmap-match]
+                              (let [[f d h m] fmap-match]
+                                (assoc fmaps
+                                       {:day    (util/str->long d)
+                                        :hour   (util/str->long h)
+                                        :minute (util/str->long m)}
+                                       (fs/path-combine maps-dir f))))
+                            initial-fmap
+                            fmap-list)]
+    (swap! fmap-load-state
+           assoc
+           :state :loading
+           :maps-loaded 0
+           :maps-to-load (count fmap-map))
+    (post-message fmap-worker #js ["clear-fmaps"])
+    (load-fmap fmap-map)
+    #_(go
+      (.debug js/console "initiating load of fmaps from" mission-path)
+      (post-message fmap-worker (->> fmap-map vals (into ["load-fmaps"]) clj->js))
+      #_(async/>! fmap-command-ch {:command :load-fmaps
+                                   :params  fmap-map}))))
+
+;;; General weather recomputation
+
+#_(formula-of
+  [fmap-load-state weather-params prevent-recomputation?]
+  (when (and (not prevent-recomputation?) weather-params))
+  (case (:source weather-params)
+    :mission
+    (post-message fmap-worker #js ["compute-weather" (encode weather-params)])
+
+    :generated
+    (recompute weather-params)
+
+    nil
+    nil
+
+    (.warn js/console "Weather source not recognized. Doing nothing." (:source weather-params))))
+
 (formula-of
- [weather-params prevent-recomputation?]
- (when (and (not prevent-recomputation?) weather-params)
-   (recompute weather-params)))
+  [weather-params prevent-recomputation?]
+  (when (and (not prevent-recomputation?) weather-params)
+     (recompute weather-params)))
 
 ;;; Mutations
 
@@ -2506,24 +2757,30 @@
                                                              (/ -0.5))])))))
         primary-layer         (svg/g
                                :id "primary-layer"
-                               :toggle (cell= (-> display-params :display some?))
+                               :toggle (formula-of [display-params #_weather-params]
+                                         (and #_(:source weather-params)
+                                              (-> display-params :display some?)))
                                :css (cell= {:opacity (-> display-params :opacity)}))
         wind-overlay          (svg/g
                                :id "wind-overlay"
-                               :toggle (-> display-params :overlay (= :wind) cell=))
+                               :toggle (formula-of [display-params #_weather-params]
+                                         (and #_(:source weather-params)
+                                              (-> display-params :overlay (= :wind) cell=))))
         text-overlay          (svg/g
                                :id "text-overlay"
                                :attr (cell= {:class (str "text-overlay "
                                                          (some-> display-params
                                                                  :overlay
                                                                  name))})
-                               :toggle (cell= (-> display-params
+                               :toggle (formula-of [display-params #_weather-params]
+                                         (and #_(:source weather-params)
+                                              (-> display-params
                                                   :overlay
-                                                  #{:pressure :temperature :type})))
+                                                  #{:pressure :temperature :type}))))
         selected-cell-overlay (let [coords (cell= (:coordinates selected-cell))]
                                 (cell-let [[x y] coords]
-                                  (when-tpl (formula-of [x y]
-                                              (and x y))
+                                  (when-tpl (formula-of [x y #_weather-params]
+                                              (and #_(:source weather-params) x y))
                                     (svg/rect
                                      :id "selected-cell-overlay"
                                      :click #(reset! selected-cell nil)
@@ -2533,16 +2790,19 @@
                                      :height 1))))
         wind-stability-areas  (formula-of
                                 [weather-params]
+                                #_(and (:source weather-params) (:wind-stability-areas weather-params))
                                 (:wind-stability-areas weather-params))
         weather-overrides     (formula-of
                                 [weather-params]
+                                #_(and (:source weather-params) (:weather-overrides weather-params))
                                 (:weather-overrides weather-params))
         effective-hover-cell  (formula-of
-                                [hover-cell wind-stability-areas weather-overrides]
+                                [hover-cell wind-stability-areas weather-overrides #_weather-params]
                                 ;; Don't show the hover info when
                                 ;; we're in an area where something
                                 ;; can be dragged.
-                                (if (or (some (fn [area]
+                                (if (or #_(not (:source weather-params))
+                                        (some (fn [area]
                                                 (and (within-area? area hover-cell)
                                                      (:editing? area)))
                                               wind-stability-areas)
@@ -2948,23 +3208,24 @@
    :id "weather-params-section"
    :toggle (cell= (= display-mode :edit))
    (control-layout
-    [["Seed"             [:seed] {:ui (div
-                                       :css {:white-space "nowrap"}
-                                       (edit-field weather-params [:seed])
-                                       (buttons/a-button
-                                        :css {:width "75px"}
-                                        :click #(swap! weather-params
-                                                       assoc
-                                                       :seed
-                                                       (+ (rand-int 5000) 100))
-                                        "Random"))}]
-     ["Min pressure"     [:pressure :min] {:type :pressure}]
-     ["Max pressure"     [:pressure :max] {:type :pressure}]
-     ["Prevailing wind"  [:prevailing-wind :heading]]
-     ["Weather heading"  [:direction :heading] {:cell movement-params
-                                                :help-base :movement-params}]
-     ["Weather speed"    [:direction :speed]   {:cell movement-params
-                                                :help-base :movement-params}]])))
+    [["Seed"               [:seed] {:ui (div
+                                         :css {:white-space "nowrap"}
+                                         (edit-field weather-params [:seed])
+                                         (buttons/a-button
+                                          :css {:width "75px"}
+                                          :click #(swap! weather-params
+                                                         assoc
+                                                         :seed
+                                                         (+ (rand-int 5000) 100))
+                                          "Random"))}]
+     ["Min pressure"       [:pressure :min] {:type :pressure}]
+     ["Max pressure"       [:pressure :max] {:type :pressure}]
+     ["Pressure variation" [:pressure :variance] {:type :pressure}]
+     ["Prevailing wind"    [:prevailing-wind :heading]]
+     ["Weather heading"    [:direction :heading] {:cell      movement-params
+                                                  :help-base :movement-params}]
+     ["Weather speed"      [:direction :speed]   {:cell      movement-params
+                                                  :help-base :movement-params}]])))
 
 (defn wind-stability-parameters
   [_]
@@ -3174,15 +3435,15 @@
     :id "category-params"
     (thead
      (tr (td "")
-         (td :colspan 2 (with-help [:weather-type-config :pressure]
-                          "Pressure"))
+         (td :colspan 2 (with-help [:weather-type-config :category]
+                          "Relative Amount"))
          (td :colspan 3 (with-help [:weather-type-config :wind]
                           "Wind"))
          (td :colspan 3 (with-help [:weather-type-config :temp]
                           "Temperature")))
      (tr (map #(apply td %)
               [[""]
-               ["From"] ["To"]
+               ["<- Less More ->"] [""]
                ["Min"] ["Mean"] ["Max"]
                ["Min"] ["Mean"] ["Max"]])))
     (tbody
@@ -3192,55 +3453,59 @@
             :css {"background-color" (let [[r g b] (weather-color category)]
                                        (str "rgb(" r "," g "," b ")"))}
             (type-key->name category))
-           (condp contains? category
-             #{:sunny}
+           #_(condp contains? category
+               #{:sunny}
+               [(td
+                 :class "derived"
+                 (formula-of
+                   [weather-params pressure-unit]
+                   (-> weather-params
+                       (get-in [:categories :fair :pressure])
+                       #_(format-pressure pressure-unit))))
+                (td
+                 :class "derived"
+                 100)]
+
+               #{:fair :poor}
+               [(td
+                 :class "derived"
+                 (formula-of
+                   [weather-params pressure-unit]
+                   (->  weather-params
+                        (get-in [:categories
+                                 (if (= :fair category)
+                                   :poor :inclement)
+                                 :pressure])
+                        (format-pressure pressure-unit))))
+                (td (div
+                     :class "edit-field"
+                     (comm/validating-edit
+                      :conform (comm/int-conformer 0 100)
+                      :source (path-lens weather-params [:categories category :pressure]))))]
+
+               #{:inclement}
+               [(td
+                 :class "derived"
+                 0)
+                (td (div
+                     :class "edit-field"
+                     (pressure-edit-field
+                      weather-params
+                      [:categories category :pressure]
+                      pressure-unit)))])
+           (let [value (path-lens weather-params [:categories category :weight])]
+             ;;td
+             ;; :css {:white-space "nobreak"
+             ;;       :display "inline-block"}
              [(td
-               :class "derived"
-               (formula-of
-                [weather-params pressure-unit]
-                (-> weather-params
-                    (get-in [:categories :fair :pressure])
-                    (format-pressure pressure-unit))))
+               (comm/slider :int? true :min 1 :max 100 :ticks 3 :value value :css {:width 80
+                                                                                   :vertical-align "middle"}))
               (td
-               :class "derived"
-               (formula-of
-                [weather-params pressure-unit]
-                (-> weather-params
-                    (get-in [:pressure :max])
-                    (format-pressure pressure-unit))))]
-
-             #{:fair :poor}
-             [(td
-               :class "derived"
-               (formula-of
-                [weather-params pressure-unit]
-                (->  weather-params
-                     (get-in [:categories
-                              (if (= :fair category)
-                                :poor :inclement)
-                              :pressure])
-                     (format-pressure pressure-unit))))
-              (td (div
-                   :class "edit-field"
-                   (pressure-edit-field
-                    weather-params
-                    [:categories category :pressure]
-                    pressure-unit)))]
-
-             #{:inclement}
-             [(td
-               :class "derived"
-               (formula-of
-                [weather-params pressure-unit]
-                (-> weather-params
-                    (get-in [:pressure :min])
-                    (format-pressure pressure-unit))))
-              (td (div
-                   :class "edit-field"
-                   (pressure-edit-field
-                    weather-params
-                    [:categories category :pressure]
-                    pressure-unit)))])
+               (comm/validating-edit
+                :width 38
+                :css {:display "inline-block"}
+                :conform (comm/int-conformer 1 100)
+                :source value))])
            (for [param [:wind :temp]
                  metric [:min :mean :max]]
              (td :class (str (name param) " " (name metric))
@@ -3323,131 +3588,430 @@
            :else
            conformed))))))
 
-(defn cloud-controls
+(defn atmosphere-controls
   [opts]
   (control-section
-   :title (with-help [:clouds :overview] "Clouds and contrails")
+   :title (with-help [:clouds :overview] "Atmosphere")
    :id (gensym)
    (div
     :toggle (cell= (= display-mode :edit))
     (help-icon [:clouds :buttons])
     (buttons/a-button
      :css {:margin-right "3px"}
-     :click #(reset! cloud-params (random-cloud-params))
-     "Randomize")
+     :click (fn [_]
+              (dosync
+               (let [rand-atm (random-atmosphere-params)
+                     new-weather (util/deep-merge-with @weather-params (fn [a b] b) rand-atm)]
+                 #_(.debug js/console "merging" rand-atm new-weather)
+                 (swap! weather-params #(util/deep-merge-with (fn [a b] b) % rand-atm)))
+               (reset! cloud-params (random-cloud-params))))
+     "Randomize Clouds")
+    (buttons/a-button
+     :css {:margin-right "3px"}
+     :click (fn [_] (swap! weather-params #(util/deep-merge-with (fn [a b] b) % (random-wind-params))))
+     "Randomize Wind")
+    (buttons/a-button
+     :css {:margin-right "3px"}
+     :click (fn [_] (swap! weather-params #(util/deep-merge-with (fn [a b] b) % (random-temp-params))))
+     "Randomize Temperature")
+    (buttons/a-button
+     :css {:margin-right "3px"}
+     :click #(dosync
+              (reset! weather-params default-weather-params)
+              (reset! cloud-params default-cloud-params))
+     "Reset to Defaults")
     (buttons/a-button
      :click #(save-twx @cloud-params
                        (:direction @movement-params)
                        (:mission-name @mission))
      "Save .TWX"))
-   (table
-    (tr (td (with-help [:clouds :cumulus-coverage]
-              "Cumulus coverage"))
-        (td :css {:text-align "right"}
-            "5%")
-        (let [l (path-lens cloud-params
-                           [:cumulus-density])]
-          (td (input
-               :type "range"
-               :disabled (cell= (= display-mode :briefing))
-               :value l
-               :min 5
-               :max 50
-               :change #(reset! l (long @%)))))
-        (td "50%"))
-    (tr (td (with-help [:clouds :cumulus-size]
-              "Cumulus qty/size"))
-        (td (div "Fewer/" (br) "Larger"))
-        (let [l (path-lens cloud-params
-                           [:cumulus-size])]
-          (td (input
-               :type "range"
-               :disabled (cell= (= display-mode :briefing))
-               :value (-> l (* 20) long cell=)
-               :min 0
-               :max 100
-               :change #(reset! l (/ (long @%) 20.0)))))
-        (td :css {:text-align "right"}
-            (div "More/" (br) "Smaller"))))
-   (table
-    (thead
-     (let [header (fn [path words]
-                    (td (map #(div
-                               (with-help path
-                                 %))
-                             words)))]
-       (tr :css {:text-align "center"}
-           (td)
-           (header [:clouds :visibility] ["Visibility"])
-           (header [:clouds :stratus-base] ["Stratus" "Base"])
-           (header [:clouds :stratus-top] ["Stratus" "Top"])
-           (header [:clouds :cumulus-base] ["Cumulus" "Base"])
-           (header [:clouds :contrails] ["Contrails"]))))
-    (tbody
-     (for [category [:sunny :fair :poor :inclement]]
-       (tr (td
-            :class (str "weather-type " (name category))
-            :css {:background-color (let [[r g b] (weather-color category)]
-                                      (str "rgb(" r "," g "," b ")"))}
-            (type-key->name category))
-           (for [column [:visibility :stratus-base :stratus-top :cumulus-base :contrails]]
-             (td
-              (let [path          [column category]
-                    literal-style {:font-family  "monospace"
-                                   :padding-left "3px"
-                                   :padding-top  "2px"
-                                   :font-size    "93%"
-                                   :text-align   "center"}]
-                (cond
-                  (and (= :stratus-top column)
-                       (#{:sunny :fair} category))
-                  (div :css literal-style
-                       (formula-of
-                         [cloud-params]
-                         (get-in cloud-params [:stratus-base category])))
+   (control-subsection
+    :title (with-help [:clouds :high :overview]
+             "High Clouds")
+    (let [category-style (fn [category]
+                           (let [[r g b] (weather-color category)]
+                             {:background-color (str "rgb(" r "," g "," b ")")}))]
+      (table
+       (tbody
+        (tr
+         (td [(span :class "weather-type sunny"
+                    :css (category-style :sunny) "Sunny")
+              "/"
+              (span :class "weather-type fair"
+                    :css (category-style :fair) "Fair")])
+         (td (validating-edit
+              :source (path-lens cloud-params [:stratus-z-fair])
+              :conform (comm/int-conformer 0 60000)
+              :align "right"
+              :placeholder "altitude (ft)"
+              :width 55)))
+        (tr
+         (td [(span :class "weather-type poor"
+                    :css (category-style :poor) "Poor")
+              "/"
+              (span :class "weather-type inclement"
+                    :css (category-style :inclement) "Inclement")])
+         (td (validating-edit
+              :source (path-lens cloud-params [:stratus-z-inclement])
+              :conform (comm/int-conformer 0 60000)
+              :align "right"
+              :placeholder "altitude (ft)"
+              :width 55)))))))
+   (control-subsection
+    :title (with-help [:clouds :low :overview]
+             "Low Clouds")
+    (table
+     :css {:border-collapse "collapse"}
+     (thead
+      (let [border-style (fn [borders]
+                           (when borders
+                             {:border-width (apply px borders)
+                              :border-style "solid"
+                              :border-color "black"}))
+            header       (fn [colspan path words & [background borders]]
+                           (td :colspan colspan
+                               :css (merge {:background background}
+                                           (border-style borders))
+                               (map #(div
+                                      (with-help path
+                                        %))
+                                    words)))]
+        [(tr :css {:text-align "center"}
+             ;; Weather Type
+             (td)
+             ;; Low Clouds
+             (header 2 [:clouds :low :base] ["Base"] "#f2f2f2" [1])
+             (header 2 [:clouds :low :size] ["Size"] "lightgray" [1])
+             (header 2 [:clouds :low :coverage] ["Coverage"] "#f2f2f2" [1]))
+         (tr :css {:text-align "center"}
+             ;; Weather Type
+             (td)
+             ;; Low Clouds
+             (let [cell (fn [type subtype]
+                          (case type
+                            :from
+                            (td :css (merge
+                                      {:background   "lightgray"
+                                       :border-width (px 1)
+                                       :border-style "solid"
+                                       :border-color "black"}
+                                      (when (= subtype :coverage)
+                                        {:margin (px 0 5)}))
+                                "From")
+                            :to
+                            (td :css (merge
+                                      {:background   "#bdbdbd"
+                                       :border-width (px 1)
+                                       :border-style "solid"
+                                       :border-color "black"}
+                                      (when (= subtype :coverage)
+                                        {:margin (px 0 5)}))
+                                "To")))]
+               [(cell :from :base)
+                (cell :to :base)
+                (cell :from :size)
+                (cell :to :size)
+                (cell :from :coverage)
+                (cell :to :coverage)]))]))
+     (tbody
+      (for [category [:fair :poor :inclement]]
+        (tr
+         (td
+          :class (str "weather-type " (name category))
+          :css {:background-color (let [[r g b] (weather-color category)]
+                                    (str "rgb(" r "," g "," b ")"))}
+          (type-key->name category))
+         (for [[a b c :as path] [[:low-clouds :base :from]
+                                 [:low-clouds :base :to]
+                                 [:low-clouds :size :from]
+                                 [:low-clouds :size :to]
+                                 [:low-clouds :coverage :from]
+                                 [:low-clouds :coverage :to]]]
+           (td (div :css {:margin (px 0 2)}
+                    (cond
+                      (= :coverage b)
+                      (let [order {:few       1
+                                   :scattered 5
+                                   :broken    9
+                                   :overcast  13}
+                            v     (path-lens weather-params (into [:categories category] path))]
+                        (do-watch v
+                          (fn [_ new-val]
+                            #_(.debug js/console "Updating dropdown for" path)
+                            (let [other-path (concat [:categories category]
+                                                     (butlast path)
+                                                     [(get {:from :to :to :from} c)])
+                                  comparison (if (= c :to) < >)]
+                              (when (comparison (order new-val) (order (get-in @weather-params other-path)))
+                                #_(.debug js/console "Constraint was violated. Updating" other-path "to" new-val)
+                                (swap! weather-params assoc-in other-path new-val)))))
+                        (comm/dropdown
+                         :value (path-lens weather-params (into [:categories category] path))
+                         :choices (case category
+                                    :fair
+                                    [{:value :few
+                                      :label "FEW"}
+                                     {:value :scattered
+                                      :label "SCT"}
+                                     {:value :broken
+                                      :label "BKN"}]
 
-                  (= [:cumulus-base :sunny] [column category])
-                  (div :css literal-style "0")
+                                    (:poor :inclement)
+                                    [{:value :scattered
+                                      :label "SCT"}
+                                     {:value :broken
+                                      :label "BKN"}
+                                     {:value :overcast
+                                      :label "OVC"}])))
+                      :else
+                      (validating-edit
+                       :source (path-lens weather-params (into [:categories category] path))
+                       :fmt (cond
+                              (= a :visibility) format-visibility
 
-                  (= [:stratus-top :inclement] path)
-                  (div
-                   :css literal-style
-                   (formula-of
-                     [cloud-params]
-                     (:stratus-top cloud-params)))
+                              (= b :size) #(.toFixed % 2)
 
-                  :else
-                  (let [l (path-lens
-                           cloud-params
-                           (if (= column :stratus-top)
-                             [:stratus-top]
-                             path))]
-                    (div
-                     :css {:margin-right (px 5)
-                           :text-align   "right"}
-                     (if-tpl (cell= (= display-mode :briefing))
-                       (div :css (assoc literal-style
-                                        :width
-                                        (if (= column :visibility)
-                                          (px 35)
-                                          (px 55)))
-                            (formula-of [l]
-                              (if (= column :visibility)
-                                (format-visibility l)
-                                (str l))))
-                       (validating-edit
-                        :source l
-                        :fmt (if (= column :visibility)
-                               format-visibility
-                               str)
-                        :conform (cloud-param-conformer cloud-params column category)
-                        :placeholder (condp = column
-                                       :visibility "vis (nm)"
-                                       "altitude")
-                        :align "right"
-                        :width (if (= column :visibility)
-                                 35
-                                 55)))))))))))))))
+                              :else str)
+                       :conform (cond
+                                  (= a :visibility)
+                                  (comm/float-conformer 0.1 30)
+
+                                  (= :size b)
+                                  (comm/float-conformer 0 5.0)
+
+                                  (= :coverage b)
+                                  (comm/int-conformer (case category
+                                                        :fair      0
+                                                        :poor      5
+                                                        :inclement 5)
+                                                      9)
+
+                                  (= :base b)
+                                  (comm/int-conformer 0 10000) ; A float in the FMAP, though
+
+                                  :else
+                                  (comm/int-conformer 0 60000))
+                       :placeholder (cond
+                                      (= a :visibility) "0.1-30"
+                                      (= b :coverage)   "0-9"
+                                      (= b :size)       "0-5"
+                                      :else             "altitude (ft)")
+                       :align "right"
+                       :width (cond
+                                (= :size b)
+                                55
+
+                                (= :coverage b)
+                                45
+
+                                :else
+                                55)))))))))))
+   (control-subsection
+    :title (with-help [:visibility-and-contrails :overview]
+             "Visibility and Contrails")
+    (table
+     :css {:border-collapse "collapse"}
+     (thead
+      (let [border-style (fn [borders]
+                           (when borders
+                             {:border-width (apply px borders)
+                              :border-style "solid"
+                              :border-color "black"}))
+            header       (fn [colspan path words & [background borders]]
+                           (td :colspan colspan
+                               :css (merge {:background background}
+                                           (border-style borders))
+                               (map #(div
+                                      (with-help path
+                                        %))
+                                    words)))]
+        [(tr :css {:text-align "center"}
+             (td)                       ; Weather type
+             (header 2 [:clouds :visibility] ["Visibility"] nil [1 1 0 1]) ; Visibility
+             (header 1 [:clouds :contrails] ["Contrails"] nil [1 1 0 1]) ; Contrails
+             )
+         (tr :css {:text-align "center"}
+             ;; Weather Type
+             (td)
+             ;; Visibility
+             (td :css (merge {:background "lightgrey"}
+                             (border-style [1]))
+                 "From")
+             (td :css (merge {:background "#bdbdbd"}
+                             (border-style [1]))
+                 "To")
+             ;; Contrails
+             (td :css (border-style [0 1 1 1])))]))
+     (tbody
+      (for [category [:sunny :fair :poor :inclement]]
+        (tr
+         (td
+          :class (str "weather-type " (name category))
+          :css {:background-color (let [[r g b] (weather-color category)]
+                                    (str "rgb(" r "," g "," b ")"))}
+          (type-key->name category))
+         (for [[a b c :as path] [[:visibility :from]
+                                 [:visibility :to]
+                                 [:contrails]]]
+           (td (div :css {:margin (px 0 2)}
+                    (validating-edit
+                     :source (cond
+                               (= a :contrails)
+                               (path-lens cloud-params [:contrails category])
+
+                               :else
+                               (path-lens weather-params (into [:categories category] path)))
+                     :fmt (cond
+                            (= a :visibility) format-visibility
+                            :else             str)
+                     :conform (cond
+                                (= a :visibility)
+                                (comm/float-conformer 0.1 30)
+
+                                :else
+                                (comm/int-conformer 0 60000))
+                     :placeholder (cond
+                                    (= a :visibility) "0.1-30"
+                                    :else             "altitude (ft)")
+                     :align "right"
+                     :width (cond
+                              (= a :visibility)
+                              35
+
+                              :else
+                              55))))))))))
+   (control-subsection
+    :title
+    (with-help [:ground-wind-and-temp :overview]
+      "Ground Wind and Temperature")
+    (table
+     :css {:border-collapse "collapse"}
+     (thead
+      (let [border-style (fn [borders]
+                           (when borders
+                             {:border-width (apply px borders)
+                              :border-style "solid"
+                              :border-color "black"}))
+            header       (fn [colspan path words & [background borders]]
+                           (td :colspan colspan
+                               :css (merge {:background background}
+                                           (border-style borders))
+                               (map #(div
+                                      (with-help path
+                                        %))
+                                    words)))]
+        [(tr :css {:text-align "center"}
+             ;; Weather Type
+             (td)
+             (td :colspan 3 :css {:border "1px solid black"} "Wind")
+             (td :colspan 3 :css {:border "1px solid black"} "Temperature"))
+         (tr :css {:text-align "center"}
+             ;; Weather Type
+             (td)
+             ;; Wind
+             (header 1 [:wind :min] ["Min"] "lightgray" [1])
+             (header 1 [:wind :min] ["Mean"] "#f2f2f2" [1])
+             (header 1 [:wind :min] ["Max"] "#bdbdbd" [1])
+             ;; Temp
+             (header 1 [:temp :min] ["Min"] "lightgray" [1])
+             (header 1 [:temp :min] ["Mean"] "#f2f2f2" [1])
+             (header 1 [:temp :min] ["Max"] "#bdbdbd" [1]))]))
+     (tbody
+      (for [category [:sunny :fair :poor :inclement]]
+        (tr
+         (td
+          :class (str "weather-type " (name category))
+          :css {:background-color (let [[r g b] (weather-color category)]
+                                    (str "rgb(" r "," g "," b ")"))}
+          (type-key->name category))
+         (for [[a b :as path] [[:wind :min]
+                               [:wind :mean]
+                               [:wind :max]
+                               [:temp :min]
+                               [:temp :mean]
+                               [:temp :max]]]
+           (td (div :css {:margin (px 0 2)}
+                    (validating-edit
+                     :source (path-lens weather-params (into [:categories category] path))
+                     :fmt str
+                     :conform (if (= a :wind)
+                                (comm/int-conformer 0 100)
+                                (comm/int-conformer -50 50))
+                     :placeholder 10
+                     :align "right"
+                     :width 45)))))))))
+   (control-subsection
+    :title (with-help [:winds-aloft :overview]
+             "Winds Aloft")
+    (let [alts [3000 6000 9000 12000 18000 24000 30000 40000 50000]]
+      (table
+       :css {:border-collapse "collapse"}
+       (thead
+        (tr :css {:text-align "center"}
+            (td)                        ; Altitude
+            (td :css {:border "solid 1px black"}
+                :colspan 2
+                (with-help [:winds-aloft :speed]
+                  "Speed adj"))
+            (td :css {:border-color "black"
+                      :border-style "solid"
+                      :border-width (px 1 1 0 1)}
+                (with-help [:winds-aloft :heading-bias]
+                  "Heading")))
+        (tr :css {:text-align "center"}
+            ;; Altitude
+            (td (div
+                 :css {:text-align "right"
+                       :margin (px 0 5)}
+                 :width (px 55)
+                 "Altitude"))
+            ;; Speed
+            (td :css {:background "lightgrey"
+                      :border     "solid 1px black"}
+                "From")
+            (td :css {:background "#bdbdbd"
+                      :border     "solid 1px black"}
+                "To")
+            ;; Bias
+            (td :css {:border-color "black"
+                      :border-style "solid"
+                      :border-width (px 0 1 1 1)}
+                (with-help [:winds-aloft :heading-bias]
+                  "Adj"))))
+       (tbody
+        (for [alt alts]
+          (tr
+           (td (div
+                :css {:text-align "right"
+                      :margin (px 0 5)}
+                (str alt " ft")))
+           (td (div
+                :css {:margin (px 0 2)}
+                (validating-edit
+                 :source (path-lens weather-params [:winds-aloft alt :speed :from])
+                 :fmt str
+                 :conform (comm/int-conformer -100 100)
+                 :placeholder 10
+                 :align "right"
+                 :width 45)))
+           (td (div
+                :css {:margin (px 0 2)}
+                (validating-edit
+                 :source (path-lens weather-params [:winds-aloft alt :speed :to])
+                 :fmt str
+                 :conform (comm/int-conformer -100 100)
+                 :placeholder 10
+                 :align "right"
+                 :width 45)))
+           (td (div
+                :css {:margin (px 0 2)}
+                (validating-edit
+                 :source (path-lens weather-params [:winds-aloft alt :bias])
+                 :fmt #(.toFixed % 2)
+                 :conform (comm/float-conformer 0 1)
+                 :placeholder 10
+                 :align "right"
+                 :width 55)))))))))))
 
 (defn advanced-controls
   [_]
@@ -3464,7 +4028,11 @@
      ["Temp uniformity"  [:temp-uniformity]]
      ["Warp strength"    [:turbulence :power]]
      ["Crossfade"        [:crossfade]]
-     ["Zoom"             [:feature-size]]])))
+     ["Zoom"             [:feature-size]]
+     ["Pressure speed"   [:pressure :speed] {:ui (comm/validating-edit
+                                                  :width 55
+                                                  :source (path-lens weather-params [:pressure :speed])
+                                                  :conform (comm/int-conformer 0 10000))}]])))
 
 (defn step-controls
   [_]
@@ -3539,6 +4107,57 @@
       :click #(move 1)
       "Step Forward >>")
      )))
+
+(defc mission-weather-load-status nil)
+
+(defn- load-mission-weather
+  []
+  (load-fmaps))
+
+(defn- initialize-generated-weather
+  []
+  ;; TODO
+  )
+
+(defn weather-source-controls
+  [opts]
+  (let [source (path-lens weather-params [:source])]
+    (do-watch source
+      (fn [_ source]
+        (case source
+          :mission (when (= :not-loaded (:state @fmap-load-state))
+                     (load-mission-weather))
+          :generated (initialize-generated-weather)
+          nil nil)))
+    (control-section
+     :toggle (cell= (= display-mode :edit))
+     :id "weather-source-controls"
+     :title "Weather Source"
+     (comm/radio-group
+      :value source
+      :choices (formula-of [fmap-load-state]
+                 [{:label "No Weather"
+                   :value nil}
+                  {:label (str "Mission Weather"
+                               (case (:state fmap-load-state)
+                                 :loading
+                                 (str " Loading: "
+                                      (:maps-loaded fmap-load-state)
+                                      " loaded of "
+                                      (:maps-to-load fmap-load-state)
+                                      "")
+
+                                 :loaded
+                                 (buttons/a-button
+                                  :click (fn [_] :todo)
+                                  "Reload")
+
+                                 ""))
+                   :value :mission}
+                  {:label     "Generated Weather"
+                   :value     :generated
+                   :disabled? true}]))
+     (pre-cell "fmap-load-state" fmap-load-state))))
 
 (defn serialization-controls
   [_]
@@ -4951,13 +5570,14 @@
   {:mission-info-section        mission-info-section
    :save-briefing-section       save-briefing-section
    :briefing-notes-section      briefing-notes-section
+   :weather-source-controls     weather-source-controls
    :serialization-controls      serialization-controls
    :step-controls               step-controls
    :weather-display-controls    weather-display-controls
    :weather-parameters          weather-parameters
    :forecast-section            forecast-section
    :weather-type-configuration  weather-type-configuration
-   :cloud-controls              cloud-controls
+   :atmosphere-controls         atmosphere-controls
    :wind-stability-parameters   wind-stability-parameters
    :weather-override-parameters weather-override-parameters
    :advanced-controls           advanced-controls
@@ -5137,4 +5757,3 @@
 (defmethod hoplon.core/on! :html/*
   [elem event callback]
   (on* elem event callback))
-

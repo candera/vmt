@@ -320,7 +320,8 @@ forward and backward in time. ")
 
     :pressure
     {:max (content-para "The maximum barometric pressure that will be generated.")
-     :min (content-para "The minimum barometric pressure that will be generated.")}
+     :min (content-para "The minimum barometric pressure that will be generated.")
+     :variance (content-para "The maximum amount the pressure will vary across the theater at any given moment. Pressure will vary over time between the min and the max.")}
 
     :prevailing-wind
     {:heading (content-para "The direction of the prevailing

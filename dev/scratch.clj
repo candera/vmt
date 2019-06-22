@@ -2429,7 +2429,7 @@ type: 0x64 -> image
                                   (:briefing briefing)))
 
 
-(class (mission/read-mission installs "/Users/candera/falcon/4.33.3/Data/Add-On Balkans/Campaign/SAVE2.CAM")) 
+(class (mission/read-mission installs "/Users/candera/falcon/4.33.3/Data/Add-On Balkans/Campaign/SAVE2.CAM"))
 
 (def b (read-briefing "/tmp/WNPU Mission 19.cam.vmtb"))
 
@@ -2927,7 +2927,7 @@ type: 0x64 -> image
      (filter #(= (:camp-id %) 5063))
      first
      :squadron
-     
+
      ;; (mission/find-unit bugged-mission :id)
      ;; (mission/find-unit bugged-mission :id)
      )
@@ -3777,7 +3777,7 @@ java.nio.file.File
 
 (-> @smpu
     :class-table
-    (nth 516) ; :index from 
+    (nth 516) ; :index from
     pprint)
 
 (->> @smpu
@@ -3831,9 +3831,9 @@ java.nio.file.File
 
 ({:who 0, :flags 4, :c-team 0, :name "XX"}
  {:who 1, :flags 6, :c-team 2, :name "U.S."} ; Blue
- {:who 2, :flags 7, :c-team 2, :name "ROK"}  ; Blue 
+ {:who 2, :flags 7, :c-team 2, :name "ROK"}  ; Blue
  {:who 3, :flags 7, :c-team 3, :name "Japan"} ; orange
- {:who 4, :flags 7, :c-team 4, :name "CIS"}  ; orange2 
+ {:who 4, :flags 7, :c-team 4, :name "CIS"}  ; orange2
  {:who 5, :flags 6, :c-team 6, :name "PRC"}  ; red
  {:who 6, :flags 21, :c-team 6, :name "DPRK"} ; red
  {:who 7, :flags 4, :c-team 7, :name "NATO"})
@@ -3888,3 +3888,225 @@ java.nio.file.File
      (map :team)
      (map :name))
 
+(inspect @bear-trap)
+
+(binding [octet.buffer/*byte-order* :little-endian]
+ (let [buf (fs/file-buf "/Users/candera/falcon/4.34/Data/Campaign/WeatherMapsUpdates/100000.Fmap")]
+   (take 5 (buf/read buf (buf/repeat (* 59 59) buf/float)
+                     {:offset (+ 0x2c
+                                 (* 3 4 59 59)
+                                 )}))))
+
+(let [buf (fs/file-buf "/Users/candera/falcon/4.34/Data/Campaign/WeatherMapsUpdates/100000.Fmap")]
+  (def f (binding [octet.buffer/*byte-order* :little-endian]
+           (buf/read buf vmt.fmap/header-spec))))
+
+(let [buf (fs/file-buf "/Users/candera/falcon/4.34/Data/Campaign/WeatherMapsUpdates/100000.Fmap")]
+  (def f (vmt.fmap/decode buf)))
+
+(->> f :vmt.fmap/cloud-coverage rand-nth)
+
+(inspect f)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(model/pressure-pattern [0.5 0.5])
+
+(pprint
+ (let [x (rand-int 1000)
+       y (rand-int 1000)]
+  (for [t (range 0 1 1/24)]
+    [x y t (+ 29 (* (- 31 29) (model/smoothed-noise-field x y t 123 2)))])))
+
+(/  (->>
+     (let [x (rand-int 1000)
+           y (rand-int 1000)]
+       (for [t (range 0 1000 1/24)]
+         (model/smoothed-noise-field x y t 123 2)))
+     (map #(Math/pow % 0.7))
+     (reduce +))
+    24000)
+
+(model/smoothed-noise-field 10 20 30 123 2)
+
+(math/clamp 0 1 0.25)
+
+(->>
+ (let [x (rand-int 1000)
+       y (rand-int 1000)
+       seed (rand-int 10000)]
+   (for [t (range 1 100 0.001)]
+     [seed x y t (model/smoothed-noise-field x y t seed 200)]))
+ (clojure.data.csv/write-csv (clojure.java.io/writer "/tmp/data13.csv")))
+
+(model/smoothed-noise-field 97 328 38.99999999999981 4919 200)
+
+
+(let [x 97
+      y 328
+      t 38.99899999999981
+      t 38.99999999999981
+      t 39.000999999999806
+      ;;t 38.99999999999
+      ;; t 39.5
+      ;; t 38.999999999999
+      seed 4919
+      zoom 200
+      t* (long (Math/floor (+ t seed)))]
+  [[(let [t 38.99899999999981] [t (long (Math/floor (+ t seed)))])]
+   [(let [t 38.99999999999981] [t (long (Math/floor (+ t seed)))])]
+   [(let [t 39.000999999999806] [t (long (Math/floor (+ t seed)))])]]
+  #_(-> (math/interpolate (math/fractal-field x
+                                              y
+                                              zoom
+                                              (+ t* 0.01) 1)
+                          (math/fractal-field x
+                                              y
+                                              zoom
+                                              (+ t* 1.01) 1)
+                          (mod (math/frac t) 1.0))
+        (#?(:clj Math/pow :cljs js/Math.pow) 0.7)
+        (- 0.2)
+        (* 1.6)))_
+
+
+(let [x (rand-int 1000)
+      y (rand-int 1000)
+      seed (rand-int 10000)
+      stats
+      (->>
+       (for [t (range 1 100000)]
+         [seed x y t (model/smoothed-noise-field x y t seed 200)])
+       (reduce (fn [stats [seed x y t v]]
+                 (-> stats
+                     (update :min #(min %1 %2) v)
+                     (update :max #(max %1 %2) v)
+                     (update :sum + v)
+                     (update :samples inc)))
+               {:seed seed
+                :x x
+                :y y
+                :samples 0
+                :min 1000
+                :max 0
+                :sum 0}))]
+  (assoc stats
+         :mean (/ (:sum stats) (:samples stats))))
+
+(->>
+ (let [x (rand-int 1000)
+       y (rand-int 1000)
+       zoom 32
+       seed (rand-int 10000)]
+   (for [x (range 1 100 0.01)]
+     [seed x y (math/fractal-field x y zoom seed 1.0)]))
+ (clojure.data.csv/write-csv (clojure.java.io/writer "/tmp/data19.csv")))
+
+
+(math/fractal-field 123 1234 32 1234 1.0)
+
+(math/interpolate 1 10 0.5)
+
+(let [[origin-x origin-y]      origin 
+      x*                       (/ (+ origin-x x) feature-size)
+      y*                       (/ (+ origin-y y) feature-size)
+      ;; These next two values get computed over and over again. I
+      ;; used to precompute them and pass them in, but that made for
+      ;; a confusing API. Might need to find a way to have an
+      ;; efficient precomputation mechanism during an optimization
+      ;; pass.
+      {:keys [offset current]} time
+      t                        (+ offset (time/campaign-time->minutes current))
+      ;; TODO: Why do we need this 10 here?
+      t*                       (/ t evolution 10)
+      max-pressure             (:max pressure) ; 100
+      min-pressure             (:min pressure) ; 0
+      params*                  (assoc params
+                                      ::pat/x x*
+                                      ::pat/y y*
+                                      ::pat/t t*)
+      ;; TODO: Introduce some sort of vector/matrix abstraction
+      ;; Although meh: just make it run on the GPU
+      p                        (perturb params*)
+      value                    (override params (pressure-pattern p)) ; 0.5
+      wind-dir                 (wind-direction p value params*)
+      pressure-t               (-> t (/ (:speed pressure) 14) (* 5000))
+      pressure-variance        (:variance pressure) ; 100
+      mean-pressure            (/ (+ max-pressure min-pressure) 2) ; 50
+      min-base-pressure        (+ min-pressure (- mean-pressure (/ pressure-variance 2))) ; 0
+      max-base-pressure        (- max-pressure (- mean-pressure (/ pressure-variance 2))) ; 100
+      theater-min-pressure     (math/interpolate
+                                min-pressure ; 0
+                                (- max-pressure pressure-variance) ; 0
+                                (math/fractal-field pressure-t 1234 32 seed 1.0)) ; 0
+      theater-max-pressure     (+ theater-min-pressure pressure-variance) ; 100
+      pressure                 (->> value
+                                    (* pressure-variance)
+                                    (+ theater-min-pressure)
+                                    ;; Should not be necessary
+                                    #_(math/clamp min-pressure max-pressure))
+      mixture                  (mix value
+                                    crossfade
+                                    categories
+                                    theater-min-pressure
+                                    theater-max-pressure)
+      wind-var                 (math/reject-tails wind-uniformity
+                                                  (smoothed-noise-field (* x* feature-size)
+                                                                        (* y* feature-size)
+                                                                        t*
+                                                                        (+ seed 17)
+                                                                        32))
+      temp-var                 (math/reject-tails temp-uniformity
+                                                  (smoothed-noise-field (* x* feature-size)
+                                                                        (* y* feature-size)
+                                                                        t*
+                                                                        (+ seed 18)
+                                                                        32))]
+  {:value       value
+   :pressure    (math/nearest pressure 0.01)
+   :mixture     mixture
+   :type        (key (last (sort-by val mixture)))
+   :temperature (temperature categories mixture temp-var)
+   ;;:info        info
+   :wind        (stabilize-wind params*
+                                {:heading (math/heading wind-dir)
+                                 :speed   (wind-speed categories mixture wind-var)})
+   :wind-var    wind-var
+   :wind-vec    wind-dir
+   :p           p})
+
+(for [h (range 24)]
+  (let [min-pressure      0
+        max-pressure      100
+        pressure-variance 10
+        t                 (* h 60)
+        pressure-speed    100
+        seed              12
+        pressure-t        (-> t (/ pressure-speed 4))]
+    (math/interpolate
+     min-pressure                          ; 0
+     (- max-pressure pressure-variance)    ; 0
+     (math/fractal-field pressure-t 1234 32 seed 1.0))))
+
+
+(require 'vmt.fmap)
+(let [buf (fs/file-buf "/Users/candera/falcon/4.34/Data/Campaign/WeatherMapsUpdates/100000.Fmap")]
+  (def f (vmt.fmap/decode buf)))
+
+(pprint (keys f))
+
+(rebl)
+
+(inspect f)
+
+(->> f :vmt.fmap/cloud-coverage frequencies)
+
+(->> "/Users/candera/falcon/4.34/Data/Campaign/WeatherMapsUpdates"
+     io/file
+     file-seq
+     (filter #(str/ends-with? % ".fmap"))
+     rand-nth
+     fs/file-buf
+     vmt.fmap/decode
+     :vmt.fmap/cloud-coverage
+     frequencies)

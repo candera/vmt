@@ -65,7 +65,8 @@
                                                "#737373")
                     :font-size               (pct 120)
                     :padding                 (px 0 10 3 10)
-                    :cursor                  "pointer"}))
+                    :cursor                  "pointer"
+                    :user-select             "none"}))
           title)))
       (div
        :debug "spacer"

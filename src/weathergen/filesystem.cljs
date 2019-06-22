@@ -1,7 +1,6 @@
 (ns weathergen.filesystem
   "Filesystem operations on CLJS."
-  (:require [cljs.nodejs :as node]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
@@ -18,8 +17,8 @@
 
 ;; (set! *warn-on-infer* true)
 
-(def fs-lib ^js/fs (node/require "fs"))
-(def os-lib ^js/os (node/require "os"))
+(def fs-lib ^js/fs (js/require "fs"))
+(def os-lib ^js/os (js/require "os"))
 
 (def win32? (-> os-lib .platform (= "win32")))
 
@@ -140,7 +139,6 @@
         (or (identical? parent ancestor)
             (ancestor? ancestor parent))))))
 
-
 (defn mkdir
   "Creates a directory. Recursively creates the parents if
   `make-parents?` is true."
@@ -164,3 +162,8 @@
   (let [^js/fs.Stats stats (.statSync fs-lib path)]
     {:size (.-size stats)
      :modified (-> stats .-mtime .valueOf)}))
+
+(defn ls
+  "Returns a seq of files in `dir`."
+  [dir & [options]]
+  (.readdirSync fs-lib dir))

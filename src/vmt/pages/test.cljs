@@ -33,8 +33,8 @@
 
 ;; (reset! ui/max-time {:day 2 :hour 2 :minute 2})
 
-;; (reset! ui/weather-params
-;;         ui/default-weather-params)
+(reset! ui/weather-params
+        ui/default-weather-params)
 
 ;; (ui/weather-page
 ;;  :test-section {})
@@ -141,17 +141,19 @@
 
 (html
  (ui/head)
- (let [b (body)
-       c (cell {"foo" true
-                "bar" false
-                "quux" true})
-       value (cell :a)
-       choices [{:value :a
-                 :label "A"}
-                {:value :b
-                 :label "B"}]
+ (let [b         (body)
+       c         (cell {"foo"  true
+                        "bar"  false
+                        "quux" true})
+       value     (cell :a)
+       choices   [{:value :a
+                   :label "A"}
+                  {:value :b
+                   :label "B"}]
        disabled? (cell false)]
    (b
+    (ui/atmosphere-controls {})
+    (comm/pre-cell "weather-params" ui/weather-params)
     (buttons/a-button
      :click (fn [_]
               (repl/connect "http://localhost:9000/repl")
@@ -163,6 +165,14 @@
     (buttons/a-button
      :click (fn [_] (swap! disabled? not))
      "Invert")
+    (let [c (cell :foo)]
+      [(comm/dropdown
+        :value c
+        :choices [{:value :foo
+                   :label "foo"}
+                  {:value :bar
+                   :label "bar"}])
+       (buttons/a-button :click (fn [_] (reset! c :bar)) "Bar")])
     (comm/pre-cell "disabled?" disabled?)
     (div
      :id "outer"
@@ -175,31 +185,65 @@
      (comm/select2 :choices choices
                    :value value)
      (comm/color-picker2 :value (cell "#000000"))
+     (let [c (cell 10)]
+       (comm/validating-edit
+        :source c
+        :conform (comm/int-conformer 1 100)
+        :width 50))
      (let [val (cell "red")]
        (div
         (comm/color-picker2
          :value val
          :alpha? true)
         (div val)))
-     #_(comm/when-dom*
-        (div "hi")
-        (fn []
-          (.log js/console "triggered")))
-     #_(let [annotations (cell {1 {:text "something"}})]
-         (keyed-for-tpl key [[k _] annotations]
-           (let [annotation (comm/map-lens annotations k)]
-             (with-key-lenses annotation [text]
-               (div
-                :id "inner"
-                (div "Value: " (cell= (pr-str text)))
-                ;; (div "Interim: " (cell= (pr-str interim)))
-                (buttons/a-button
-                 :click #(reset! text "This is a\ntext.")
-                 "Reset")
-                (ta/textarea2
-                 :value text
-                 :css {:font-family "monospace"}
-                 :change (fn [v] (reset! text v))
-                 :placeholder "Enter some text")
-                (textarea
-                 "This is a bunch of \n multiline text in a normal textarea for comparison."))))))))))
+     (let [display-params (cell {:opacity       0.33
+                                 :display       :type
+                                 ;; :map            :korea
+                                 :mouse-mode    :select
+                                 :overlay       nil #_:wind
+                                 :pressure-unit :inhg
+                                 :flight-paths  nil
+                                 :multi-save    {:mission-name nil
+                                                 :from         {:day 1 :hour 5 :minute 0}
+                                                 :to           {:day 1 :hour 10 :minute 0}
+                                                 :step         15}})
+           weather-data (cell nil)
+           selected-cell (cell nil)
+           wind-stability-areas (cell nil)
+           computing (cell nil)
+           pressure-unit (cell :inhg)
+           weather-params (cell weathergen.ui/default-weather-params)]
+      (weathergen.ui/grid
+       :display-params display-params
+       :weather-data weather-data
+       :selected-cell selected-cell
+       :wind-stability-areas wind-stability-areas
+       :weather-overrides [] #_weather-overrides
+       :computing computing
+       :pressure-unit pressure-unit
+       ;; TODO: Make these reactive, although they never
+       ;; change, so maybe not
+       :nx (first (:cell-count @weather-params))
+       :ny (second (:cell-count @weather-params)))
+       #_(comm/when-dom*
+          (div "hi")
+          (fn []
+            (.log js/console "triggered")))
+       #_(let [annotations (cell {1 {:text "something"}})]
+           (keyed-for-tpl key [[k _] annotations]
+             (let [annotation (comm/map-lens annotations k)]
+               (with-key-lenses annotation [text]
+                 (div
+                  :id "inner"
+                  (div "Value: " (cell= (pr-str text)))
+                  ;; (div "Interim: " (cell= (pr-str interim)))
+                  (buttons/a-button
+                   :click #(reset! text "This is a\ntext.")
+                   "Reset")
+                  (ta/textarea2
+                   :value text
+                   :css {:font-family "monospace"}
+                   :change (fn [v] (reset! text v))
+                   :placeholder "Enter some text")
+                  (textarea
+                   "This is a bunch of \n multiline text in a normal textarea for comparison.")))))))))))

@@ -132,7 +132,7 @@
          ;; in them. They're just JSON, though, so it might be worth
          ;; figuring out how to fix them up.
          :source-map (boolean source-maps))
-   (cljs :ids #{"worker"}
+   (cljs :ids #{"worker" #_"fmap-worker"}
          ;; :optimizations :none
          :optimizations :whitespace
          :compiler-options { ;;:target :nodejs
@@ -195,7 +195,7 @@
                               }
            :source-map source-maps
            )
-     (cljs :ids #{"worker" "index.html" #_"mission.html"}
+     (cljs :ids #{"worker" #_"fmap-worker" "index.html" #_"mission.html"}
            :optimizations #_:advanced #_:whitespace :simple
            :compiler-options { ;;:target :nodejs
                               :hashbang false

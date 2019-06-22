@@ -1,7 +1,6 @@
 (ns weathergen.settings
   "Reads and writes the settings file."
-  (:require [cljs.nodejs :as node]
-            [cljs.reader :as reader]
+  (:require [cljs.reader :as reader]
             [taoensso.timbre :as log
              :refer-macros (log trace debug info warn error fatal report
                                 logf tracef debugf infof warnf errorf fatalf reportf
@@ -12,7 +11,7 @@
 
 ;; (set! *warn-on-infer* true)
 
-(def electron ^js/electron (node/require "electron"))
+(def electron ^js/electron (js/require "electron"))
 (def remote ^js/remote (.-remote electron))
 
 #_(defn remote-if-necessary

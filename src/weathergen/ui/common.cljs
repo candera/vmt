@@ -1190,11 +1190,17 @@
                                    (aset o "index" (aget s "selectedIndex")))))}
                 (:label choice)))))))))
 
+(register-class!
+ ::disabled-radio-button
+ [{:pointer-events "none"
+   :color          "grey"
+   :cursor         "default"}])
+
 (defelem radio-group
   "Renders a group of HTML radio buttons. Attrs include :value, a cell
   or lens containing the current choice, which will be updated when
   the choice changes, and :choices, a vector of maps containing :value
-  and :label keys."
+  and :label keys, and optionally a :disabled? key."
   [attrs _]
   (with-attr-bindings attrs [value choices]
     (let [choices* (if (cell? choices)
@@ -1218,13 +1224,17 @@
                                        ":id" id
                                        "checked?" checked?
                                        ":value" (pr-str value)
-                                       ":choice" (pr-str choice))))]
+                                       ":choice" (pr-str choice))))
+                    disabled? (formula-of [choice]
+                                (:disabled? choice))]
                 (with-let [elem (input
                                  :type "radio"
                                  :id id
                                  :name name
                                  :value index
                                  :checked checked?
+                                 :class (formula-of [disabled?]
+                                          {(class-for ::disabled-radio-button) disabled?})
                                  :change (fn [e]
                                            #_(.log js/console "Radio is changing" e)
                                            (reset! value (->> e .-currentTarget .-value (get @by-index) :value))))]
@@ -1233,15 +1243,19 @@
                               (-> elem .-checked (set! new-val))))))
               (label
                :for id
+               :class (formula-of [choice]
+                        {(class-for ::disabled-radio-button) (:disabled? choice)})
                (cell= (:label choice)))))))))))
 
 (defelem slider
   "Renders an HTML range input. Synchronizes value with cell `:value`,
   which is limited to be between `:min`, and `:max`, inclusive.
-  `:ticks` is the number of tickmarks shown on the slider."
+  `:ticks` is the number of tickmarks shown on the slider. If `:int?`
+  is true, value will be coerced to an integer."
   [attrs _]
-  (with-attr-bindings attrs [min max ticks value]
+  (with-attr-bindings attrs [min max ticks value int? change]
     (let [id (str (gensym))
+          coerce (if int? long identity)
           v (lens
              (formula-of [value]
                (-> value
@@ -1255,18 +1269,23 @@
                        (-> v
                            (/ 100.0)
                            (* (- max min))
-                           (+ min)))))]
+                           (+ min)
+                           coerce))))]
       [(when ticks
          (datalist
           :id id
           (for [val (range 0 101 (/ 100 (dec ticks)))]
             (option :value val))))
-       (input {:type  "range"
-               :list  (when ticks id)
-               :min   0
-               :max   100
-               :value v
-               :input #(reset! v @%)})])))
+       (input (merge attrs
+                     {:type  "range"
+                      :list  (when ticks id)
+                      :min   0
+                      :max   100
+                      :value v
+                      :input (fn [e]
+                               (let [prev @value]
+                                 (reset! v @e)
+                                 (when change (change @value prev))))}))])))
 
 (defelem checkbox
   "Renders an HTML checkbox."
@@ -1363,7 +1382,7 @@
                                   (reset! interim nil)
                                   (reset! state :set))))
                       :css (formula-of
-                             [state valid? align]
+                             [state valid? align width]
                              {:font-style    (if (= state :editing)
                                                "italic"
                                                "")
