@@ -31,7 +31,7 @@
 (def types [:inclement :poor :fair :sunny])
 
 (defn mix
-  [x fade type-params min-pressure max-pressure]
+  [x fade type-params]
   (let [i          (get-in type-params [:inclement :weight])
         p          (get-in type-params [:poor :weight])
         f          (get-in type-params [:fair :weight])
@@ -172,14 +172,31 @@
        (<= x x*) (< x* (+ x width))
        (<= y y*) (< y* (+ y height))))
 
+(def wind-alts [3000 6000 9000 12000 18000 24000 30000 40000 50000])
+
 (defn stabilize-wind
   "Returns the wind, stabilized if appropriate by a wind stability region"
-  [{:keys [wind-stability-areas x y]} pattern-wind]
-  (as-> wind-stability-areas ?
-    (filter #(in-area? (:bounds %) x y) ?)
-    (first ?)
-    (:wind ?)
-    (or ? pattern-wind)))
+  [{:keys [wind-stability-areas x y winds-aloft prevailing-wind]}
+   wind-adj-var
+   pattern-wind]
+  (let [ground-wind (as-> wind-stability-areas ?
+                        (filter #(in-area? (:bounds %) x y) ?)
+                      (first ?)
+                      (:wind ?)
+                      (or ? pattern-wind))]
+    (reduce (fn [m alt]
+              (assoc m
+                     alt
+                     {:speed   (+ (:speed pattern-wind)
+                                  (math/interpolate (get-in winds-aloft [alt :speed :from])
+                                                    (get-in winds-aloft [alt :speed :to])
+                                                    wind-adj-var))
+                      :heading (-> (math/interpolate (:heading pattern-wind)
+                                                     (:heading prevailing-wind)
+                                                     (get-in winds-aloft [alt :bias]))
+                                   (mod 360))}))
+            {0 ground-wind}
+            wind-alts)))
 
 (defn temperature
   [categories mixture v]
@@ -246,6 +263,28 @@
                  v)
          (math/clamp 0.0 1.0))))
 
+(let [coverage-vals {:none      0
+                     :few       1
+                     :scattered 2
+                     :broken    3
+                     :overcast  4}
+      inverse (zipmap (vals coverage-vals)
+                      (keys coverage-vals))]
+ (defn- cloud-coverage
+   [{type       :type
+     categories :categories
+     :as        params}
+    v]
+   (if (= type :sunny)
+     :none
+     (let [{:keys [from to]} (get-in categories [type :low-clouds :coverage])
+           from-val (- (coverage-vals from) 0.49999)
+           to-val (+ (coverage-vals to) 0.49999)]
+       (-> (math/interpolate from-val to-val v)
+           (math/nearest 1)
+           long
+           inverse)))))
+
 (defn weather
   "x and y are in cells"
   [{:keys [x y seed
@@ -298,33 +337,50 @@
                                       #_(math/clamp min-pressure max-pressure))
         mixture                  (mix value
                                       crossfade
-                                      categories
-                                      theater-min-pressure
-                                      theater-max-pressure)
+                                      categories)
         wind-var                 (math/reject-tails wind-uniformity
                                                     (smoothed-noise-field (* x* feature-size)
                                                                           (* y* feature-size)
                                                                           t*
                                                                           (+ seed 17)
                                                                           32))
-        temp-var                 (math/reject-tails temp-uniformity
+        wind-adj-var             (math/reject-tails wind-uniformity
                                                     (smoothed-noise-field (* x* feature-size)
                                                                           (* y* feature-size)
                                                                           t*
                                                                           (+ seed 18)
-                                                                          32))]
-    {:value       value
-     :pressure    (math/nearest pressure 0.01)
-     :mixture     mixture
-     :type        (key (last (sort-by val mixture)))
-     :temperature (temperature categories mixture temp-var)
+                                                                          32))
+        temp-var                 (math/reject-tails temp-uniformity
+                                                    (smoothed-noise-field (* x* feature-size)
+                                                                          (* y* feature-size)
+                                                                          t*
+                                                                          (+ seed 19)
+                                                                          32))
+        coverage-var             (math/reject-tails 0.7
+                                  (smoothed-noise-field (* x* feature-size)
+                                                        (* y* feature-size)
+                                                        t*
+                                                        (+ seed 20)
+                                                        32))
+        weather-type             (key (last (sort-by val mixture)))]
+    {:value        value
+     :pressure     (math/nearest pressure 0.01)
+     :mixture      mixture
+     :type         weather-type
+     :temperature  (temperature categories mixture temp-var)
      ;;:info        info
-     :wind        (stabilize-wind params*
-                                  {:heading (math/heading wind-dir)
-                                   :speed   (wind-speed categories mixture wind-var)})
-     :wind-var    wind-var
-     :wind-vec    wind-dir
-     :p           p}))
+     :wind         (stabilize-wind params*
+                                   wind-adj-var
+                                   {:heading (math/heading wind-dir)
+                                    :speed   (wind-speed categories mixture wind-var)})
+     :low-clouds   {:coverage (cloud-coverage (assoc params*
+                                                     :type weather-type)
+                                              coverage-var)}
+     :wind-var     wind-var
+     :temp-var     temp-var
+     :coverage-var coverage-var
+     :wind-vec     wind-dir
+     :p            p}))
 
 (defn weather-grid
   [{:keys [map-fn cells origin time] :as params}]

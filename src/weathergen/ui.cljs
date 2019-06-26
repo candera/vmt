@@ -36,6 +36,7 @@
             [goog.style :as gstyle]
             [octet.core :as buf]
             [vmt.fmap :as fmap2]
+            [vmt.clouds :as clouds]
             [weathergen.canvas :as canvas]
             [weathergen.compression :refer [compress decompress]]
             [weathergen.coordinates :as coords]
@@ -479,6 +480,7 @@
                       ;; :map            :korea
                       :mouse-mode    :select
                       :overlay       nil #_:wind
+                      :wind-alt      0
                       :pressure-unit :inhg
                       :flight-paths  nil
                       :multi-save    {:mission-name nil
@@ -1407,17 +1409,18 @@
   (str "map-image-" (name map)))
 
 (def display-name->key
-  {"Weather Type" :type
-   "Pressure" :pressure
-   "Temperature" :temperature})
+  {"Weather Type"   :type
+   "Pressure"       :pressure
+   "Temperature"    :temperature
+   "Cloud Coverage" :cloud-cover})
 
 (def display-key->name
   (invert-map display-name->key))
 
 (def overlay-name->key
-  {"Wind" :wind
-   "Pressure" :pressure
-   "Temperature" :temperature
+  {"Wind"         :wind
+   "Pressure"     :pressure
+   "Temperature"  :temperature
    "Weather Type" :type})
 
 (def overlay-key->name
@@ -1845,8 +1848,9 @@
   [weather-data display-params]
   (with-time "update-wind-layer"
     (doseq [[[x y] weather] weather-data
-            :let [{:keys [speed heading]} (:wind weather)
-                  ^js/SVGRectElement cell (gdom/getElement (str "grid-wind-cell-" x "-" y))]]
+            :let            [wind-alt (:wind-alt display-params)
+                             {:keys [speed heading]} (get-in weather [:wind wind-alt])
+                             ^js/SVGRectElement cell (gdom/getElement (str "grid-wind-cell-" x "-" y))]]
       (.setAttribute cell
                      "transform"
                      (comm/svg-rotate heading))
@@ -1854,6 +1858,24 @@
                        "http://www.w3.org/1999/xlink"
                        "href"
                        (str "#" (wind-vector-id speed))))))
+
+(def cloud-coverage-id
+  {:none      "cloud-coverage-none"
+   :few       "cloud-coverage-few"
+   :scattered "cloud-coverage-scattered"
+   :broken    "cloud-coverage-broken"
+   :overcast  "cloud-coverage-overcast"})
+
+(defn- update-coverage-layer
+  [weather-data display-params]
+  (with-time "update-coverage-layer"
+    (doseq [[[x y] weather] weather-data
+            :let            [coverage (get-in weather [:low-clouds :coverage])
+                             ^js/SVGRectElement cell (gdom/getElement (str "cloud-coverage-cell-" x "-" y))]]
+      (.setAttributeNS cell
+                       "http://www.w3.org/1999/xlink"
+                       "href"
+                       (str "#" (cloud-coverage-id coverage))))))
 
 (defmulti overlay-text
   (fn [weather display-params] (:overlay display-params)))
@@ -1896,6 +1918,9 @@
      #{:wind}
      (update-wind-layer weather-data display-params)
 
+     #{:cloud-cover}
+     (update-coverage-layer weather-data display-params)
+
      #{:type :pressure :temperature}
      (update-text-layer weather-data display-params)
      nil)))
@@ -1935,6 +1960,14 @@
       (svg/g
        :id (wind-vector-id speed)
        (wind/barb speed)))))
+
+(defn- cloud-coverage-defs
+  []
+   (svg/defs
+    (for [coverage (keys cloud-coverage-id)]
+      (svg/g
+       :id (cloud-coverage-id coverage)
+       (clouds/coverage-icon coverage)))))
 
 (defn bullseye-info-box
   []
@@ -2765,7 +2798,12 @@
                                :id "wind-overlay"
                                :toggle (formula-of [display-params #_weather-params]
                                          (and #_(:source weather-params)
-                                              (-> display-params :overlay (= :wind) cell=))))
+                                              (-> display-params :overlay (= :wind)))))
+        coverage-overlay      (svg/g
+                               :id "coverage-overlay"
+                               :toggle (formula-of [display-params #_weather-params]
+                                         (and #_(:source weather-params)
+                                              (-> display-params :overlay (= :cloud-cover)))))
         text-overlay          (svg/g
                                :id "text-overlay"
                                :attr (cell= {:class (str "text-overlay "
@@ -2877,6 +2915,7 @@
                      ;; interfere with our drag/resize functionality.
                      :dragstart (constantly false)
                      [(wind-vector-defs)
+                      (cloud-coverage-defs)
                       (svg/image
                        :id "map-image"
                        ;;:toggle (cell= (some? mission))
@@ -2892,6 +2931,7 @@
                       primary-layer
                       (bullseye-overlay mission)
                       wind-overlay
+                      coverage-overlay
                       text-overlay
                       (wind-stability-overlay weather-params register-drag-handler)
                       (weather-overrides-overlay weather-params register-drag-handler)
@@ -2957,6 +2997,27 @@
                   (gdom/appendChild g r)
                   (gdom/appendChild frag g)))
               (gdom/appendChild wind-overlay frag))
+            ;; Cloud coverage layer
+            (let [frag (.createDocumentFragment js/document)]
+              (doseq [x (range nx)
+                      y (range ny)]
+                (let [^js/SVGElement g    (.createElementNS
+                                           js/document
+                                           "http://www.w3.org/2000/svg"
+                                           "g")
+                      ^js/SVGUseElement r (.createElementNS
+                                           js/document
+                                           "http://www.w3.org/2000/svg"
+                                           "use")]
+                  (doto g
+                    (.setAttribute "transform"
+                                   (comm/svg-translate (+ x 0.5)
+                                                       (+ y 0.5))))
+                  (doto r
+                    (.setAttribute "id" (str "cloud-coverage-cell-" x "-" y)))
+                  (gdom/appendChild g r)
+                  (gdom/appendChild frag g)))
+              (gdom/appendChild coverage-overlay frag))
             ;; Text overlay layer
             (let [frag  (.createDocumentFragment js/document)
                   scale 0.03]
@@ -3168,17 +3229,39 @@
                                   :value :temperature}])})]
          ["Overlay"
           [:overlay]
-          (merge opts {:ui (comm/dropdown
-                            :value (path-lens display-params [:overlay])
-                            :choices [{:label "None"}
-                                      {:label "Wind"
-                                       :value :wind}
-                                      {:label "Pressure"
-                                       :value :pressure}
-                                      {:label "Temperature"
-                                       :value :temperature}
-                                      {:label "Weather Type"
-                                       :value :type}])})]
+          (merge opts {:ui (let [wind? (cell= (= (:overlay display-params) :wind))]
+                             (div
+                              :css (formula-of [wind?]
+                                     (when wind?
+                                       {:width (pct 250)}))
+                              (comm/dropdown
+                               :css (formula-of [wind?]
+                                      (when wind?
+                                        {:width (pct 40)}))
+                               :value (path-lens display-params [:overlay])
+                               :choices [{:label "None"}
+                                         {:label "Wind"
+                                          :value :wind}
+                                         {:label "Cloud Cover"
+                                          :value :cloud-cover}
+                                         {:label "Pressure"
+                                          :value :pressure}
+                                         {:label "Temperature"
+                                          :value :temperature}
+                                         {:label "Weather Type"
+                                          :value :type}])
+                              (when-tpl wind?
+                                [(span
+                                  :css {:margin (px 0 7)}
+                                  "at alt")
+                                 (comm/dropdown
+                                  :css (formula-of [wind?]
+                                         (when wind?
+                                           {:width (pct 40)}))
+                                  :value (path-lens display-params [:wind-alt])
+                                  :choices (for [alt (into [0] model/wind-alts)]
+                                             {:label (str alt " ft")
+                                              :value alt}))])))})]
          ["Pressure"
           [:pressure]
           (merge opts {:ui (comm/dropdown
@@ -3660,6 +3743,7 @@
    (control-subsection
     :title (with-help [:clouds :low :overview]
              "Low Clouds")
+    (div :css {:font-size (pct 300)} "TODO: Deal with towering cumulus")
     (table
      :css {:border-collapse "collapse"}
      (thead
@@ -3737,7 +3821,7 @@
                             v     (path-lens weather-params (into [:categories category] path))]
                         (do-watch v
                           (fn [_ new-val]
-                            #_(.debug js/console "Updating dropdown for" path)
+                            #_(.debugf js/console "Updating dropdown for" path)
                             (let [other-path (concat [:categories category]
                                                      (butlast path)
                                                      [(get {:from :to :to :from} c)])

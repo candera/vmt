@@ -4110,3 +4110,27 @@ java.nio.file.File
      vmt.fmap/decode
      :vmt.fmap/cloud-coverage
      frequencies)
+
+(->> (-> weather-params
+         (assoc :x 29 :y 33)
+         (assoc-in [:winds-aloft 50000 :bias] 0)
+         model/weather)
+     (into (sorted-map))
+     inspect)
+
+{:pressure 29.490000000000002,
+ :value 0.4036059804193305,
+ :type :poor,
+ :wind {:heading 311.67634976495293, :speed 18.83884016274887},
+ :mixture {:inclement 0.0, :poor 1.0, :fair 0.0, :sunny 0.0},
+ :wind-var 0.6279613387582956,
+ :wind-vec [-0.7469127087778206 0.664922104810916],
+ :p [192.1999537822458 200.42987830797153],
+ :temperature 17.387567859419175}
+
+{:wind {0 {:heading 311 :speed 18.8}
+        3000 }}
+
+(inspect weather-params)
+
+(@#'model/cloud-coverage (assoc weather-params :type :inclement) 0.6)

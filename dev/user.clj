@@ -263,3 +263,153 @@
 #_(alter-var-root #'s/*explain-out* expound-explainer)
 
 #_(stest/instrument)
+
+(def weather-params
+    {:temp-uniformity      0.7
+   :pressure             {:min 28 :max 31 :variance 1.2 :speed 100}
+   ;; From Ahmed, cell count is a function of theater size:
+   ;; #define CELLSIZE  57344
+   ;; #define FMAP_CELLS_FROM_SIZE(s) round(floor((s*1000)*3.28084 / (double)CELLSIZE +1))
+   :cell-count           [59 59]
+   :feature-size         10
+   :categories           {:sunny     {:weight     50
+                                      :wind       {:min 5 :mean 10 :max 30}
+                                      :temp       {:min 20 :mean 22 :max 24}
+                                      :visibility {:from 15 :to 30}}
+                          :fair      {:weight     50
+                                      :wind       {:min 0 :mean 7 :max 20}
+                                      :temp       {:min 18 :mean 21 :max 23}
+                                      :visibility {:from 10 :to 30}
+                                      :low-clouds {:base     {:from 3000 :to 10000}
+                                                   :size     {:from 0 :to 5}
+                                                   :coverage {:from :few :to :broken}}}
+                          :poor      {:weight     50
+                                      :wind       {:min 10 :mean 15 :max 30}
+                                      :temp       {:min 15 :mean 18 :max 21}
+                                      :visibility {:from 2 :to 10}
+                                      :low-clouds {:base     {:from 0 :to 10000}
+                                                   :size     {:from 0 :to 5}
+                                                   :coverage {:from :scattered
+                                                              :to   :overcast}}}
+                          :inclement {:weight     50
+                                      :wind       {:min 15 :mean 25 :max 60}
+                                      :temp       {:min 12 :mean 14 :max 16}
+                                      :visibility {:from 15 :to 30}
+                                      :low-clouds {:base     {:from 0 :to 10000}
+                                                   :size     {:from 0 :to 5}
+                                                   :coverage {:from :scattered
+                                                              :to   :overcast}}}}
+   :winds-aloft          {3000  {:speed {:from 2 :to 3}
+                                 :bias  0.1}
+                          6000  {:speed {:from 4 :to 6}
+                                 :bias  0.2}
+                          9000  {:speed {:from 7 :to 9}
+                                 :bias  0.3}
+                          12000 {:speed {:from 8 :to 12}
+                                 :bias  0.4}
+                          18000 {:speed {:from 11 :to 13}
+                                 :bias  0.5}
+                          24000 {:speed {:from 13 :to 17}
+                                 :bias  0.6}
+                          30000 {:speed {:from 16 :to 18}
+                                 :bias  0.7}
+                          40000 {:speed {:from 18 :to 22}
+                                 :bias  0.8}
+                          50000 {:speed {:from 20 :to 25}
+                                 :bias  0.9}}
+   :turbulence           {:size 1 :power 250}
+   :origin               [1000 1000]
+   :evolution            3600
+   :time                 {:offset  1234
+                          :current {:day 1 :hour 5 :minute 0}
+                          :max     nil}
+   :wind-uniformity      0.7
+   :crossfade            0.1
+   :prevailing-wind      {:heading 325}
+   :seed                 1234
+   :wind-stability-areas [#_{:bounds   {:x      16
+                                        :y      39
+                                        :width  6
+                                        :height 4}
+                             :wind     {:speed   5
+                                        :heading 0}
+                             :index    0
+                             :editing? false}]
+   :weather-overrides    [#_{:location               {:x 22
+                                                      :y 45}
+                             :radius                 10
+                             :falloff                5
+                             :animate?               false
+                             :begin                  {:day 1 :hour 5 :minute 0}
+                             :peak                   {:day 1 :hour 6 :minute 0}
+                             :taper                  {:day 1 :hour 8 :minute 0}
+                             :end                    {:day 1 :hour 9 :minute 0}
+                             :pressure               28.5
+                             :strength               1
+                             :show-outline?          false
+                             :exclude-from-forecast? false
+                             :editing?               false}]}
+  #_{:temp-uniformity      0.7
+   :pressure             {:min 28 :max 31 :variance 1.2 :speed 100}
+   ;; From Ahmed, cell count is a function of theater size:
+   ;; #define CELLSIZE  57344
+   ;; #define FMAP_CELLS_FROM_SIZE(s) round(floor((s*1000)*3.28084 / (double)CELLSIZE +1))
+   :cell-count           [59 59]
+   :feature-size         10
+   :categories           {:sunny     {:weight     50
+                                      :wind       {:min 5 :mean 10 :max 30}
+                                      :temp       {:min 20 :mean 22 :max 24}
+                                      :visibility {:from 15 :to 30}}
+                          :fair      {:weight     50
+                                      :wind       {:min 0 :mean 7 :max 20}
+                                      :temp       {:min 18 :mean 21 :max 23}
+                                      :visibility {:from 10 :to 30}
+                                      :low-clouds {:base     {:from 3000 :to 10000}
+                                                   :size     {:from 0 :to 5}
+                                                   :coverage {:from :few :to :broken}}}
+                          :poor      {:weight     50
+                                      :wind       {:min 10 :mean 15 :max 30}
+                                      :temp       {:min 15 :mean 18 :max 21}
+                                      :visibility {:from 2 :to 10}
+                                      :low-clouds {:base     {:from 0 :to 10000}
+                                                   :size     {:from 0 :to 5}
+                                                   :coverage {:from :scattered
+                                                              :to   :overcast}}}
+                          :inclement {:weight     50
+                                      :wind       {:min 15 :mean 25 :max 60}
+                                      :temp       {:min 12 :mean 14 :max 16}
+                                      :visibility {:from 15 :to 30}
+                                      :low-clouds {:base     {:from 0 :to 10000}
+                                                   :size     {:from 0 :to 5}
+                                                   :coverage {:from :scattered
+                                                              :to   :overcast}}}}
+   :winds-aloft          {3000  {:speed {:from 2 :to 3}
+                                 :bias  0.1}
+                          6000  {:speed {:from 4 :to 6}
+                                 :bias  0.2}
+                          9000  {:speed {:from 7 :to 9}
+                                 :bias  0.3}
+                          12000 {:speed {:from 8 :to 12}
+                                 :bias  0.4}
+                          18000 {:speed {:from 11 :to 13}
+                                 :bias  0.5}
+                          24000 {:speed {:from 13 :to 17}
+                                 :bias  0.6}
+                          30000 {:speed {:from 16 :to 18}
+                                 :bias  0.7}
+                          40000 {:speed {:from 18 :to 22}
+                                 :bias  0.8}
+                          50000 {:speed {:from 20 :to 25}
+                                 :bias  0.9}}
+   :turbulence           {:size 1 :power 250}
+   :origin               [1000 1000]
+   :evolution            3600
+   :time                 {:offset  1234
+                          :current {:day 1 :hour 5 :minute 0}
+                          :max     nil}
+   :wind-uniformity      0.7
+   :crossfade            0.1
+   :prevailing-wind      {:heading 325}
+   :seed                 1234
+   :wind-stability-areas []
+   :weather-overrides    []})
