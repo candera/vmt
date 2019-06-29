@@ -219,7 +219,7 @@
                           :poor      {:weight     50
                                       :wind       {:min 10 :mean 15 :max 30}
                                       :temp       {:min 15 :mean 18 :max 21}
-                                      :visibility {:from 2 :to 10}
+                                      :visibility {:from 5 :to 10}
                                       :low-clouds {:base     {:from 0 :to 10000}
                                                    :size     {:from 0 :to 5}
                                                    :coverage {:from :scattered
@@ -228,7 +228,7 @@
                           :inclement {:weight     50
                                       :wind       {:min 15 :mean 25 :max 60}
                                       :temp       {:min 12 :mean 14 :max 16}
-                                      :visibility {:from 15 :to 30}
+                                      :visibility {:from 2 :to 7}
                                       :low-clouds {:base     {:from 0 :to 10000}
                                                    :size     {:from 0 :to 5}
                                                    :coverage {:from :scattered
@@ -1458,24 +1458,6 @@
   [map]
   (str "map-image-" (name map)))
 
-(def display-name->key
-  {"Weather Type"   :type
-   "Pressure"       :pressure
-   "Temperature"    :temperature
-   "Cloud Coverage" :cloud-cover})
-
-(def display-key->name
-  (invert-map display-name->key))
-
-(def overlay-name->key
-  {"Wind"         :wind
-   "Pressure"     :pressure
-   "Temperature"  :temperature
-   "Weather Type" :type})
-
-(def overlay-key->name
-  (invert-map overlay-name->key))
-
 (def type-name->key
   {"Sunny" :sunny
    "Fair" :fair
@@ -1484,13 +1466,6 @@
 
 (def type-key->name
   (invert-map type-name->key))
-
-(def pressure-unit-name->key
-  {"InHg"     :inhg
-   "Millibar" :mbar})
-
-(def pressure-unit-key->name
-  (invert-map pressure-unit-name->key))
 
 (def mbar-per-inhg 33.8637526)
 
@@ -1945,6 +1920,22 @@
   [weather _]
   (-> weather :temperature (hint-> js/Number) (.toFixed 1)))
 
+(defmethod overlay-text :visibility
+  [weather _]
+  (-> weather :visibility (hint-> js/Number) format-visibility))
+
+(defmethod overlay-text :cloud-base
+  [weather _]
+  (if (= (:type weather) :sunny)
+    ""
+    (-> weather :low-clouds :base (hint-> js/Number) long str)))
+
+(defmethod overlay-text :cloud-size
+  [weather _]
+  (if (= (:type weather) :sunny)
+    ""
+    (-> weather :low-clouds :size (hint-> js/Number) (.toFixed 2))))
+
 (defmethod overlay-text :type
   [weather _]
   (-> weather :type {:sunny "S"
@@ -1967,15 +1958,16 @@
 (defn update-overlay
   [weather-data display-params]
   (with-time "update-overlay"
-   (condp contains? (:overlay display-params)
-     #{:wind}
+   (case (:overlay display-params)
+     :wind
      (update-wind-layer weather-data display-params)
 
-     #{:cloud-cover}
+     :cloud-cover
      (update-coverage-layer weather-data display-params)
 
-     #{:type :pressure :temperature}
+     (:type :pressure :temperature :visibility :cloud-size :cloud-base)
      (update-text-layer weather-data display-params)
+
      nil)))
 
 (defn update-primary-layer
@@ -2868,7 +2860,7 @@
                                          (and #_(:source weather-params)
                                               (-> display-params
                                                   :overlay
-                                                  #{:pressure :temperature :type}))))
+                                                  #{:pressure :temperature :type :cloud-base :cloud-size :visibility}))))
         selected-cell-overlay (let [coords (cell= (:coordinates selected-cell))]
                                 (cell-let [[x y] coords]
                                   (when-tpl (formula-of [x y #_weather-params]
@@ -3303,7 +3295,13 @@
                                          {:label "Temperature"
                                           :value :temperature}
                                          {:label "Weather Type"
-                                          :value :type}])
+                                          :value :type}
+                                         {:label "Cloud Base"
+                                          :value :cloud-base}
+                                         {:label "Cloud Size"
+                                          :value :cloud-size}
+                                         {:label "Visibility"
+                                          :value :visibility}])
                               (when-tpl wind?
                                 [(span
                                   :css {:margin (px 0 7)}

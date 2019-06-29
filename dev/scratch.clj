@@ -4180,3 +4180,19 @@ java.nio.file.File
   (->> f
        sort
        pprint))
+
+
+(->> (-> weather-params
+         (assoc :x (rand-int 1000) :y (rand-int 1000))
+         model/weather)
+     (into (sorted-map))
+     inspect
+     )
+
+(@#'model/visibility (assoc weather-params ::model/mixture {:sunny 0 :fair 1 :poor 0 :inclement 0})
+ 0.3)
+
+(@#'model/mix-on
+ (:categories weather-params)
+ {:sunny 0 :fair 1 :poor 0 :inclement 0}
+ [:fair :visibility :from])

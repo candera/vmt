@@ -291,6 +291,38 @@
   (when-not (= type :sunny)
     (< v (get-in categories [type :low-clouds :towering]))))
 
+(defn- linear-param
+  [{:keys [from to]} v]
+  (math/interpolate from to v))
+
+(defn- cloud-param
+  [{type       :type
+    categories :categories
+    :as        params}
+   param
+   v]
+  (if (= type :sunny)
+    0
+    (linear-param (get-in categories [type :low-clouds param]) v)))
+
+(defn- cloud-size
+  [params v]
+  (cloud-param params :size v))
+
+(defn- cloud-base
+  [params v]
+  (math/nearest (cloud-param params :base v) 100))
+
+(defn- visibility
+  [{type       :type
+    categories :categories
+    mixture    ::mixture
+    :as        params}
+   v]
+  (linear-param {:from (mix-on categories mixture [:visibility :from])
+                 :to   (mix-on categories mixture [:visibility :to])}
+                v))
+
 (defn weather
   "x and y are in cells"
   [{:keys [x y seed
@@ -357,7 +389,11 @@
                                   (pressure-pattern (math/vector-add p [1000 1000])
                                                     2.5 3.5))
         weather-type             (key (last (sort-by val mixture)))
-        towering-var             (pressure-pattern p 1.5 1.5)]
+        towering-var             (pressure-pattern p 1.5 1.5)
+        base-var                 (pressure-pattern p 3.4 3.5)
+        size-var                 (pressure-pattern p 3.5 3.6)
+        vis-var                  (pressure-pattern p 3.7 3.8)
+        params**                 (assoc params* :type weather-type)]
     {:value        value
      :pressure     (math/nearest pressure 0.01)
      :mixture      mixture
@@ -368,12 +404,11 @@
                                    wind-adj-var
                                    {:heading (math/heading wind-dir)
                                     :speed   (wind-speed categories mixture wind-var)})
-     :low-clouds   {:coverage  (cloud-coverage (assoc params*
-                                                      :type weather-type)
-                                               coverage-var)
-                    :towering? (cloud-towering? (assoc params
-                                                       :type weather-type)
-                                                towering-var)}
+     :low-clouds   {:coverage  (cloud-coverage params** coverage-var)
+                    :towering? (cloud-towering? params** towering-var)
+                    :base (cloud-base params** base-var)
+                    :size (cloud-size params** size-var)}
+     :visibility   (visibility (assoc params** ::mixture mixture) vis-var)
      :wind-var     wind-var
      :temp-var     temp-var
      :coverage-var coverage-var
