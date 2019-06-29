@@ -114,11 +114,11 @@
 
 ;; A checkerboard pattern of high and low pressure "cells"
 (defn pressure-pattern
-  [[x y]]
-  (let [v  (+ (* (Math/sin x)
-                 (Math/sin y))
-              (* (Math/sin (/ x 3))
-                 (Math/sin (/ y 3))))]
+  [[x y] x1 y1]
+  (let [v       (+ (* (Math/sin x)
+                      (Math/sin y))
+                   (* (Math/sin (/ x x1))
+                      (Math/sin (/ y y1))))]
     (-> v (+ 2) (/ 4))))
 
 ;; TODO: move to this more general model, in which we categorize the
@@ -263,11 +263,9 @@
                  v)
          (math/clamp 0.0 1.0))))
 
-(let [coverage-vals {:none      0
-                     :few       1
-                     :scattered 2
-                     :broken    3
-                     :overcast  4}
+(def cloud-coverages [:none :few :scattered :broken :overcast])
+
+(let [coverage-vals (zipmap cloud-coverages (range))
       inverse (zipmap (vals coverage-vals)
                       (keys coverage-vals))]
  (defn- cloud-coverage
@@ -284,6 +282,14 @@
            (math/nearest 1)
            long
            inverse)))))
+
+(defn- cloud-towering?
+  [{type       :type
+    categories :categories
+    :as        params}
+   v]
+  (when-not (= type :sunny)
+    (< v (get-in categories [type :low-clouds :towering]))))
 
 (defn weather
   "x and y are in cells"
@@ -320,7 +326,7 @@
         ;; TODO: Introduce some sort of vector/matrix abstraction
         ;; Although meh: just make it run on the GPU
         p                        (perturb params*)
-        value                    (override params (pressure-pattern p))
+        value                    (override params (pressure-pattern p 3 3))
         wind-dir                 (wind-direction p value params*)
         pressure-t               (/ t (:speed pressure) 4)
         pressure-variance        (:variance pressure)
@@ -344,25 +350,14 @@
                                                                           t*
                                                                           (+ seed 17)
                                                                           32))
-        wind-adj-var             (math/reject-tails wind-uniformity
-                                                    (smoothed-noise-field (* x* feature-size)
-                                                                          (* y* feature-size)
-                                                                          t*
-                                                                          (+ seed 18)
-                                                                          32))
-        temp-var                 (math/reject-tails temp-uniformity
-                                                    (smoothed-noise-field (* x* feature-size)
-                                                                          (* y* feature-size)
-                                                                          t*
-                                                                          (+ seed 19)
-                                                                          32))
-        coverage-var             (math/reject-tails 0.7
-                                  (smoothed-noise-field (* x* feature-size)
-                                                        (* y* feature-size)
-                                                        t*
-                                                        (+ seed 20)
-                                                        32))
-        weather-type             (key (last (sort-by val mixture)))]
+        wind-adj-var             (pressure-pattern p 3.2 3.2)
+        temp-var                 (pressure-pattern p 3.3 3.3)
+        coverage-var             (math/reject-tails
+                                  0.9
+                                  (pressure-pattern (math/vector-add p [1000 1000])
+                                                    2.5 3.5))
+        weather-type             (key (last (sort-by val mixture)))
+        towering-var             (pressure-pattern p 1.5 1.5)]
     {:value        value
      :pressure     (math/nearest pressure 0.01)
      :mixture      mixture
@@ -373,19 +368,23 @@
                                    wind-adj-var
                                    {:heading (math/heading wind-dir)
                                     :speed   (wind-speed categories mixture wind-var)})
-     :low-clouds   {:coverage (cloud-coverage (assoc params*
-                                                     :type weather-type)
-                                              coverage-var)}
+     :low-clouds   {:coverage  (cloud-coverage (assoc params*
+                                                      :type weather-type)
+                                               coverage-var)
+                    :towering? (cloud-towering? (assoc params
+                                                       :type weather-type)
+                                                towering-var)}
      :wind-var     wind-var
      :temp-var     temp-var
      :coverage-var coverage-var
+     :towering-var towering-var
      :wind-vec     wind-dir
      :p            p}))
 
 (defn weather-grid
   [{:keys [map-fn cells origin time] :as params}]
   (let [;; This is so we can pass in pmap when we're in a non-CLJS context
-        map-fn (or map-fn map)]
+        map-fn (or map-fn mapv)]
     (->>  (for [[x y] cells]
             [[x y] (assoc params
                           :x x

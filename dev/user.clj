@@ -282,7 +282,8 @@
                                       :visibility {:from 10 :to 30}
                                       :low-clouds {:base     {:from 3000 :to 10000}
                                                    :size     {:from 0 :to 5}
-                                                   :coverage {:from :few :to :broken}}}
+                                                   :coverage {:from :few :to :broken}
+                                                   :towering 0.48}}
                           :poor      {:weight     50
                                       :wind       {:min 10 :mean 15 :max 30}
                                       :temp       {:min 15 :mean 18 :max 21}
@@ -290,7 +291,8 @@
                                       :low-clouds {:base     {:from 0 :to 10000}
                                                    :size     {:from 0 :to 5}
                                                    :coverage {:from :scattered
-                                                              :to   :overcast}}}
+                                                              :to   :overcast}
+                                                   :towering 0.35}}
                           :inclement {:weight     50
                                       :wind       {:min 15 :mean 25 :max 60}
                                       :temp       {:min 12 :mean 14 :max 16}
@@ -298,7 +300,8 @@
                                       :low-clouds {:base     {:from 0 :to 10000}
                                                    :size     {:from 0 :to 5}
                                                    :coverage {:from :scattered
-                                                              :to   :overcast}}}}
+                                                              :to   :overcast}
+                                                   :towering 0.25}}}
    :winds-aloft          {3000  {:speed {:from 2 :to 3}
                                  :bias  0.1}
                           6000  {:speed {:from 4 :to 6}

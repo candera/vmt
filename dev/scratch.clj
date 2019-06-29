@@ -4007,7 +4007,7 @@ java.nio.file.File
 
 (math/interpolate 1 10 0.5)
 
-(let [[origin-x origin-y]      origin 
+(let [[origin-x origin-y]      origin
       x*                       (/ (+ origin-x x) feature-size)
       y*                       (/ (+ origin-y y) feature-size)
       ;; These next two values get computed over and over again. I
@@ -4112,11 +4112,12 @@ java.nio.file.File
      frequencies)
 
 (->> (-> weather-params
-         (assoc :x 29 :y 33)
+         (assoc :x 10 :y 33)
          (assoc-in [:winds-aloft 50000 :bias] 0)
          model/weather)
      (into (sorted-map))
-     inspect)
+     inspect
+     )
 
 {:pressure 29.490000000000002,
  :value 0.4036059804193305,
@@ -4134,3 +4135,48 @@ java.nio.file.File
 (inspect weather-params)
 
 (@#'model/cloud-coverage (assoc weather-params :type :inclement) 0.6)
+
+
+(->> (repeatedly 10000 #(model/pressure-pattern [(* (rand) 10000) (* (rand) 1000)]
+                                               3.1 3.1))
+     (map #(math/nearest % 0.05))
+     frequencies
+     (into (sorted-map))
+     pprint)
+
+;; Target: :rare 5%, :some 10%, :common 25%, :frequent 50%, :prevalent 75%
+;; Fair/rare: 0.3
+;; Fair/some: 0.4
+;; Fair/common: 0.5
+;; Fair/frequent: 0.6
+;; Fair/prevalent: 0.7
+;; Poor/rare: 0.2
+;; Poor/some: 0.25
+;; Poor/common: 0.4
+;; Poor/frequent: 0.45
+;; Poor/prevalent: 0.5
+;; Inclement/rare: 0.07
+;; Inclement/some: 0.1
+;; Inclement/common: 0.2
+;; Inclement/frequent: 0.35
+;; Inclement/prevalent: 0.45
+
+
+(let [weather-params (-> weather-params
+                         (assoc-in [:categories :fair :low-clouds :towering]  0.7)
+                         (assoc-in [:categories :poor :low-clouds :towering]  0.45)
+                         (assoc-in [:categories :inclement :low-clouds :towering]  0.45))
+      f (->> (for [seed (repeatedly 10 #(rand-int 10009))
+                   x    (range 0 59)
+                   y    (range 0 59)
+                   :let [weather
+                         (-> weather-params
+                             (assoc :x x :y y :seed seed)
+                             (assoc-in [:winds-aloft 50000 :bias] 0)
+                             model/weather)]]
+               [(get-in weather [:type])
+                (get-in weather [:low-clouds :coverage])])
+             frequencies)]
+  (->> f
+       sort
+       pprint))

@@ -164,6 +164,38 @@
                        [(.width window)
                         (.height window)]))))
 
+(def towering-thresholds
+  {:fair      {:none      0
+               :rare      0.3
+               :some      0.4
+               :common    0.5
+               :frequent  0.6
+               :prevalent 0.7
+               :always    1}
+   :poor      {:none      0
+               :rare      0.2
+               :some      0.25
+               :common    0.4
+               :frequent  0.45
+               :prevalent 0.5
+               :always    1}
+   :inclement {:none      0
+               :rare      0.07
+               :some      0.1
+               :common    0.2
+               :frequent  0.35
+               :prevalent 0.45
+               :always    1}})
+
+(def towering-threshold-names
+  [[:none       "None"]
+   [:rare       "Rare"]
+   [:some       "Some"]
+   [:common     "Common"]
+   [:frequent   "Frequent"]
+   [:prevalent  "Prevalent"]
+   [:always     "Always"]])
+
 (def default-weather-params
   {:temp-uniformity      0.7
    :pressure             {:min 28 :max 31 :variance 1.2 :speed 100}
@@ -182,7 +214,8 @@
                                       :visibility {:from 10 :to 30}
                                       :low-clouds {:base     {:from 3000 :to 10000}
                                                    :size     {:from 0 :to 5}
-                                                   :coverage {:from :few :to :broken}}}
+                                                   :coverage {:from :few :to :broken}
+                                                   :towering 0.4}}
                           :poor      {:weight     50
                                       :wind       {:min 10 :mean 15 :max 30}
                                       :temp       {:min 15 :mean 18 :max 21}
@@ -190,7 +223,8 @@
                                       :low-clouds {:base     {:from 0 :to 10000}
                                                    :size     {:from 0 :to 5}
                                                    :coverage {:from :scattered
-                                                              :to   :overcast}}}
+                                                              :to   :overcast}
+                                                   :towering 0.4}}
                           :inclement {:weight     50
                                       :wind       {:min 15 :mean 25 :max 60}
                                       :temp       {:min 12 :mean 14 :max 16}
@@ -198,7 +232,8 @@
                                       :low-clouds {:base     {:from 0 :to 10000}
                                                    :size     {:from 0 :to 5}
                                                    :coverage {:from :scattered
-                                                              :to   :overcast}}}}
+                                                              :to   :overcast}
+                                                   :towering 0.35}}}
    :winds-aloft          {3000  {:speed {:from 2 :to 3}
                                  :bias  0.1}
                           6000  {:speed {:from 4 :to 6}
@@ -331,7 +366,12 @@
                                            :size     {:from size-f-from
                                                       :to   size-f-to}
                                            :coverage {:from cover-f-from
-                                                      :to   cover-f-to}}}
+                                                      :to   cover-f-to}
+                                           :towering (->> towering-thresholds
+                                                          :fair
+                                                          vals
+                                                          (remove #{:always :prevalent :frequent})
+                                                          rand-nth)}}
                   :poor      {:visibility {:from vis-p
                                            :to   (math/clamp 0 30 (+ vis-p visd-p))}
                               :low-clouds {:base     {:from base-p-from
@@ -339,7 +379,12 @@
                                            :size     {:from size-p-from
                                                       :to   size-p-to}
                                            :coverage {:from cover-p-from
-                                                      :to   cover-p-to}}}
+                                                      :to   cover-p-to}
+                                           :towering (->> towering-thresholds
+                                                          :poor
+                                                          vals
+                                                          (remove #{:always :prevalent})
+                                                          rand-nth)}}
                   :inclement {:visibility {:from vis-i
                                            :to   (math/clamp 0 30 (+ vis-i visd-i))}
                               :low-clouds {:base     {:from base-i-from
@@ -347,7 +392,12 @@
                                            :size     {:from size-i-from
                                                       :to   size-i-to}
                                            :coverage {:from cover-i-from
-                                                      :to   cover-i-to}}}}}))
+                                                      :to   cover-i-to}
+                                           :towering (->> towering-thresholds
+                                                          :inclement
+                                                          vals
+                                                          (remove #{:always})
+                                                          rand-nth)}}}}))
 
 (defn- random-wind-params
   []
@@ -486,7 +536,7 @@
                       :multi-save    {:mission-name nil
                                       :from         {:day 1 :hour 5 :minute 0}
                                       :to           {:day 1 :hour 10 :minute 0}
-                                      :step         15}})
+                                      :step         60}})
 
 (defc map-display {:brightness              0.5 ; Range [0 1]
                    :text-size               0   ; Range [-1 1]
@@ -1859,23 +1909,26 @@
                        "href"
                        (str "#" (wind-vector-id speed))))))
 
-(def cloud-coverage-id
-  {:none      "cloud-coverage-none"
-   :few       "cloud-coverage-few"
-   :scattered "cloud-coverage-scattered"
-   :broken    "cloud-coverage-broken"
-   :overcast  "cloud-coverage-overcast"})
+(let [ids {:none      "cloud-coverage-none"
+           :few       "cloud-coverage-few"
+           :scattered "cloud-coverage-scattered"
+           :broken    "cloud-coverage-broken"
+           :overcast  "cloud-coverage-overcast"}]
+  (defn cloud-coverage-id
+    [coverage towering?]
+    (str (get ids coverage) (when towering? "-towering"))))
 
 (defn- update-coverage-layer
   [weather-data display-params]
   (with-time "update-coverage-layer"
     (doseq [[[x y] weather] weather-data
             :let            [coverage (get-in weather [:low-clouds :coverage])
+                             towering? (get-in weather [:low-clouds :towering?])
                              ^js/SVGRectElement cell (gdom/getElement (str "cloud-coverage-cell-" x "-" y))]]
       (.setAttributeNS cell
                        "http://www.w3.org/1999/xlink"
                        "href"
-                       (str "#" (cloud-coverage-id coverage))))))
+                       (str "#" (cloud-coverage-id coverage towering?))))))
 
 (defmulti overlay-text
   (fn [weather display-params] (:overlay display-params)))
@@ -1964,10 +2017,11 @@
 (defn- cloud-coverage-defs
   []
    (svg/defs
-    (for [coverage (keys cloud-coverage-id)]
+     (for [coverage model/cloud-coverages
+           towering? [true false]]
       (svg/g
-       :id (cloud-coverage-id coverage)
-       (clouds/coverage-icon coverage)))))
+       :id (cloud-coverage-id coverage towering?)
+       (clouds/coverage-icon coverage towering?)))))
 
 (defn bullseye-info-box
   []
@@ -3680,7 +3734,7 @@
     :toggle (cell= (= display-mode :edit))
     (help-icon [:clouds :buttons])
     (buttons/a-button
-     :css {:margin-right "3px"}
+     :css {:margin-right (px 3)}
      :click (fn [_]
               (dosync
                (let [rand-atm (random-atmosphere-params)
@@ -3688,22 +3742,23 @@
                  #_(.debug js/console "merging" rand-atm new-weather)
                  (swap! weather-params #(util/deep-merge-with (fn [a b] b) % rand-atm)))
                (reset! cloud-params (random-cloud-params))))
-     "Randomize Clouds")
+     "Randomize Clouds & Vis")
     (buttons/a-button
-     :css {:margin-right "3px"}
+     :css {:margin-right (px 3)}
      :click (fn [_] (swap! weather-params #(util/deep-merge-with (fn [a b] b) % (random-wind-params))))
      "Randomize Wind")
     (buttons/a-button
-     :css {:margin-right "3px"}
+     :css {:margin-right (px 3)}
      :click (fn [_] (swap! weather-params #(util/deep-merge-with (fn [a b] b) % (random-temp-params))))
      "Randomize Temperature")
     (buttons/a-button
-     :css {:margin-right "3px"}
+     :css {:margin-right (px 3)}
      :click #(dosync
               (reset! weather-params default-weather-params)
               (reset! cloud-params default-cloud-params))
      "Reset to Defaults")
     (buttons/a-button
+     :css {:margin-right (px 3)}
      :click #(save-twx @cloud-params
                        (:direction @movement-params)
                        (:mission-name @mission))
@@ -3743,7 +3798,6 @@
    (control-subsection
     :title (with-help [:clouds :low :overview]
              "Low Clouds")
-    (div :css {:font-size (pct 300)} "TODO: Deal with towering cumulus")
     (table
      :css {:border-collapse "collapse"}
      (thead
@@ -3766,7 +3820,8 @@
              ;; Low Clouds
              (header 2 [:clouds :low :base] ["Base"] "#f2f2f2" [1])
              (header 2 [:clouds :low :size] ["Size"] "lightgray" [1])
-             (header 2 [:clouds :low :coverage] ["Coverage"] "#f2f2f2" [1]))
+             (header 2 [:clouds :low :coverage] ["Coverage"] "#f2f2f2" [1])
+             (header 1 [:clouds :low :towering] ["Towering?"] "lightgray" [1 1 0 1]))
          (tr :css {:text-align "center"}
              ;; Weather Type
              (td)
@@ -3796,7 +3851,12 @@
                 (cell :from :size)
                 (cell :to :size)
                 (cell :from :coverage)
-                (cell :to :coverage)]))]))
+                (cell :to :coverage)])
+             ;; Towering
+             (td :css {:background "lightgray"
+                       :border-width (px 0 1 1 1)
+                       :border-color "black"
+                       :border-style "solid"}))]))
      (tbody
       (for [category [:fair :poor :inclement]]
         (tr
@@ -3810,7 +3870,8 @@
                                  [:low-clouds :size :from]
                                  [:low-clouds :size :to]
                                  [:low-clouds :coverage :from]
-                                 [:low-clouds :coverage :to]]]
+                                 [:low-clouds :coverage :to]
+                                 [:low-clouds :towering]]]
            (td (div :css {:margin (px 0 2)}
                     (cond
                       (= :coverage b)
@@ -3847,6 +3908,15 @@
                                       :label "BKN"}
                                      {:value :overcast
                                       :label "OVC"}])))
+
+                      (= :towering b)
+                      (comm/dropdown
+                       :value (path-lens weather-params (into [:categories category] path))
+                       :choices (mapv (fn [[k l]]
+                                        {:value (get-in towering-thresholds [category k])
+                                         :label l})
+                                      towering-threshold-names))
+
                       :else
                       (validating-edit
                        :source (path-lens weather-params (into [:categories category] path))
@@ -4341,7 +4411,15 @@
               (validating-edit
                :width 32
                :source (path-lens display-params [:multi-save :step])
-               :conform comm/conform-positive-integer
+               :conform (fn [s]
+                          (formula-of
+                            [s]
+                            (let [parsed (comm/parse-int s)
+                                  valid? (and parsed (<= 60 s))]
+                              {:valid? valid?
+                               :message (when-not valid?
+                                          "Must be an integer greater than or equal to 60. Values below 60 may cause problems in BMS.")
+                               :value parsed})))
                :fmt str
                :placeholder "60"))
          (let [progress    (cell nil)
