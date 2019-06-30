@@ -105,7 +105,6 @@
               ;;:flight-path-controls {}
               :weather-type-configuration {}
               :atmosphere-controls {}
-              :wind-stability-parameters {}
               :weather-override-parameters {}
               :advanced-controls {}
               ]}

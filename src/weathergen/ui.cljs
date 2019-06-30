@@ -207,11 +207,11 @@
    :categories           {:sunny     {:weight     50
                                       :wind       {:min 5 :mean 10 :max 30}
                                       :temp       {:min 20 :mean 22 :max 24}
-                                      :visibility {:from 15 :to 30}}
+                                      :visibility {:from 24 :to 48}}
                           :fair      {:weight     50
                                       :wind       {:min 0 :mean 7 :max 20}
                                       :temp       {:min 18 :mean 21 :max 23}
-                                      :visibility {:from 10 :to 30}
+                                      :visibility {:from 16 :to 48}
                                       :low-clouds {:base     {:from 3000 :to 10000}
                                                    :size     {:from 0 :to 5}
                                                    :coverage {:from :few :to :broken}
@@ -219,7 +219,7 @@
                           :poor      {:weight     50
                                       :wind       {:min 10 :mean 15 :max 30}
                                       :temp       {:min 15 :mean 18 :max 21}
-                                      :visibility {:from 5 :to 10}
+                                      :visibility {:from 8 :to 16}
                                       :low-clouds {:base     {:from 0 :to 10000}
                                                    :size     {:from 0 :to 5}
                                                    :coverage {:from :scattered
@@ -228,7 +228,7 @@
                           :inclement {:weight     50
                                       :wind       {:min 15 :mean 25 :max 60}
                                       :temp       {:min 12 :mean 14 :max 16}
-                                      :visibility {:from 2 :to 7}
+                                      :visibility {:from 3 :to 11}
                                       :low-clouds {:base     {:from 0 :to 10000}
                                                    :size     {:from 0 :to 5}
                                                    :coverage {:from :scattered
@@ -262,14 +262,6 @@
    :crossfade            0.1
    :prevailing-wind      {:heading 325}
    :seed                 1234
-   :wind-stability-areas [#_{:bounds   {:x      16
-                                        :y      39
-                                        :width  6
-                                        :height 4}
-                             :wind     {:speed   5
-                                        :heading 0}
-                             :index    0
-                             :editing? false}]
    :weather-overrides    [#_{:location               {:x 22
                                                       :y 45}
                              :radius                 10
@@ -304,7 +296,7 @@
                                             4
                                             #(random-int
                                               1
-                                              300))
+                                              600))
                                            (map #(/ % 10))
                                            sort)
         [visd-s visd-f visd-p visd-i] (->> (repeatedly
@@ -725,10 +717,6 @@
 (defc= selected-cell-weather (get weather-data (:coordinates selected-cell)))
 
 (defc= cell-count (:cell-count weather-params))
-
-(defc= wind-stability-areas
-  (->> weather-params
-       :wind-stability-areas))
 
 (defc= weather-overrides
   (:weather-overrides weather-params))
@@ -1312,13 +1300,11 @@
             (fn []
               (dosync
                (reset! display-mode :briefing)
-               (swap! map-display assoc :hide-wind-stability? true)
                (reset! mission mission-data)
                (reset! visible-sides (:visible-sides vmtb))
                (reset! weather-params (-> vmtb
                                           :weather
                                           :weather-params
-                                          (update :wind-stability-areas #(map unedit %))
                                           (update :weather-overrides #(map unedit %))
                                           (assoc-in [:time :max] (mission/mission-time mission-data))))
                (reset! cloud-params (-> vmtb :weather :cloud-params))
@@ -1527,24 +1513,16 @@
   (str x ", " y))
 
 (defn cloud-descriptions
-  [cloud-params type]
+  [cloud-params type low-clouds]
   (if (= type :sunny)
-    ["SKC"]
-    (let [stratus-base (get-in cloud-params [:stratus-base type])
-          cumulus-base (get-in cloud-params [:cumulus-base type])
-          cumulus-density (:cumulus-density cloud-params)
-          density-str (if (< 25 cumulus-density)
-                        "SCT"
-                        "FEW")
-          cumulus-level (gstring/format "%03d" (-> cumulus-base (/ 100) long))
-          stratus-level (gstring/format "%03d" (-> stratus-base (/ 100) long))]
-      (cond-> []
-        (and (pos? cumulus-base)
-             (< cumulus-base stratus-base))
-        (conj (str density-str cumulus-level " "))
-
-        (not= type :fair)
-        (conj (str "OVC" stratus-level))))))
+    "SKC"
+    (let [cumulus-base (:base low-clouds)
+          density-str ({:few "FEW"
+                        :scattered "SCT"
+                        :broken "BKN"
+                        :overcast "OVC"} (:coverage low-clouds))
+          cumulus-level (gstring/format "%03d" (-> cumulus-base (/ 100) long))]
+      (str density-str cumulus-level " "))))
 
 (defn contrail-description
   [cloud-params type]
@@ -1557,10 +1535,8 @@
 
 (defn format-cloud
   "Returns a string describing the clouds for the given weather type."
-  [cloud-params type]
-  (str (->> (cloud-descriptions cloud-params type)
-            (interpose " ")
-            (reduce str))
+  [cloud-params type low-clouds]
+  (str (cloud-descriptions cloud-params type low-clouds)
        " "
        (contrail-description cloud-params type)))
 
@@ -1646,6 +1622,16 @@
 
 ;;; Controls
 
+(defelem wind-alt-selector
+  "Returns UI for a dropdown that lets you pick what the displayed wind altitude is."
+  [attrs _]
+  (comm/dropdown
+   attrs
+   :value (path-lens display-params [:wind-alt])
+   :choices (for [alt model/wind-alts]
+              {:label (str alt " ft")
+               :value alt})))
+
 (defelem triple-border
   "Creates a three-layer border with :inner and :outer colors."
   [attrs contents]
@@ -1705,94 +1691,100 @@
    :id "forecast-section"
    (div
     :id "forecast"
-    (div
-     (label :for "locations"
-            "Forecast for:")
-     ;; formula-of
-     ;; [location-type
-     ;;  mission
-     ;;  selected-cell]
-     (let [airbases (->> mission
-                         mission/oob-air
-                         (sort-by #(mission/objective-name mission %))
-                         cell=)]
-       (cell-let [{:keys [coordinates]} selected-cell
-                  [x y] coordinates]
-         ;; TODO: It's not good enough to just set the value of the
-         ;; `selected` attribute - that won't cause the browser to
-         ;; actually change the selected item. You have to change the
-         ;; select's selectedIndex property, too. The `dropdown` elem
-         ;; should help with this.
-         (select
-          :id "locations"
-          :change #(change-location @mission (nth @airbases (util/str->long @%)))
-          (option :selected (cell= (not= :named location-type))
-                  :value ""
-                  (formula-of [location-type x y]
-                    (condp = location-type
-                      :coordinates (str "Location " (format-coords x y))
-                      :named ""
-                      :none "None selected")))
-          (for-tpl [indexed (cell= (map-indexed vector airbases))]
-            (cell-let [[index ab] indexed]
-              (option :value index
-                      :selected (cell= (= ab (:location selected-cell)))
-                      (cell= (mission/objective-name mission ab))))))))
+    (table
+     (tr
+      (td "Forecast for:")
+      ;; formula-of
+      ;; [location-type
+      ;;  mission
+      ;;  selected-cell]
+      (let [airbases (->> mission
+                          mission/oob-air
+                          (sort-by #(mission/objective-name mission %))
+                          cell=)]
+        (cell-let [{:keys [coordinates]} selected-cell
+                   [x y] coordinates]
+          ;; TODO: It's not good enough to just set the value of the
+          ;; `selected` attribute - that won't cause the browser to
+          ;; actually change the selected item. You have to change the
+          ;; select's selectedIndex property, too. The `dropdown` elem
+          ;; should help with this.
+          (select
+           :id "locations"
+           :change #(change-location @mission (nth @airbases (util/str->long @%)))
+           (option :selected (cell= (not= :named location-type))
+                   :value ""
+                   (formula-of [location-type x y]
+                     (condp = location-type
+                       :coordinates (str "Location " (format-coords x y))
+                       :named ""
+                       :none "None selected")))
+           (for-tpl [indexed (cell= (map-indexed vector airbases))]
+             (cell-let [[index ab] indexed]
+               (option :value index
+                       :selected (cell= (= ab (:location selected-cell)))
+                       (cell= (mission/objective-name mission ab)))))))))
      #_(vector
-      (a :css {:margin-left "5px"}
-         :href (formula-of
-                 [weather-params
-                  display-params
-                  movement-params
-                  cloud-params]
-                 (str "http://firstfighterwing.com/weathergen/forecast.html?data="
-                      (with-time "encoding shareable forecast"
-                        (encoding/data->base64
-                         {:weather-params weather-params
-                          :display-params display-params
-                          :movement-params movement-params
-                          :cloud-params cloud-params}))))
-         :target "_blank"
-         "Shareable Forecast")
-      (help-icon [:forecast :share]))
-     (formula-of
-       [pressure-unit
-        forecast
-        cloud-params]
-       (let [td1 (fn [& args] (apply td
-                                     :css {:padding-right "3px"
-                                           :padding-left "3px"}
-                                     args))
-             td2 (fn [& args] (apply td
-                                     :css {:padding-right "3px"
-                                           :padding-left "3px"
-                                           :text-align "center"}
-                                     args))]
-         (table
-          :class "info-grid"
-          (thead
-           (tr (td1 (with-help [:forecast :time] "Weather Time"))
-               (td1 (with-help [:forecast :type] "Type"))
-               (td1 (with-help [:forecast :pressure] "Press"))
-               (td2 (with-help [:forecast :temperature] "Temp"))
-               (td2 (with-help [:forecast :wind] "Wind"))
-               (td2 (with-help [:forecast :visibility] "Vis"))
-               (td1 (with-help [:forecast :precipitation] "Precip"))
-               (td1 (with-help [:forecast :cloud] "Cloud"))))
-          (tbody
-           (if-not forecast
-             (tr (td :colspan 8
-                     "No location is selected. Choose a location from the list, or click on the weather map to select one."))
-             (for [[time weather] forecast
-                   :let [{:keys [pressure temperature wind type]} weather]]
-               (tr (td1 (format-time time))
-                   (td1 (format-type type))
-                   (td1 (format-pressure pressure pressure-unit))
-                   (td2 (format-temperature temperature))
-                   (td1 (format-wind wind))
-                   (td2 (format-visibility (get-in cloud-params [:visibility type])))
-                   (td1 (format-precipitation temperature type))
-                   (td1 (format-cloud cloud-params type)))))))))))))
+        (a :css {:margin-left "5px"}
+           :href (formula-of
+                   [weather-params
+                    display-params
+                    movement-params
+                    cloud-params]
+                   (str "http://firstfighterwing.com/weathergen/forecast.html?data="
+                        (with-time "encoding shareable forecast"
+                          (encoding/data->base64
+                           {:weather-params weather-params
+                            :display-params display-params
+                            :movement-params movement-params
+                            :cloud-params cloud-params}))))
+           :target "_blank"
+           "Shareable Forecast")
+        (help-icon [:forecast :share]))
+     (tr
+      (td "Show winds at:")
+      (td (wind-alt-selector))))
+
+    (let [wind-alt (cell= (:wind-alt display-params))]
+      (formula-of
+        [pressure-unit
+         forecast
+         cloud-params
+         wind-alt]
+        (let [td1 (fn [& args] (apply td
+                                      :css {:padding-right "3px"
+                                            :padding-left "3px"}
+                                      args))
+              td2 (fn [& args] (apply td
+                                      :css {:padding-right "3px"
+                                            :padding-left "3px"
+                                            :text-align "center"}
+                                      args))]
+          (table
+           :class "info-grid"
+           (thead
+            (tr (td1 (with-help [:forecast :time] "Weather Time"))
+                (td1 (with-help [:forecast :type] "Type"))
+                (td1 (with-help [:forecast :pressure] "Press"))
+                (td2 (with-help [:forecast :temperature] "Temp"))
+                (td2 (with-help [:forecast :wind] "Wind"))
+                (td2 (with-help [:forecast :visibility] "Vis"))
+                (td1 (with-help [:forecast :precipitation] "Precip"))
+                (td1 (with-help [:forecast :cloud] "Cloud"))))
+           (tbody
+            (if-not forecast
+              (tr (td :colspan 8
+                      "No location is selected. Choose a location from the list, or click on the weather map to select one."))
+              (for [[time weather] forecast
+                    :let [{:keys [pressure temperature wind type low-clouds visibility]} weather]]
+                (tr (td1 (format-time time))
+                    (td1 (format-type type))
+                    (td1 (format-pressure pressure pressure-unit))
+                    (td2 (format-temperature temperature))
+                    (td1 (format-wind (get wind wind-alt)))
+                    (td2 (format-visibility visibility))
+                    (td1 (format-precipitation temperature type))
+                    (td1 (format-cloud cloud-params type low-clouds)))))))))))))
 
 ;;; Grid interaction
 
@@ -2056,14 +2048,14 @@
          :opacity 0.8)
         t)))))
 
-(defn info-overlay
+#_(defn info-overlay
   [hover-cell weather-data pressure-unit nx ny cloud-params]
   (let [{:keys [x y]} hover-cell]
     (if (not (and x y (<= 0 x (dec nx)) (<= 0 y (dec ny))))
       []
       (let [width 13
             height 8
-            {:keys [pressure temperature wind type]} (get weather-data [x y])
+            {:keys [pressure temperature wind type low-clouds visibility]} (get weather-data [x y])
             {:keys [speed heading]} wind]
         #_(log/debug :x x
                      :y y
@@ -2101,14 +2093,14 @@
            :height height)
           (svg/g
            :css {:font-size "6%"}
-           (let [cloud-descriptions (cloud-descriptions cloud-params type)]
+           (let [cloud-descriptions (cloud-descriptions cloud-params type low-clouds)]
              (for [[line [label value]] (map-indexed
                                          vector
                                          [["Location" (format-coords x y)]
                                           ["Pressure" (format-pressure pressure pressure-unit)]
                                           ["Temp" (format-temperature temperature)]
-                                          ["Wind" (format-wind wind)]
-                                          ["Vis" (format-visibility (get-in cloud-params [:visibility type]))]
+                                          ["Wind" (format-wind (get wind wind-alt))]
+                                          ["Vis" (format-visibility visibility)]
                                           ["Precip" (format-precipitation temperature type)]
                                           ["Cloud" (format-cloud cloud-params type)]])]
                [(svg/text
@@ -2176,114 +2168,6 @@
                (pos? width)
                (pos? height))
       proposed)))
-
-(defn wind-stability-overlay
-  [weather-params register-drag-handler]
-  (let [indexed (->> weather-params
-                     :wind-stability-areas
-                     (map-indexed vector)
-                     cell=)
-        [nx ny] (:cell-count @weather-params)]
-    (formula-of
-      [indexed map-display]
-      (svg/g
-       :id "wind-stability-overlay"
-       (for [[index area] indexed]
-         (let [{:keys [bounds editing?]} area
-               {:keys [x y width height]} bounds
-               {:keys [hide-wind-stability?]} map-display
-               mousedown (fn [e]
-                           (reset! prevent-recomputation? true)
-                           (register-drag-handler
-                            (let [starting-bounds bounds]
-                              (fn [[dx dy] final?]
-                                (let [dx (long dx)
-                                      dy (long dy)]
-                                  (dosync
-                                   (swap! weather-params
-                                          update-in
-                                          [:wind-stability-areas index :bounds]
-                                          (fn [bounds]
-                                            (assoc bounds
-                                                   :x (math/clamp
-                                                       0
-                                                       (- nx (:width bounds))
-                                                       (+ (:x starting-bounds)
-                                                          dx))
-                                                   :y (math/clamp
-                                                       0
-                                                       (- ny (:height bounds))
-                                                       (+ (:y starting-bounds)
-                                                          dy)))))
-                                   (when final?
-                                     (reset! prevent-recomputation? false))))))))]
-           (svg/g
-            :css {:display (when (and (not editing?) hide-wind-stability?)
-                             "none")}
-            (svg/rect
-             :fill (if editing? (colors :edit) "none")
-             :mousedown mousedown
-             :css {:cursor (when editing? "move")
-                   :border-width 0}
-             :x x
-             :y y
-             :width width
-             :height height)
-            (svg/rect
-             :fill "none"
-             :stroke "black"
-             :stroke-width 0.2
-             :stroke-dasharray "0.6 0.6"
-             :x x
-             :y y
-             :width width
-             :height height)
-            (svg/rect
-             :fill "none"
-             :stroke "white"
-             :stroke-width 0.2
-             :stroke-dasharray "0.6 0.6"
-             :stroke-dashoffset 0.6
-             :x x
-             :y y
-             :width width
-             :height height)
-            (if-not editing?
-              []
-              (for [[dx dir-h] [[0 "w"] [(/ width 2) nil] [width "e"]]
-                    [dy dir-v] [[0 "n"] [(/ height 2) nil] [height "s"]]
-                    :when (not= [nil nil] [dir-h dir-v])]
-                (svg/rect
-                 :attr {:stroke "black"
-                        :stroke-width "0.1"
-                        :fill "white"
-                        :cursor (str dir-v dir-h "-resize")}
-                 :x (+ dx (- x (/ resize-handle-size 2)))
-                 :y (+ dy (- y (/ resize-handle-size 2)))
-                 :width resize-handle-size
-                 :height resize-handle-size
-                 :mousedown (fn [e]
-                              (reset! prevent-recomputation? true)
-                              (register-drag-handler
-                               (let [starting-bounds bounds]
-                                 (fn [[dx dy] final?]
-                                   (dosync
-                                    (swap! weather-params
-                                           update-in
-                                           [:wind-stability-areas index :bounds]
-                                           (fn [bounds]
-                                             (let [dx (long dx)
-                                                   dy (long dy)]
-                                               (or (restrict
-                                                    nx ny
-                                                    (cond-> bounds
-                                                      (= dir-h "w") (adjust-west starting-bounds dx)
-                                                      (= dir-h "e") (adjust-east starting-bounds dx)
-                                                      (= dir-v "n") (adjust-north starting-bounds dy)
-                                                      (= dir-v "s") (adjust-south starting-bounds dy)))
-                                                   bounds))))
-                                    (when final?
-                                      (reset! prevent-recomputation? false)))))))))))))))))
 
 (defn weather-overrides-overlay
   [weather-params register-drag-handler]
@@ -2781,7 +2665,6 @@
   [{:keys [display-params
            selected-cell
            weather-data
-           wind-stability-areas
            weather-overrides
            pressure-unit
            computing
@@ -2872,24 +2755,16 @@
                                      :y y
                                      :width 1
                                      :height 1))))
-        wind-stability-areas  (formula-of
-                                [weather-params]
-                                #_(and (:source weather-params) (:wind-stability-areas weather-params))
-                                (:wind-stability-areas weather-params))
         weather-overrides     (formula-of
                                 [weather-params]
                                 #_(and (:source weather-params) (:weather-overrides weather-params))
                                 (:weather-overrides weather-params))
         effective-hover-cell  (formula-of
-                                [hover-cell wind-stability-areas weather-overrides #_weather-params]
+                                [hover-cell weather-overrides #_weather-params]
                                 ;; Don't show the hover info when
                                 ;; we're in an area where something
                                 ;; can be dragged.
                                 (if (or #_(not (:source weather-params))
-                                        (some (fn [area]
-                                                (and (within-area? area hover-cell)
-                                                     (:editing? area)))
-                                              wind-stability-areas)
                                         (some (fn [override]
                                                 (and (within-override? override hover-cell)
                                                      (:editing? override)))
@@ -2914,7 +2789,6 @@
                            (dissoc :display-params
                                    :selected-cell
                                    :weather-data
-                                   :wind-stability-areas
                                    :weather-overrides)
                            (assoc :viewBox (formula-of [map-viewbox]
                                              (let [{:keys [x y width height]} map-viewbox]
@@ -2979,7 +2853,6 @@
                       wind-overlay
                       coverage-overlay
                       text-overlay
-                      (wind-stability-overlay weather-params register-drag-handler)
                       (weather-overrides-overlay weather-params register-drag-handler)
                       ;;(flight-paths-overlay [nx ny] display-params)
                       selected-cell-overlay
@@ -3306,14 +3179,10 @@
                                 [(span
                                   :css {:margin (px 0 7)}
                                   "at alt")
-                                 (comm/dropdown
+                                 (wind-alt-selector
                                   :css (formula-of [wind?]
                                          (when wind?
-                                           {:width (pct 40)}))
-                                  :value (path-lens display-params [:wind-alt])
-                                  :choices (for [alt (into [0] model/wind-alts)]
-                                             {:label (str alt " ft")
-                                              :value alt}))])))})]
+                                           {:width (pct 40)})))])))})]
          ["Pressure"
           [:pressure]
           (merge opts {:ui (comm/dropdown
@@ -3362,73 +3231,6 @@
      ["Weather speed"      [:direction :speed]   {:cell      movement-params
                                                   :help-base :movement-params}]])))
 
-(defn wind-stability-parameters
-  [_]
-  (control-section
-   :title (with-help [:wind-stability-areas] "Wind stability regions")
-   :id "wind-stability-params-section"
-   :toggle (cell= (= display-mode :edit))
-   (let [indexed-wind-stability-areas (->> weather-params
-                                           :wind-stability-areas
-                                           (map-indexed vector)
-                                           cell=)]
-     (div
-      :class "wind-stability-boxes"
-      (loop-tpl :bindings [[index area] indexed-wind-stability-areas]
-        (div
-         :class "wind-stability-params"
-         (table
-          (tbody
-           (tr (td "NW corner")
-               (td (edit-field weather-params [:wind-stability-areas @index :bounds :x]))
-               (td (edit-field weather-params [:wind-stability-areas @index :bounds :y])))
-           (tr (td "Width/height")
-               (td (edit-field weather-params [:wind-stability-areas @index :bounds :width]))
-               (td (edit-field weather-params [:wind-stability-areas @index :bounds :height])))
-           (tr (td "Wind spd/hdg")
-               (td (edit-field weather-params [:wind-stability-areas @index :wind :speed]))
-               (td (edit-field weather-params [:wind-stability-areas @index :wind :heading])))))
-         (buttons/image-button
-          :click #(swap! weather-params
-                         update-in
-                         [:wind-stability-areas @index :editing?]
-                         not)
-          :title "Edit"
-          :src "images/move.svg"
-          :width "16px"
-          :height "16px"
-          :latched? (cell= (:editing? area)))
-         (buttons/image-button
-          :css {:float "right"}
-          :src "images/trash.png"
-          :width "16px"
-          :title "Remove"
-          :click #(swap! weather-params
-                         update
-                         :wind-stability-areas
-                         (fn [areas]
-                           (remove-nth areas @index))))
-         (hr)))))
-   (buttons/a-button
-    :click #(swap! weather-params
-                   update
-                   :wind-stability-areas
-                   (fn [areas]
-                     (conj areas
-                           {:bounds {:x 0 :y 0 :width 10 :height 10}
-                            :wind {:heading 45
-                                   :speed 5}
-                            :index (count areas)
-                            :editing? true})))
-    "Add New")
-   (div
-    (input :type "checkbox"
-           ;; Inverted so we can be backward-compatible
-           :value (-> map-display :hide-wind-stability? not cell=)
-           :change #(swap! map-display update :hide-wind-stability? not))
-    (with-help [:map-controls :show-wind-stability?]
-      (label "Show wind stability regions?")))))
-
 (defn weather-override-parameters
   [_]
   (control-section
@@ -3436,34 +3238,34 @@
    :id "weather-override-params-section"
    :toggle (cell= (= display-mode :edit))
    (let [indexed-weather-overrides (formula-of
-                                    [weather-params]
-                                    (->> weather-params
-                                         :weather-overrides
-                                         (map-indexed vector)))]
+                                     [weather-params]
+                                     (->> weather-params
+                                          :weather-overrides
+                                          (map-indexed vector)))]
      (div
       :class "weather-override-boxes"
       (loop-tpl :bindings [[index override] indexed-weather-overrides]
-        (div
-         :class "weather-overrides"
-         (table
-          :id "weather-override-params"
-          (let [checkbox (fn checkbox
-                           ([l k {:keys [change row-attrs]}]
-                            (tr
-                             (or row-attrs [])
-                             (td
-                              :colspan 2
-                              (input :css {:width "25px"}
-                                     :type "checkbox"
-                                     :value (cell= (k override))
-                                     :change (or change
-                                                 (fn [_]
-                                                   (swap! weather-params
-                                                          update-in
-                                                          [:weather-overrides @index k]
-                                                          not))))
-                              (with-help [:weather-overrides k]
-                                (label l))))))]
+        (let [checkbox (fn checkbox
+                         ([l k {:keys [change row-attrs]}]
+                          (tr
+                           (or row-attrs [])
+                           (td
+                            :colspan 2
+                            (input :css {:width "25px"}
+                                   :type "checkbox"
+                                   :value (cell= (k override))
+                                   :change (or change
+                                               (fn [_]
+                                                 (swap! weather-params
+                                                        update-in
+                                                        [:weather-overrides @index k]
+                                                        not))))
+                            (with-help [:weather-overrides k]
+                              (label l))))))]
+          (div
+           :class "weather-overrides"
+           (table
+            :id "weather-override-params"
             (tbody
              (tr (td :class "override-label"
                      (with-help [:weather-overrides :center]
@@ -3481,63 +3283,199 @@
                        "Falloff"))
                  (td (edit-field weather-params [:weather-overrides @index :falloff])))
              (tr (td :class "override-label"
-                     (with-help [:weather-overrides :pressure]
-                       "Pressure"))
-                 (td (pressure-edit-field
-                      weather-params
-                      [:weather-overrides @index :pressure]
-                      pressure-unit)))
-             (tr (td :class "override-label"
                      (with-help [:weather-overrides :strength]
                        "Strength"))
-                 (td (edit-field weather-params [:weather-overrides @index :strength])))
-             (checkbox "Show outline?" :show-outline? {})
-             (checkbox "Fade in/out?" :animate?
-                       {:change (fn [_]
-                                  (dosync
-                                   (swap! weather-params
-                                          update-in
-                                          [:weather-overrides @index :animate?]
-                                          not)
-                                   (swap! weather-params
-                                          (fn [weather-params]
-                                            (if (get-in weather-params
-                                                        [:weather-overrides @index :animate?])
-                                              weather-params
-                                              (assoc-in weather-params
-                                                        [:weather-overrides @index :exclude-from-forecast?]
-                                                        false))))))})
-             (for [[label k] [["Begin" :begin]
-                              ["Peak" :peak]
-                              ["Taper" :taper]
-                              ["End" :end]]]
-               (tr :toggle (cell= (:animate? override))
-                   (td (with-help [:weather-overrides k]
-                         label))
-                   (td (time-entry :source weather-params
-                                   :path [:weather-overrides @index k]))))
-             (checkbox "Exclude from forecast?" :exclude-from-forecast?
-                       {:row-attrs {:toggle (cell= (:animate? override))}}))))
-         (buttons/image-button
-          :click #(swap! weather-params
-                         update-in
-                         [:weather-overrides @index :editing?]
-                         not)
-          :title "Edit"
-          :src "images/move.svg"
-          :width "16px"
-          :height "16px"
-          :latched? (cell= (:editing? override)))
-         (buttons/image-button
-          :css {:float "right"}
-          :src "images/trash.png"
-          :width "16px"
-          :title "Remove"
-          :click #(swap! weather-params
-                         update
-                         :weather-overrides
-                         (fn [overrides]
-                           (remove-nth overrides @index))))))))
+                 (td (edit-field weather-params [:weather-overrides @index :strength])))))
+
+           (let [override (fn [label k default ui]
+                            (let [prior (cell nil)
+                                  val   (path-lens weather-params [:weather-overrides @index k])
+                                  ui*   (ui val)]
+                              (tr
+                               (td
+                                (comm/checkbox :value (cell= (some? val))
+                                               :change (fn [v]
+                                                         (.debug js/console "change" label)
+                                                         (dosync
+                                                          (when-not v
+                                                            (reset! prior @val))
+                                                          (reset! val (if v (or @prior default) nil))))))
+                               (td
+                                (str "Override " label "?"))
+                               (td
+                                (when-tpl (cell= (some? val))
+                                  ui*)))))]
+             (fieldset
+              (legend "Weather Attributes")
+              (table
+               (tbody
+                (override "type"
+                          :type
+                          :inclement
+                          (fn [val]
+                            (comm/dropdown
+                             :value val
+                             :choices [{:label "Sunny"
+                                        :value :sunny}
+                                       {:label "Fair"
+                                        :value :fair}
+                                       {:label "Poor"
+                                        :value :poor}
+                                       {:label "Inclement"
+                                        :value :inclement}])))
+                (override "cloud cover"
+                          :cloud-cover
+                          :overcast
+                          (fn [val]
+                            (comm/dropdown
+                             :value val
+                             :choices [{:label "Few"
+                                        :value :few}
+                                       {:label "Scattered"
+                                        :value :scattered}
+                                       {:label "Broken"
+                                        :value :broken}
+                                       {:label "Overcast"
+                                        :value :overcast}]))))
+               (override "cloud base"
+                         :cloud-base
+                         5000
+                         (fn [val]
+                           (comm/validating-edit :source val
+                                                 :conform (comm/int-conformer 0 10000)
+                                                 :placeholder "altitude (ft)"
+                                                 :align "right"
+                                                 :width 55)))
+               (override "cloud size"
+                         :cloud-size
+                         1.0
+                         (fn [val]
+                           (comm/validating-edit :source val
+                                                 :fmt #(if % (.toFixed % 2) "")
+                                                 :conform (comm/float-conformer 0 5.0)
+                                                 :placeholder "0-5"
+                                                 :align "right"
+                                                 :width 55)))
+               (override "cloud towering"
+                         :towering?
+                         true
+                         (fn [val]
+                           (comm/dropdown
+                            :value val
+                            :choices [{:label "Towering"
+                                       :value true}
+                                      {:label "Not towering"
+                                       :value false}])))
+               (override "wind direction"
+                         :wind-dir
+                         90
+                         (fn [val]
+                           (comm/validating-edit :source val
+                                                 :conform (comm/int-conformer 0 359)
+                                                 :placeholder "90"
+                                                 :align "right"
+                                                 :width 45)))
+               (override "wind speed"
+                         :wind-speed
+                         5
+                         (fn [val]
+                           (comm/validating-edit :source val
+                                                 :conform (comm/int-conformer 0 200)
+                                                 :placeholder "20"
+                                                 :align "right"
+                                                 :width 45))))
+              (let [wind? (formula-of [weather-params]
+                            (let [{:keys [wind-dir wind-speed]}
+                                  (get-in weather-params [:weather-overrides @index])]
+                              (or wind-dir wind-speed)))
+                    alts (cell :all)]
+                (when-tpl wind?
+                  (div
+                   (div
+                    (span :css {:margin-right (px 7)} "Override winds at")
+                    (comm/dropdown :value alts
+                                       :change (fn [v]
+                                                 (swap! weather-params
+                                                        assoc-in
+                                                        [:weather-overrides @index :wind-alts]
+                                                        (if (= v :all)
+                                                          model/wind-alts
+                                                          [])))
+                                       :choices [{:label  "All Altitudes"
+                                                  :value :all}
+                                                 {:label "Selected Altitudes"
+                                                  :value :some}]))
+                   (when-tpl (cell= (not= alts :all))
+                     (table
+                      (tbody
+                       (for [alt model/wind-alts]
+                         (tr (td (let [checked? (formula-of [weather-params]
+                                                  (->> (get-in weather-params [:weather-overrides @index :wind-alts])
+                                                       (some #{alt})))]
+                                   (comm/checkbox :value checked?
+                                                  :change (fn [v]
+                                                            (swap! weather-params
+                                                                   update-in
+                                                                   [:weather-overrides @index :wind-alts]
+                                                                   (fn [alts]
+                                                                     (if v
+                                                                       (conj alts alt)
+                                                                       (->> alts
+                                                                            (remove #{alt})
+                                                                            (into [])))))))))
+                             (td (str alt "ft"))))))))))))
+
+
+           (checkbox "Show outline?" :show-outline? {})
+           (checkbox "Fade in/out?" :animate?
+                     {:change (fn [_]
+                                (dosync
+                                 (swap! weather-params
+                                        update-in
+                                        [:weather-overrides @index :animate?]
+                                        not)
+                                 (swap! weather-params
+                                        (fn [weather-params]
+                                          (if (get-in weather-params
+                                                      [:weather-overrides @index :animate?])
+                                            weather-params
+                                            (assoc-in weather-params
+                                                      [:weather-overrides @index :exclude-from-forecast?]
+                                                      false))))))})
+           (for [[label k] [["Begin" :begin]
+                            ["Peak" :peak]
+                            ["Taper" :taper]
+                            ["End" :end]]]
+             (tr :toggle (cell= (:animate? override))
+                 (td (with-help [:weather-overrides k]
+                       label))
+                 (td (time-entry :source weather-params
+                                 :path [:weather-overrides @index k]))))
+           (checkbox "Exclude from forecast?" :exclude-from-forecast?
+                     {:row-attrs {:toggle (cell= (:animate? override))}})
+           #_(pre-cell "data"
+                     (formula-of [weather-params]
+                       (get-in weather-params [:weather-overrides @index])))
+           (buttons/image-button
+            :click #(swap! weather-params
+                           update-in
+                           [:weather-overrides @index :editing?]
+                           not)
+            :title "Edit"
+            :src "images/move.svg"
+            :width "16px"
+            :height "16px"
+            :latched? (cell= (:editing? override)))
+           (buttons/image-button
+            :css {:float "right"}
+            :src "images/trash.png"
+            :width "16px"
+            :title "Remove"
+            :click #(swap! weather-params
+                           update
+                           :weather-overrides
+                           (fn [overrides]
+                             (remove-nth overrides @index)))))))))
    (buttons/a-button
     :click #(swap! weather-params
                    (fn [wp]
@@ -3545,42 +3483,42 @@
                              :weather-overrides
                              (fn [overrides]
                                (conj overrides
-                                     {:location {:x 30
-                                                 :y 30}
-                                      :radius 8
-                                      :falloff 2
-                                      :begin (-> wp :time :current)
-                                      :peak (-> wp :time :current (time/add-minutes 60))
-                                      :taper (-> wp :time :current (time/add-minutes 180))
-                                      :end (-> wp :time :current (time/add-minutes 240))
-                                      :pressure (-> wp :pressure :min)
-                                      :strength 1
-                                      :show-outline? true
-                                      :editing? true
-                                      :exclude-from-forecast? false})))))
+                                     {:location               {:x 30
+                                                               :y 30}
+                                      :radius                 8
+                                      :falloff                2
+                                      :begin                  (-> wp :time :current)
+                                      :peak                   (-> wp :time :current (time/add-minutes 60))
+                                      :taper                  (-> wp :time :current (time/add-minutes 180))
+                                      :end                    (-> wp :time :current (time/add-minutes 240))
+                                      :strength               1
+                                      :show-outline?          true
+                                      :editing?               true
+                                      :exclude-from-forecast? false
+                                      ;; Attributes
+                                      :type                   :inclement
+                                      :cloud-cover            nil
+                                      :cloud-base             nil
+                                      :cloud-size             nil
+                                      :towering?              nil
+                                      :wind-dir               nil
+                                      :wind-speed             nil
+                                      :wind-alts              model/wind-alts
+                                      })))))
     "Add New")))
 
 (defn weather-type-configuration
   [_]
   (control-section
-   :title "Weather type configuration"
+   :title (with-help [:weather-type-config :category]
+            "Weather type configuration")
    :id "weather-type-configuration-section"
    :toggle (cell= (= display-mode :edit))
    (table
     :id "category-params"
     (thead
-     (tr (td "")
-         (td :colspan 2 (with-help [:weather-type-config :category]
-                          "Relative Amount"))
-         (td :colspan 3 (with-help [:weather-type-config :wind]
-                          "Wind"))
-         (td :colspan 3 (with-help [:weather-type-config :temp]
-                          "Temperature")))
-     (tr (map #(apply td %)
-              [[""]
-               ["<- Less More ->"] [""]
-               ["Min"] ["Mean"] ["Max"]
-               ["Min"] ["Mean"] ["Max"]])))
+     (tr (td "<- Less More ->")
+         (td)))
     (tbody
      (for [category [:sunny :fair :poor :inclement]]
        (tr (td
@@ -3633,19 +3571,14 @@
              ;; :css {:white-space "nobreak"
              ;;       :display "inline-block"}
              [(td
-               (comm/slider :int? true :min 1 :max 100 :ticks 3 :value value :css {:width 80
+               (comm/slider :int? true :min 1 :max 100 :ticks 3 :value value :css {:width 120
                                                                                    :vertical-align "middle"}))
               (td
                (comm/validating-edit
                 :width 38
                 :css {:display "inline-block"}
                 :conform (comm/int-conformer 1 100)
-                :source value))])
-           (for [param [:wind :temp]
-                 metric [:min :mean :max]]
-             (td :class (str (name param) " " (name metric))
-                 (div :class "edit-field"
-                      (edit-field weather-params [:categories category param metric]))))))))))
+                :source value))])))))))
 
 (defmulti cloud-param-conformer
   (fn [params column category] column))
@@ -3656,7 +3589,7 @@
 
 (defmethod cloud-param-conformer :visibility
   [params column category]
-  (comm/float-conformer 0 30))
+  (comm/float-conformer 0 60))
 
 (defmethod cloud-param-conformer :stratus-base
   [params column category]
@@ -3926,7 +3859,7 @@
                               :else str)
                        :conform (cond
                                   (= a :visibility)
-                                  (comm/float-conformer 0.1 30)
+                                  (comm/float-conformer 0.1 60)
 
                                   (= :size b)
                                   (comm/float-conformer 0 5.0)
@@ -3944,7 +3877,7 @@
                                   :else
                                   (comm/int-conformer 0 60000))
                        :placeholder (cond
-                                      (= a :visibility) "0.1-30"
+                                      (= a :visibility) "0.1-60"
                                       (= b :coverage)   "0-9"
                                       (= b :size)       "0-5"
                                       :else             "altitude (ft)")
@@ -4018,7 +3951,7 @@
                             :else             str)
                      :conform (cond
                                 (= a :visibility)
-                                (comm/float-conformer 0.1 30)
+                                (comm/float-conformer 0.1 60)
 
                                 :else
                                 (comm/int-conformer 0 60000))
@@ -4309,7 +4242,7 @@
                   {:label     "Generated Weather"
                    :value     :generated
                    :disabled? true}]))
-     (pre-cell "fmap-load-state" fmap-load-state))))
+     #_(pre-cell "fmap-load-state" fmap-load-state))))
 
 (defn serialization-controls
   [_]
@@ -5221,14 +5154,7 @@
                :value (-> map-display :show-bullseye? cell=)
                :change #(swap! map-display update :show-bullseye? not))
         (with-help [:map-controls :show-bullseye?]
-          (label "Show bullseye")))
-       (div
-        (input :type "checkbox"
-               ;; Inverted so we can be backward-compatible
-               :value (-> map-display :hide-wind-stability? not cell=)
-               :change #(swap! map-display update :hide-wind-stability? not))
-        (with-help [:map-controls :show-wind-stability?]
-          (label "Show wind stability regions?"))))))
+          (label "Show bullseye"))))))
    (airbase-display-controls "Airbase Display Options")
    (let [flight-path-display-controls (:map-display-controls-fn flight-paths-layer)]
      (flight-path-display-controls "Flight Path Display Options"))))
@@ -5738,7 +5664,6 @@
    :forecast-section            forecast-section
    :weather-type-configuration  weather-type-configuration
    :atmosphere-controls         atmosphere-controls
-   :wind-stability-parameters   wind-stability-parameters
    :weather-override-parameters weather-override-parameters
    :advanced-controls           advanced-controls
    ;; :flight-path-controls flight-path-controls
@@ -5829,7 +5754,6 @@
          (grid :display-params display-params
                :weather-data weather-data
                :selected-cell selected-cell
-               :wind-stability-areas wind-stability-areas
                :weather-overrides weather-overrides
                :computing computing
                :pressure-unit pressure-unit

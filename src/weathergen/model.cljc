@@ -172,40 +172,7 @@
        (<= x x*) (< x* (+ x width))
        (<= y y*) (< y* (+ y height))))
 
-(def wind-alts [3000 6000 9000 12000 18000 24000 30000 40000 50000])
-
-(defn stabilize-wind
-  "Returns the wind, stabilized if appropriate by a wind stability region"
-  [{:keys [wind-stability-areas x y winds-aloft prevailing-wind]}
-   wind-adj-var
-   pattern-wind]
-  (let [ground-wind (as-> wind-stability-areas ?
-                        (filter #(in-area? (:bounds %) x y) ?)
-                      (first ?)
-                      (:wind ?)
-                      (or ? pattern-wind))]
-    (reduce (fn [m alt]
-              (assoc m
-                     alt
-                     {:speed   (+ (:speed pattern-wind)
-                                  (math/interpolate (get-in winds-aloft [alt :speed :from])
-                                                    (get-in winds-aloft [alt :speed :to])
-                                                    wind-adj-var))
-                      :heading (-> (math/interpolate (:heading pattern-wind)
-                                                     (:heading prevailing-wind)
-                                                     (get-in winds-aloft [alt :bias]))
-                                   (mod 360))}))
-            {0 ground-wind}
-            wind-alts)))
-
-(defn temperature
-  [categories mixture v]
-  (let [mean (mix-on categories mixture [:temp :mean])
-        min  (mix-on categories mixture [:temp :min])
-        max  (mix-on categories mixture [:temp :max])]
-    (math/distribute v min mean max 1)))
-
-(defn time-weight
+(defn- time-weight
   "Given a weather override and a time, determine how much of the
   override we should blend in based on the time."
   [override current-time]
@@ -223,14 +190,120 @@
       (< bm t) (-> t (- bm) (/ (- pm bm)))
       :else 0)))
 
+(defn- override-weight
+  "Computes the weight a particular override contributes considering the
+  time and location and other factors."
+  [params override]
+  (let [{:keys [x y t weather-overrides time]} params
+        {:keys [location
+                radius
+                falloff
+                strength
+                animate?]} override
+        locx (:x location)
+        locy (:y location)
+        dx (- locx x)
+        dy (- locy y)
+        d2 (+ (* dx dx) (* dy dy))
+        r2 (* radius radius)
+        fr falloff
+        f2 (* fr fr)
+        position-weight (cond
+                          (< d2 f2) 1
+                          (< d2 r2) (- 1
+                                       (-> d2
+                                           Math/sqrt
+                                           (- fr)
+                                           (/ (- radius falloff))))
+                          :else 0)
+        tw (time-weight override (:current time))]
+    (* position-weight tw strength)))
+
+(def wind-alts [0 3000 6000 9000 12000 18000 24000 30000 40000 50000])
+
+(defn wind
+  "Returns the wind, stabilized if appropriate by a wind stability region"
+  [{x               :x
+    y               :y
+    winds-aloft     :winds-aloft
+    prevailing-wind :prevailing-wind
+    overrides       :weather-overrides
+    :as             params}
+   wind-adj-var
+   ground-wind]
+  (let [base-winds (reduce (fn [m alt]
+                             (assoc m
+                                    alt
+                                    {:speed   (+ (:speed ground-wind)
+                                                 (math/interpolate (get-in winds-aloft [alt :speed :from])
+                                                                   (get-in winds-aloft [alt :speed :to])
+                                                                   wind-adj-var))
+                                     :heading (-> (math/interpolate (:heading ground-wind)
+                                                                    (:heading prevailing-wind)
+                                                                    (get-in winds-aloft [alt :bias]))
+                                                  (mod 360))}))
+                           {0 ground-wind}
+                           (drop 1 wind-alts))]
+    (reduce (fn [winds override]
+              (let [alts           (:wind-alts override)
+                    override-dir   (get override :wind-dir)
+                    override-speed (get override :wind-speed)
+                    weight         (override-weight params override)]
+                (reduce (fn [winds alt]
+                          (cond-> winds
+                            (some? override-dir)
+                            (update-in [alt :heading]
+                                       (fn [heading]
+                                         (-> heading
+                                             (* (- 1 weight))
+                                             (+ (* weight override-dir))
+                                             (mod 360)
+                                             (math/nearest 1))))
+
+                            (some? override-speed)
+                            (update-in [alt :speed]
+                                       (fn [speed]
+                                         (-> speed
+                                             (* (- 1 weight))
+                                             (+ (* weight override-speed)))))))
+                        winds
+                        alts)))
+            base-winds
+            overrides)))
+
+(defn temperature
+  [categories mixture v]
+  (let [mean (mix-on categories mixture [:temp :mean])
+        min  (mix-on categories mixture [:temp :min])
+        max  (mix-on categories mixture [:temp :max])]
+    (math/distribute v min mean max 1)))
+
+(defn- override-pressure
+  "Computes the pressure we should use to override the weather type given the weather type"
+  [params override]
+  (let [i            (get-in params [:categories :inclement :weight])
+        p            (get-in params [:categories :poor :weight])
+        f            (get-in params [:categories :fair :weight])
+        s            (get-in params [:categories :sunny :weight])
+        total-weight (+ i p f s)
+        i*           (/ i total-weight)
+        p*           (/ (+ i p) total-weight)]
+    (case (:type override)
+      :sunny     1
+      :inclement 0
+      :poor      (-> p (/ 2) (+ i) (/ total-weight))
+      :fair      (-> f (/ 2) (+ i p) (/ total-weight)))))
+
 (defn override
   "Adjusts pressure value based on weather overrides, if any."
   [params v]
   (let [{:keys [x y t weather-overrides time]} params
-        min-pressure (-> params :pressure :min)
-        max-pressure (-> params :pressure :max)
-        pressure-span (- max-pressure min-pressure)]
+        ;; min-pressure (-> params :pressure :min)
+        ;; max-pressure (-> params :pressure :max)
+        ;; pressure-span (- max-pressure min-pressure)
+        ]
     (->> weather-overrides
+         (filter :type)
          (reduce (fn [v override]
                    (let [{:keys [location
                                  radius
@@ -255,41 +328,75 @@
                                            :else 0)
                          tw (time-weight override (:current time))
                          w (* position-weight tw strength)
-                         v* (-> override
-                                :pressure
-                                (- min-pressure)
-                                (/ pressure-span))]
+                         v* (override-pressure params override)]
                      (+ (* v* w) (* v (- 1 w)))))
                  v)
          (math/clamp 0.0 1.0))))
 
+(defn- override-param
+  [params attr attr-val v override]
+  (let [override-val (get override attr)]
+    (if (nil? override-val)
+      v
+      (let [w  (override-weight params override)
+            v* (attr-val override-val)]
+        (+ (* v* w) (* v (- 1 w)))))))
+
 (def cloud-coverages [:none :few :scattered :broken :overcast])
 
-(let [coverage-vals (zipmap cloud-coverages (range))
-      inverse (zipmap (vals coverage-vals)
-                      (keys coverage-vals))]
- (defn- cloud-coverage
-   [{type       :type
-     categories :categories
-     :as        params}
-    v]
-   (if (= type :sunny)
-     :none
-     (let [{:keys [from to]} (get-in categories [type :low-clouds :coverage])
-           from-val (- (coverage-vals from) 0.49999)
-           to-val (+ (coverage-vals to) 0.49999)]
-       (-> (math/interpolate from-val to-val v)
-           (math/nearest 1)
-           long
-           inverse)))))
+(let [coverage-vals (zipmap cloud-coverages [0 0.25 0.5 0.75 1])
+      inverse       (zipmap (vals coverage-vals)
+                            (keys coverage-vals))]
+  (defn- cloud-coverage
+    [{type       :type
+      categories :categories
+      overrides  :weather-overrides
+      :as        params}
+     v]
+    (if (= type :sunny)
+      :none
+      (let [{:keys [from to]} (get-in categories [type :low-clouds :coverage])
+            from-val          (- (coverage-vals from) 0.12)
+            to-val            (+ (coverage-vals to) 0.12)
+            result            (math/interpolate from-val to-val v)
+            v*                (->> overrides
+                                   (reduce #(override-param params :cloud-cover coverage-vals %1 %2) result)
+                                   (math/clamp (case type
+                                                 :sunny     0
+                                                 :fair      0.25
+                                                 :poor      0.5
+                                                 :inclement 0.5)
+                                               (case  type
+                                                 :sunny     0
+                                                 :fair      0.75
+                                                 :poor      1
+                                                 :inclement 1)))
+            final             (inverse (math/nearest v* 0.25))]
+        #?(:cljs
+           (when-not final
+             (.debug js/console "coverage error" v* final)))
+        final))))
 
 (defn- cloud-towering?
   [{type       :type
     categories :categories
+    overrides  :weather-overrides
     :as        params}
    v]
-  (when-not (= type :sunny)
-    (< v (get-in categories [type :low-clouds :towering]))))
+  (if (= type :sunny)
+    false
+    (let [threshold (get-in categories [type :low-clouds :towering])
+          v*        (reduce (fn [v override]
+                              (override-param params
+                                              :towering?
+                                              #(if %
+                                                 (/ threshold 2)
+                                                 (/ (+ 1 threshold) 2))
+                                              v
+                                              override))
+                            v
+                            overrides)]
+      (< v* threshold))))
 
 (defn- linear-param
   [{:keys [from to]} v]
@@ -306,12 +413,30 @@
     (linear-param (get-in categories [type :low-clouds param]) v)))
 
 (defn- cloud-size
-  [params v]
-  (cloud-param params :size v))
+  [{overrides :weather-overrides
+    type      :type
+    :as       params}
+   v]
+  (if (= type :sunny)
+    0
+    (->> overrides
+         (reduce (fn [v override]
+                   (override-param params :cloud-size identity v override))
+                 (cloud-param params :size v)))))
 
 (defn- cloud-base
-  [params v]
-  (math/nearest (cloud-param params :base v) 100))
+  [{overrides :weather-overrides
+    type      :type
+    :as       params}
+   v]
+  (if (= type :sunny)
+    0
+    (math/nearest
+     (->> overrides
+          (reduce (fn [v override]
+                    (override-param params :cloud-base identity v override))
+                  (cloud-param params :base v)))
+     100)))
 
 (defn- visibility
   [{type       :type
@@ -400,10 +525,10 @@
      :type         weather-type
      :temperature  (temperature categories mixture temp-var)
      ;;:info        info
-     :wind         (stabilize-wind params*
-                                   wind-adj-var
-                                   {:heading (math/heading wind-dir)
-                                    :speed   (wind-speed categories mixture wind-var)})
+     :wind         (wind params*
+                         wind-adj-var
+                         {:heading (math/heading wind-dir)
+                          :speed   (wind-speed categories mixture wind-var)})
      :low-clouds   {:coverage  (cloud-coverage params** coverage-var)
                     :towering? (cloud-towering? params** towering-var)
                     :base (cloud-base params** base-var)
@@ -543,7 +668,11 @@
                         (+ min-pressure
                            (* relative pressure-span)))
         cumulative    (->> types
-                           (map #(get-in params [:weather-params :categories % :weight]))
+                           (map (fn [type]
+                                  (let [weight (get-in params [:weather-params :categories type :weight])]
+                                    (if (= type :sunny)
+                                      (* weight weight)
+                                      weight))))
                            (reductions +))
         total         (last cumulative)
         thresholds    (zipmap types
@@ -551,7 +680,7 @@
                                         (/ total)
                                         (* pressure-span)
                                         (+ min-pressure)
-                                        (math/nearest 0.01))
+                                        #_(math/nearest 0.01))
                                    cumulative))]
     (reduce (fn [params type]
               (assoc-in params
@@ -589,7 +718,6 @@
                   :crossfade       0.1
                   :wind-uniformity 0.7
                   :temp-uniformity 0.7
-                  :wind-stability-areas [[0 0 1 1]]
                   :categories      {:sunny     {:wind   {:min  0
                                                          :mean 10
                                                          :max  20}
@@ -651,7 +779,6 @@
               :crossfade       0.1
               :wind-uniformity 0.7
               :temp-uniformity 0.7
-              :wind-stability-areas [[0 0 1 1]]
               :categories      {:sunny     {:wind   {:min  0
                                                      :mean 10
                                                      :max  20}

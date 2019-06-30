@@ -42,10 +42,6 @@ body {
     margin-right: 10px;
 }
 
-#wind-stability-params input {
-    width: 30px;
-}
-
 svg {
     display: inline-block;
 }

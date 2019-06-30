@@ -45,12 +45,6 @@
                  [:time :max]
                  (-> wp :time :current))
                 (update
-                 :wind-stability-areas
-                 (fn [areas]
-                   (map (fn [area]
-                          (dissoc area :editing?))
-                        areas)))
-                (update
                  :weather-overrides
                  (fn [overrides]
                    (map (fn [override]

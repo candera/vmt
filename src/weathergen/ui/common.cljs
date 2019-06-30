@@ -1161,7 +1161,7 @@
   ;; TODO: Let choices be a cell if we ever need that.
   ;; TODO: Maybe choices should be a map from values to labels, since
   ;; values have to be unique
-  (with-attr-bindings attrs [value choices]
+  (with-attr-bindings attrs [value choices change]
     (let [indexed  (map-indexed (fn [i c] [(str i) (assoc c ::index (str i))])
                                 choices)
           by-index (into {} indexed)]
@@ -1175,7 +1175,9 @@
                               first
                               ::index))
                 :change (fn [v]
-                          (reset! value (-> @v by-index :value))))
+                          (let [n (-> @v by-index :value)]
+                            (when change (change n))
+                            (reset! value n))))
          (for [[index choice] indexed]
            (option
             :value index
@@ -1293,7 +1295,7 @@
   (with-attr-bindings attrs [change value]
     (let [change* (or change #(swap! value not))
           change** (fn [e]
-                     (change* e)
+                     (change* (-> e .-currentTarget .-checked))
                      (.preventDefault e)
                      false)]
       (input (assoc attrs
@@ -1326,6 +1328,8 @@
   :align: Specifies text alignment of the input box"
   [attrs _]
   (with-attr-bindings attrs [conform fmt source update width placeholder css align]
+    (assert source "source is required")
+    (assert conform "conform is required")
     (let [interim  (cell nil)
           fmt      (or fmt str)
           value    (formula-of

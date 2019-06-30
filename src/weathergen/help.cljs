@@ -125,16 +125,6 @@
     :database-export
     (content-para "Exports the mission database to a series of CSV files. Use the dialog box to select a directory. Files will be written here with names in the pattern \"THEATER-MISSION-CATEGORY.csv\".")}
 
-   :wind-stability-areas
-   (content
-    [:p "Wind stability areas define regions of the map where the wind
-   will not be affected by the weather. Although cloud cover,
-   temperature, and pressure will change, within the bounds of a wind
-   stability region the wind speed and direction will remain
-   constant. Use this to stabilize winds in an area to support tanker
-   and carrier operations, or to provide fixed, known winds at landing
-   or target sites."])
-
    :serialization-controls
    {:save-single-files
     (content
@@ -440,7 +430,7 @@ forward and backward in time. ")
      from, not the direction it is blowing towards.")
     :visibility
     (content-para
-     "The forecast visibility (in nm) at the selected location.")
+     "The forecast visibility (in km) at the selected location.")
     :precipitation
     (content-para
      "The forecast precipitation at the selected location.")
@@ -958,11 +948,6 @@ forward and backward in time. ")
      "When checked, the bullseye \"spiderweb\" will be shown on
       the map, with range rings every 30nm up to 180nm and bearing
       lines every 30 degrees.")
-
-    :show-wind-stability?
-    (content-para
-     "When checked, the outline of any wind stability regions
-      will be shown as a white and black dashed line.")
 
     :reset-brightness
     (content-para

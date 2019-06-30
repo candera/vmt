@@ -4108,8 +4108,11 @@ java.nio.file.File
      rand-nth
      fs/file-buf
      vmt.fmap/decode
-     :vmt.fmap/cloud-coverage
-     frequencies)
+     :vmt.fmap/cloud-size
+     (map #(math/nearest % 0.1))
+     frequencies
+     (into (sorted-map))
+     pprint)
 
 (->> (-> weather-params
          (assoc :x 10 :y 33)
@@ -4196,3 +4199,41 @@ java.nio.file.File
  (:categories weather-params)
  {:sunny 0 :fair 1 :poor 0 :inclement 0}
  [:fair :visibility :from])
+
+
+(->> (-> weather-params
+         (assoc :x (rand-int 1000) :y (rand-int 1000))
+         model/forecast)
+     (into (sorted-map))
+     inspect
+     )
+
+(->> (-> weather-params
+         (assoc :x 10 :y 10)
+         (assoc :weather-overrides
+                [{:location               {:x 10
+                                           :y 10}
+                  :radius                 20
+                  :falloff                2
+                  :begin                  (-> weather-params :time :current)
+                  :peak                   (-> weather-params :time :current (time/add-minutes 60))
+                  :taper                  (-> weather-params :time :current (time/add-minutes 180))
+                  :end                    (-> weather-params :time :current (time/add-minutes 240))
+                  :strength               1
+                  :show-outline?          true
+                  :editing?               true
+                  :exclude-from-forecast? false
+                  ;; Attributes
+                  :type                   :inclement
+                  :cloud-cover            nil
+                  :cloud-base             nil
+                  :cloud-size             nil
+                  :towering?              nil
+                  :wind-dir               90
+                  :wind-speed             nil
+                  :wind-alts              model/wind-alts
+                  }])
+         model/weather)
+     (into (sorted-map))
+     inspect
+     )

@@ -152,7 +152,7 @@
                    :label "B"}]
        disabled? (cell false)]
    (b
-    (ui/atmosphere-controls {})
+    (ui/weather-override-parameters {})
     (comm/pre-cell "weather-params" ui/weather-params)
     (buttons/a-button
      :click (fn [_]
@@ -209,7 +209,6 @@
                                                  :step         15}})
            weather-data (cell nil)
            selected-cell (cell nil)
-           wind-stability-areas (cell nil)
            computing (cell nil)
            pressure-unit (cell :inhg)
            weather-params (cell weathergen.ui/default-weather-params)]
@@ -217,7 +216,6 @@
        :display-params display-params
        :weather-data weather-data
        :selected-cell selected-cell
-       :wind-stability-areas wind-stability-areas
        :weather-overrides [] #_weather-overrides
        :computing computing
        :pressure-unit pressure-unit

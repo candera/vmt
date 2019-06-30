@@ -330,14 +330,6 @@
    :crossfade            0.1
    :prevailing-wind      {:heading 325}
    :seed                 1234
-   :wind-stability-areas [#_{:bounds   {:x      16
-                                        :y      39
-                                        :width  6
-                                        :height 4}
-                             :wind     {:speed   5
-                                        :heading 0}
-                             :index    0
-                             :editing? false}]
    :weather-overrides    [#_{:location               {:x 22
                                                       :y 45}
                              :radius                 10
@@ -414,5 +406,4 @@
    :crossfade            0.1
    :prevailing-wind      {:heading 325}
    :seed                 1234
-   :wind-stability-areas []
    :weather-overrides    []})
