@@ -156,6 +156,16 @@
   (mkdir (parent path) true)
   (.writeFileSync fs-lib path data))
 
+(defn save-data-async
+  [path data]
+  (mkdir (parent path) true)
+  (.writeFile fs-lib
+              path
+              data
+              (fn [err]
+                (when err
+                  (.error js/console "save-data-async error" path err)))))
+
 (defn stat
   "Returns stats for file as map with keys `:size` and `:modified`."
   [path]

@@ -1079,7 +1079,7 @@
   (str (mission-name-base mission-name) ".twx"))
 
 (defn save-fmap
-  [weather-params weather-data]
+  [weather-params movement-params cloud-params weather-data]
   (let [t                 (get-in weather-params [:time :current])
         [x-cells y-cells] (:cell-count weather-params)
         ;; Since processing is async, it's possible the weather data
@@ -1091,9 +1091,12 @@
                                                        :cells (for [x (range x-cells)
                                                                     y (range y-cells)]
                                                                 [x y]))))
-        blob              (fmap/get-blob data
-                                         x-cells
-                                         y-cells)]
+        blob              (fmap2/encode data
+                                        weather-params
+                                        movement-params
+                                        cloud-params
+                                        x-cells
+                                        y-cells)]
     (comm/save-data
      {:data     (safari-safe-binary blob)
       :title    "Save FMAP"
@@ -1364,7 +1367,7 @@
                (recur)))}))
 
 (defn save-weather-files
-  [{:keys [weather-params cloud-params weather-direction mission-name
+  [{:keys [weather-params cloud-params movement-params weather-direction mission-name
            nx ny from to step save-file progress cancel campaign-dir]}]
   (let [cells (for [x (range nx)
                     y (range ny)]
@@ -1378,7 +1381,11 @@
                     (comm/save-blob-async blob
                                           (fs/path-combine
                                            campaign-dir
-                                           path)))]
+                                           path)))
+        save-buffer (fn [buf path]
+                      (reset! save-file path)
+                      (fs/save-data-async (fs/path-combine campaign-dir path)
+                                          buf))]
     (go-loop [t start
               first-done? false]
       (let [p (-> t (- start) (/ (- end start)) (min 1))]
@@ -1398,14 +1405,14 @@
                                   (time/minutes->campaign-time t))
                         (assoc :cells cells)))
           (let [data (async/<! (:output-ch weather-worker))
-                blob (fmap/get-blob data nx ny)]
+                buf (fmap2/encode data weather-params movement-params cloud-params nx ny)]
             (when-not first-done?
-              (save-blob blob
-                         (str (mission-name-base mission-name) ".fmap")))
-            (save-blob blob
-                       (fs/path-combine
-                        "WeatherMapsUpdates"
-                        (fmap-filename (time/minutes->campaign-time t)))))
+              (save-buffer buf
+                           (str (mission-name-base mission-name) ".fmap")))
+            (save-buffer buf
+                         (fs/path-combine
+                          "WeatherMapsUpdates"
+                          (fmap-filename (time/minutes->campaign-time t)))))
           (if @cancel
             (reset! progress nil)
             (recur (+ t step) true)))))))
@@ -3517,8 +3524,8 @@
    (table
     :id "category-params"
     (thead
-     (tr (td "<- Less More ->")
-         (td)))
+     (tr (td)
+         (td "<- Less More ->")))
     (tbody
      (for [category [:sunny :fair :poor :inclement]]
        (tr (td
@@ -4284,7 +4291,7 @@
        (div
         :class "button-container"
         (buttons/a-button
-         :click #(save-fmap @weather-params @weather-data)
+         :click #(save-fmap @weather-params @movement-params @cloud-params @weather-data)
          "Save Current as FMAP"))
        (div
         :class "button-container"
@@ -4376,6 +4383,7 @@
                           (reset! save-file nil)
                           (save-weather-files {:weather-params    @weather-params
                                                :cloud-params      @cloud-params
+                                               :movement-params   @movement-params
                                                :weather-direction (:direction @movement-params)
                                                :campaign-dir      (mission/campaign-dir @mission)
                                                :mission-name      (:mission-name @mission)

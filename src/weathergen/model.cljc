@@ -344,7 +344,7 @@
 
 (def cloud-coverages [:none :few :scattered :broken :overcast])
 
-(let [coverage-vals (zipmap cloud-coverages [0 0.25 0.5 0.75 1])
+(let [coverage-vals (zipmap cloud-coverages [0.0 0.25 0.5 0.75 1.0])
       inverse       (zipmap (vals coverage-vals)
                             (keys coverage-vals))]
   (defn- cloud-coverage
@@ -362,19 +362,22 @@
             v*                (->> overrides
                                    (reduce #(override-param params :cloud-cover coverage-vals %1 %2) result)
                                    (math/clamp (case type
-                                                 :sunny     0
+                                                 :sunny     0.0
                                                  :fair      0.25
                                                  :poor      0.5
                                                  :inclement 0.5)
                                                (case  type
-                                                 :sunny     0
+                                                 :sunny     0.0
                                                  :fair      0.75
-                                                 :poor      1
-                                                 :inclement 1)))
+                                                 :poor      1.0
+                                                 :inclement 1.0)))
             final             (inverse (math/nearest v* 0.25))]
         #?(:cljs
            (when-not final
-             (.debug js/console "coverage error" v* final)))
+             (.debug js/console "coverage error" v* final))
+           :clj
+           (when-not final
+             (println "coverage error" v* final)))
         final))))
 
 (defn- cloud-towering?

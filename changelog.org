@@ -4,6 +4,17 @@
 #+TITLE:
 
 * Change Log
+** v058-16 [2019-07-01 Mon]
+
+BETA Release!
+
+- Weather should be working now.
+- Implement new and improved weather override regions: override wind,
+  weather type, temperature, and/or clouds.
+- Remove wind stability regions, as these are subsumed by improved
+  overrides.
+- Known bug: occasionally weather parameters do not update the model.
+
 ** v058-10 [2019-06-08 Sat]
 
 ALPHA Release! Weather generation does not work yet! Everything else

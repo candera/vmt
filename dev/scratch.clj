@@ -4093,6 +4093,8 @@ java.nio.file.File
 (let [buf (fs/file-buf "/Users/candera/falcon/4.34/Data/Campaign/WeatherMapsUpdates/100000.Fmap")]
   (def f (vmt.fmap/decode buf)))
 
+(inspect f5)
+
 (pprint (keys f))
 
 (rebl)
@@ -4237,3 +4239,43 @@ java.nio.file.File
      (into (sorted-map))
      inspect
      )
+
+(require '[vmt.fmap :as fmap2])
+
+(inspect (model/weather-grid (assoc weather-params
+                                      :cells (for [x (range 59)
+                                                   y (range 59)]
+                                               [x y]))))
+
+(rebl)
+
+(do
+  (require '[vmt.fmap :as fmap2])
+  (let [convert @#'fmap2/convert
+        fos     (java.io.FileOutputStream. "/tmp/buf.bin")
+        ch      (.getChannel fos)
+        buf     (-> (model/weather-grid (assoc weather-params
+                                               :cells (for [x (range 59)
+                                                            y (range 59)]
+                                                        [x y])))
+                    #_(convert 4 4)
+                    (fmap2/encode weather-params
+                                  {:step      60
+                                   :direction {:heading 135 :speed 20}
+                                   :looping?  false}
+                                  {:stratus-z-fair      43300
+                                   :stratus-z-inclement 33000
+                                   :contrails           {:sunny     34000
+                                                         :fair      28000
+                                                         :poor      25000
+                                                         :inclement 20000}}
+                                  59
+                                  59)
+                    #_(.position 0)
+                    #_fmap2/decode
+                    #_inspect)]
+    (-> buf
+        fmap2/decode
+        inspect)
+    #_(.write ch buf)
+    #_(.close ch)))
