@@ -4,6 +4,15 @@
 #+TITLE:
 
 * Change Log
+** v058-19 [2019-07-03 Wed]
+
+BETA Release!
+
+- Fix the stupid bugs I had in the last beta: FMAP and TWX saving
+  should work now.
+- Fix app icons.
+- Allow overriding visibility and temperature.
+
 ** v058-16 [2019-07-01 Mon]
 
 BETA Release!
