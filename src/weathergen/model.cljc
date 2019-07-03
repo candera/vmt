@@ -271,13 +271,6 @@
             base-winds
             overrides)))
 
-(defn temperature
-  [categories mixture v]
-  (let [mean (mix-on categories mixture [:temp :mean])
-        min  (mix-on categories mixture [:temp :min])
-        max  (mix-on categories mixture [:temp :max])]
-    (math/distribute v min mean max 1)))
-
 (defn- override-pressure
   "Computes the pressure we should use to override the weather type given the weather type"
   [params override]
@@ -341,6 +334,21 @@
       (let [w  (override-weight params override)
             v* (attr-val override-val)]
         (+ (* v* w) (* v (- 1 w)))))))
+
+(defn temperature
+  [{categories :categories
+    overrides :weather-overrides
+    :as params}
+   mixture
+   v]
+  (let [mean (mix-on categories mixture [:temp :mean])
+        min  (mix-on categories mixture [:temp :min])
+        max  (mix-on categories mixture [:temp :max])
+        init (math/distribute v min mean max 1)]
+    (reduce (fn [v override]
+              (override-param params :temperature identity v override))
+            init
+            overrides)))
 
 (def cloud-coverages [:none :few :scattered :broken :overcast])
 
@@ -445,11 +453,15 @@
   [{type       :type
     categories :categories
     mixture    ::mixture
+    overrides  :weather-overrides
     :as        params}
    v]
-  (linear-param {:from (mix-on categories mixture [:visibility :from])
-                 :to   (mix-on categories mixture [:visibility :to])}
-                v))
+  (reduce (fn [v override]
+            (override-param params :visibility identity v override))
+          (linear-param {:from (mix-on categories mixture [:visibility :from])
+                         :to   (mix-on categories mixture [:visibility :to])}
+                        v)
+          overrides))
 
 (defn weather
   "x and y are in cells"
@@ -526,7 +538,7 @@
      :pressure     (math/nearest pressure 0.01)
      :mixture      mixture
      :type         weather-type
-     :temperature  (temperature categories mixture temp-var)
+     :temperature  (temperature params** mixture temp-var)
      ;;:info        info
      :wind         (wind params*
                          wind-adj-var

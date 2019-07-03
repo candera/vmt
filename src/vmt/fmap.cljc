@@ -17,7 +17,7 @@
   {:none 0
    :few 1
    :scattered 5
-   :broken 8
+   :broken 9
    :overcast 13})
 
 ;; (defn weather-type
@@ -76,6 +76,18 @@
                          :poor      buf/int32
                          :inclement buf/int32)))
 
+(def wind-data
+  (buf/spec :data-0 buf/float
+            :data-3000 buf/float
+            :data-6000 buf/float
+            :data-9000 buf/float
+            :data-12000 buf/float
+            :data-18000 buf/float
+            :data-24000 buf/float
+            :data-30000 buf/float
+            :data-40000 buf/float
+            :data-50000 buf/float))
+
 (defn data-spec
   [{rows ::rows
     cols ::cols
@@ -85,32 +97,35 @@
      ::weather-type       (buf/repeat cells buf/int32)
      ::pressure-mmhg      (buf/repeat cells buf/float)
      ::temperature        (buf/repeat cells buf/float)
-     ::wind-speed-0       (buf/repeat cells buf/float)
-     ::wind-speed-3000    (buf/repeat cells buf/float)
-     ::wind-speed-6000    (buf/repeat cells buf/float)
-     ::wind-speed-9000    (buf/repeat cells buf/float)
-     ::wind-speed-12000   (buf/repeat cells buf/float)
-     ::wind-speed-18000   (buf/repeat cells buf/float)
-     ::wind-speed-24000   (buf/repeat cells buf/float)
-     ::wind-speed-30000   (buf/repeat cells buf/float)
-     ::wind-speed-40000   (buf/repeat cells buf/float)
-     ::wind-speed-50000   (buf/repeat cells buf/float)
-     ::wind-heading-0     (buf/repeat cells buf/float)
-     ::wind-heading-3000  (buf/repeat cells buf/float)
-     ::wind-heading-6000  (buf/repeat cells buf/float)
-     ::wind-heading-9000  (buf/repeat cells buf/float)
-     ::wind-heading-12000 (buf/repeat cells buf/float)
-     ::wind-heading-18000 (buf/repeat cells buf/float)
-     ::wind-heading-24000 (buf/repeat cells buf/float)
-     ::wind-heading-30000 (buf/repeat cells buf/float)
-     ::wind-heading-40000 (buf/repeat cells buf/float)
-     ::wind-heading-50000 (buf/repeat cells buf/float)
+     ::wind-speed         (buf/repeat cells wind-data)
+     ::wind-heading       (buf/repeat cells wind-data)
+     ;; ::wind-speed-0       (buf/repeat cells buf/float)
+     ;; ::wind-speed-3000    (buf/repeat cells buf/float)
+     ;; ::wind-speed-6000    (buf/repeat cells buf/float)
+     ;; ::wind-speed-9000    (buf/repeat cells buf/float)
+     ;; ::wind-speed-12000   (buf/repeat cells buf/float)
+     ;; ::wind-speed-18000   (buf/repeat cells buf/float)
+     ;; ::wind-speed-24000   (buf/repeat cells buf/float)
+     ;; ::wind-speed-30000   (buf/repeat cells buf/float)
+     ;; ::wind-speed-40000   (buf/repeat cells buf/float)
+     ;; ::wind-speed-50000   (buf/repeat cells buf/float)
+     ;; ::wind-heading-0     (buf/repeat cells buf/float)
+     ;; ::wind-heading-3000  (buf/repeat cells buf/float)
+     ;; ::wind-heading-6000  (buf/repeat cells buf/float)
+     ;; ::wind-heading-9000  (buf/repeat cells buf/float)
+     ;; ::wind-heading-12000 (buf/repeat cells buf/float)
+     ;; ::wind-heading-18000 (buf/repeat cells buf/float)
+     ;; ::wind-heading-24000 (buf/repeat cells buf/float)
+     ;; ::wind-heading-30000 (buf/repeat cells buf/float)
+     ;; ::wind-heading-40000 (buf/repeat cells buf/float)
+     ;; ::wind-heading-50000 (buf/repeat cells buf/float)
      ::cloud-base         (buf/repeat cells buf/float)
      ::cloud-coverage     (buf/repeat cells buf/int32)
      ::cloud-size         (buf/repeat cells buf/float)
      ::towering-cumulus?  (buf/repeat cells buf/int32)
      ::visibility-km      (buf/repeat cells buf/float))))
 
+;; TODO: broken
 (defn decode
   "Given FMAP data, decodes it into the internal representation."
   [buf]
@@ -190,108 +205,133 @@
 (defn- convert
   "Convert from the data format VMT uses to the one in the FMAPs."
   [data rows cols]
-  {::weather-type       (for [y (range rows)
-                              x (range cols)]
-                          (-> data (get [x y]) :type weather-type->code))
-   ::pressure-mmhg      (for [y (range rows)
-                              x (range cols)]
-                          (or (some-> data (get [x y]) :pressure model/inhg->mmhg)
-                              (when (< 0.1 (rand))
-                                (println "pressure is nil" [x y (get data [x y])]))))
-   ::temperature        (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :temperature]))
-   ::wind-speed-0       (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 0 :speed]))
-   ::wind-speed-3000    (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 3000 :speed]))
-   ::wind-speed-6000    (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 6000 :speed]))
-   ::wind-speed-9000    (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 9000 :speed]))
-   ::wind-speed-12000   (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 12000 :speed]))
-   ::wind-speed-18000   (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 18000 :speed]))
-   ::wind-speed-24000   (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 24000 :speed]))
-   ::wind-speed-30000   (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 30000 :speed]))
-   ::wind-speed-40000   (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 40000 :speed]))
-   ::wind-speed-50000   (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 50000 :speed]))
-   ::wind-heading-0     (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 0 :heading]))
-   ::wind-heading-3000  (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 3000 :heading]))
-   ::wind-heading-6000  (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 6000 :heading]))
-   ::wind-heading-9000  (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 9000 :heading]))
-   ::wind-heading-12000 (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 12000 :heading]))
-   ::wind-heading-18000 (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 18000 :heading]))
-   ::wind-heading-24000 (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 24000 :heading]))
-   ::wind-heading-30000 (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 30000 :heading]))
-   ::wind-heading-40000 (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 40000 :heading]))
-   ::wind-heading-50000 (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :wind 50000 :heading]))
-   ::cloud-base         (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :low-clouds :base]))
-   ::cloud-coverage     (for [y (range rows)
-                              x (range cols)]
-                          (coverage-code->type (get-in data [[x y] :low-clouds :coverage])))
-   ::cloud-size         (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :low-clouds :size]))
-   ::towering-cumulus?  (for [y (range rows)
-                              x (range cols)
-                              :let [towering? (get-in data [[x y] :low-clouds :towering?])]]
-                          (if towering? 1 0))
-   ::visibility-km      (for [y (range rows)
-                              x (range cols)]
-                          (get-in data [[x y] :visibility]))})
+  {::weather-type      (for [y (range rows)
+                             x (range cols)]
+                         (-> data (get [x y]) :type weather-type->code))
+   ::pressure-mmhg     (for [y (range rows)
+                             x (range cols)]
+                         (or (some-> data (get [x y]) :pressure model/inhg->mmhg)
+                             (when (< 0.1 (rand))
+                               (println "pressure is nil" [x y (get data [x y])]))))
+   ::temperature       (for [y (range rows)
+                             x (range cols)]
+                         (get-in data [[x y] :temperature]))
+   ::wind-speed        (for [y (range rows)
+                             x (range rows)]
+                         {:data-0     (get-in data [[x y] :wind 0 :speed])
+                          :data-3000  (get-in data [[x y] :wind 3000 :speed])
+                          :data-6000  (get-in data [[x y] :wind 6000 :speed])
+                          :data-9000  (get-in data [[x y] :wind 9000 :speed])
+                          :data-12000 (get-in data [[x y] :wind 12000 :speed])
+                          :data-18000 (get-in data [[x y] :wind 18000 :speed])
+                          :data-24000 (get-in data [[x y] :wind 24000 :speed])
+                          :data-30000 (get-in data [[x y] :wind 30000 :speed])
+                          :data-40000 (get-in data [[x y] :wind 40000 :speed])
+                          :data-50000 (get-in data [[x y] :wind 50000 :speed])})
+   ::wind-heading      (for [y (range rows)
+                             x (range rows)]
+                         {:data-0     (get-in data [[x y] :wind 0 :heading])
+                          :data-3000  (get-in data [[x y] :wind 3000 :heading])
+                          :data-6000  (get-in data [[x y] :wind 6000 :heading])
+                          :data-9000  (get-in data [[x y] :wind 9000 :heading])
+                          :data-12000 (get-in data [[x y] :wind 12000 :heading])
+                          :data-18000 (get-in data [[x y] :wind 18000 :heading])
+                          :data-24000 (get-in data [[x y] :wind 24000 :heading])
+                          :data-30000 (get-in data [[x y] :wind 30000 :heading])
+                          :data-40000 (get-in data [[x y] :wind 40000 :heading])
+                          :data-50000 (get-in data [[x y] :wind 50000 :heading])})
+   ;; ::wind-speed-0       (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 0 :speed]))
+   ;; ::wind-speed-3000    (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 3000 :speed]))
+   ;; ::wind-speed-6000    (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 6000 :speed]))
+   ;; ::wind-speed-9000    (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 9000 :speed]))
+   ;; ::wind-speed-12000   (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 12000 :speed]))
+   ;; ::wind-speed-18000   (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 18000 :speed]))
+   ;; ::wind-speed-24000   (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 24000 :speed]))
+   ;; ::wind-speed-30000   (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 30000 :speed]))
+   ;; ::wind-speed-40000   (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 40000 :speed]))
+   ;; ::wind-speed-50000   (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 50000 :speed]))
+   ;; ::wind-heading-0     (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 0 :heading]))
+   ;; ::wind-heading-3000  (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 3000 :heading]))
+   ;; ::wind-heading-6000  (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 6000 :heading]))
+   ;; ::wind-heading-9000  (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 9000 :heading]))
+   ;; ::wind-heading-12000 (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 12000 :heading]))
+   ;; ::wind-heading-18000 (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 18000 :heading]))
+   ;; ::wind-heading-24000 (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 24000 :heading]))
+   ;; ::wind-heading-30000 (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 30000 :heading]))
+   ;; ::wind-heading-40000 (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 40000 :heading]))
+   ;; ::wind-heading-50000 (for [y (range rows)
+   ;;                            x (range cols)]
+   ;;                        (get-in data [[x y] :wind 50000 :heading]))
+   ::cloud-base        (for [y (range rows)
+                             x (range cols)]
+                         (get-in data [[x y] :low-clouds :base]))
+   ::cloud-coverage    (for [y (range rows)
+                             x (range cols)]
+                         (coverage-code->type (get-in data [[x y] :low-clouds :coverage])))
+   ::cloud-size        (for [y (range rows)
+                             x (range cols)]
+                         (get-in data [[x y] :low-clouds :size]))
+   ::towering-cumulus? (for [y    (range rows)
+                             x    (range cols)
+                             :let [towering? (get-in data [[x y] :low-clouds :towering?])]]
+                         (if towering? 1 0))
+   ::visibility-km     (for [y (range rows)
+                             x (range cols)]
+                         (get-in data [[x y] :visibility]))})
 
 (defn encode
   "Given weather data in the VMT format, return a buffer or blob encoding it."
-  [data weather-params movement-params cloud-params rows cols]
-  (let [header    {::version             5
-                   ::rows                rows
-                   ::cols                cols
-                   ::map-move-heading    (get-in movement-params [:direction :heading])
-                   ::map-move-speed      (double (get-in movement-params [:direction :speed]))
-                   ::stratus-z-fair      (:stratus-z-fair cloud-params)
-                   ::stratus-z-inclement (:stratus-z-inclement cloud-params)
-                   ::contrails           (:contrails cloud-params)}
-        data-spec (data-spec header)
-        buf       (buf/allocate (+ (buf/size header-spec)
-                                   (buf/size data-spec)))]
+  [data weather-params movement-params cloud-params]
+  (let [[rows cols] (:cell-count weather-params)
+        header      {::version             5
+                     ::rows                rows
+                     ::cols                cols
+                     ::map-move-heading    (get-in movement-params [:direction :heading])
+                     ::map-move-speed      (double (get-in movement-params [:direction :speed]))
+                     ::stratus-z-fair      (:stratus-z-fair cloud-params)
+                     ::stratus-z-inclement (:stratus-z-inclement cloud-params)
+                     ::contrails           (:contrails cloud-params)}
+        data-spec   (data-spec header)
+        buf         (buf/allocate (+ (buf/size header-spec)
+                                     (buf/size data-spec)))]
     (binding [octet.buffer/*byte-order* :little-endian]
       (buf/write! buf header header-spec)
       (buf/write! buf (convert data rows cols) data-spec {:offset (buf/size header-spec)}))

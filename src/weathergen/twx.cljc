@@ -68,11 +68,13 @@
    :contrail-high buf/float
    :temperature buf/float))
 
-(def twx (buf/spec :version buf/uint32
-                   :last-check buf/int32
-                   :basic-old-condition buf/int32
-                   :basic-condition buf/int32
-                   :basic-condition-counter buf/int32
+;; The new one is twelve bytes shorter than the old one. Which might
+;; be something to do with removing fair/poor/inclement....
+(def twx (buf/spec :version buf/uint32 ;; 3
+                   :last-check buf/int32 ;; 32400000
+                   :basic-old-condition buf/int32 ;; 2
+                   :basic-condition buf/int32 ;; 2
+                   :basic-condition-counter buf/int32 ;; 0
                    :current-condition condition-preset
                    :condition-change-interval buf/int32
                    :model buf/int32
@@ -119,22 +121,23 @@
 
                    :fog-start (for-weather-types buf/float)
                    :fog-end (for-weather-types buf/float)
-                   :stratus-layer (for-weather-types buf/int32)
+                   ;; :stratus-layer (for-weather-types buf/int32)
                    :stratus-thick  (for-weather-types buf/int32)
                    :cumulus-layer  (for-weather-types buf/int32)
                    :contrail-layer (for-weather-types buf/int32)
                    :cumulus-density buf/int32
                    :cumulus-size buf/float
 
-                   :wth-temp (for-weather-types
-                              (buf/spec :night buf/int32
-                                        :dawn buf/int32
-                                        :day buf/int32))
+                   ;; :wth-temp (for-weather-types
+                   ;;            (buf/spec :night buf/int32
+                   ;;                      :dawn buf/int32
+                   ;;                      :day buf/int32))
 
-                   :wth-press (for-weather-types
-                               (buf/spec :night buf/int32
-                                         :dawn buf/int32
-                                         :day buf/int32))))
+                   ;; :wth-press (for-weather-types
+                   ;;             (buf/spec :night buf/int32
+                   ;;                       :dawn buf/int32
+                   ;;                       :day buf/int32))
+                   ))
 
 (defn parse
   "Given a ByteBuffer (JVM) or a ArrayBuffer (CLJS) over the contents
@@ -237,7 +240,7 @@
                    :fair 0,
                    :poor 2000,
                    :inclement 7000},
-   :version 2,
+   :version 3,
    :wind-heading 0,
    :wind-heading-model 1,
    :wth-press {:sunny {:night 1034, :dawn 1036, :day 1040},
@@ -391,18 +394,29 @@
              :cumulus-layer (:cumulus-base cloud-params)
              :contrail-layer (:contrails cloud-params))))
 
+;; I got tired of trying to reverse-engineer yet another BMS file
+;; format, and realized that I only need the turbulence data, the map
+;; model, and "maps auto update". So I saved a TWX like that and here
+;; it is: understanding the contents not required.
+(def twx-data
+  [3 0 0 0 -128 98 -18 1 2 0 0 0 2 0 0 0 0 0 0 0 12 0 0 0 18 0 0 0 28 0 0 0 -17 3 0 0 -15 3 0 0 -11 3 0 0 9 0 0 0 18 0 0 0 27 0 0 0 98 0 0 0 -72 -120 0 0 -120 19 0 0 96 109 0 0 0 0 0 0 0 0 -6 69 0 -128 -69 69 0 80 67 72 0 96 106 72 0 0 0 63 -51 -52 12 63 0 64 -100 69 0 0 0 0 -116 -117 11 63 -93 -94 34 63 -59 -60 68 63 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 64 64 0 -128 -69 68 0 0 -128 63 0 0 -128 63 0 0 -128 63 51 51 115 63 0 0 -128 63 0 0 -128 63 0 64 -100 -59 0 -72 8 -57 0 -64 -38 70 0 -48 4 71 0 0 0 0 28 86 0 0 3 0 0 0 1 0 0 0 32 78 0 0 -88 97 0 0 0 0 -128 62 0 0 -128 62 0 0 -128 62 0 0 -128 62 -128 -66 20 7 1 0 0 0 -128 26 59 12 1 0 0 0 -128 118 97 17 1 0 0 0 -128 -46 -121 22 1 0 0 0 -128 46 -82 27 1 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 5 0 0 0 30 0 0 0 5 0 0 0 2 0 0 0 10 0 0 0 5 0 0 0 10 0 0 0 15 0 0 0 20 0 0 0 10 0 0 0 9 0 0 0 20 0 0 0 10 0 0 0 15 0 0 0 20 0 0 0 15 0 0 0 10 0 0 0 13 0 0 0 30 0 0 0 15 0 0 0 20 0 0 0 25 0 0 0 5 0 0 0 5 0 0 0 16 0 0 0 30 0 0 0 5 0 0 0 7 0 0 0 3 0 0 0 45 0 0 0 -122 0 0 0 -16 0 0 0 3 0 0 0 4 0 0 0 2 0 0 0 45 0 0 0 -122 0 0 0 -16 0 0 0 4 0 0 0 5 0 0 0 2 0 0 0 45 0 0 0 -122 0 0 0 -16 0 0 0 1 0 0 0 3 0 0 0 3 0 0 0 45 0 0 0 -63 0 0 0 -16 0 0 0 3 0 0 0 4 0 0 0 4 0 0 0 45 0 0 0 -63 0 0 0 -16 0 0 0 1 0 0 0 1 0 0 0 0 0 0 0 45 0 0 0 -63 0 0 0 -16 0 0 0 -12 1 0 0 -36 5 0 0 60 0 0 0 20 0 0 0 -118 -46 -37 69 -119 -69 118 69 0 0 -6 68 0 0 -6 68 95 -64 64 72 -89 -126 27 72 103 94 -118 71 -100 7 -46 70 -72 -120 0 0 -72 -120 0 0 48 117 0 0 48 117 0 0 -120 19 0 0 -120 19 0 0 -96 15 0 0 -72 11 0 0 -48 -124 0 0 96 109 0 0 -88 97 0 0 32 78 0 0 5 0 0 0 0 0 64 64 12 0 0 0 18 0 0 0 30 0 0 0 12 0 0 0 18 0 0 0 28 0 0 0 10 0 0 0 15 0 0 0 25 0 0 0 9 0 0 0 14 0 0 0 22 0 0 0 10 4 0 0 12 4 0 0 16 4 0 0 -17 3 0 0 -15 3 0 0 -11 3 0 0 -35 3 0 0 -33 3 0 0 -29 3 0 0 -46 3 0 0 -44 3 0 0 -30 3 0 0])
+
+(def twx-data-len (count twx-data))
+
 (defn get-twx
   "Given global weather parameters and weather direction, return a
   ByteBuffer (JVM) or an ArrayBuffer (CLJS) populated with the
   contents of a TWX file."
-  [cloud-params direction]
-  (let [buf (buf/allocate buffer-size)]
+  []
+  (let [buf (buf/allocate twx-data-len)]
     ;; Unfortunately, there seems to be a problem with using
     ;; buf/with-byte-order. Something something ClojureScript and
     ;; macros.
     (binding [octet.buffer/*byte-order* :little-endian]
-      (buf/write! buf (params->twx cloud-params direction) twx))
+      (buf/write! buf twx-data (buf/repeat twx-data-len buf/byte)))
     buf))
+
+
 
 (comment
   ;; JVM

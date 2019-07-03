@@ -295,7 +295,7 @@
   (let [[vis-i vis-p vis-f vis-s]     (->> (repeatedly
                                             4
                                             #(random-int
-                                              1
+                                              0
                                               600))
                                            (map #(/ % 10))
                                            sort)
@@ -1091,14 +1091,12 @@
                                                        :cells (for [x (range x-cells)
                                                                     y (range y-cells)]
                                                                 [x y]))))
-        blob              (fmap2/encode data
+        buf              (fmap2/encode data
                                         weather-params
                                         movement-params
-                                        cloud-params
-                                        x-cells
-                                        y-cells)]
+                                        cloud-params)]
     (comm/save-data
-     {:data     (safari-safe-binary blob)
+     {:data     (-> buf .-buffer js/Buffer.from)
       :title    "Save FMAP"
       :filters  {:name      "FMAP Files"
                  :extension ["fmap"]}
@@ -1133,14 +1131,14 @@
 
 (defn twx-blob
   "Returns a JS blob containing TWX file data."
-  [cloud-params direction]
-  (js/Blob. #js [(twx/get-twx cloud-params direction)]))
+  []
+  (js/Blob. #js [(twx/get-twx)]))
 
 (defn save-twx
   "Initiates a download of a TWX file."
-  [cloud-params direction mission-name]
+  [mission-name]
   (comm/save-data
-   {:data         (safari-safe-binary (twx-blob cloud-params direction))
+   {:data         (safari-safe-binary (twx-blob))
     :title        "Save TWX"
     :filters      [{:name      "TWX Files"
                     :extension ["twx"]}]
@@ -1393,7 +1391,7 @@
         (reset! progress p))
       (if (< end t)
         (do
-          (save-blob (twx-blob cloud-params weather-direction)
+          (save-blob (twx-blob)
                      (twx-filename mission-name))
           (save-blob (settings-blob)
                      (settings-filename mission-name))
@@ -1404,8 +1402,12 @@
                         (assoc-in [:time :current]
                                   (time/minutes->campaign-time t))
                         (assoc :cells cells)))
-          (let [data (async/<! (:output-ch weather-worker))
-                buf (fmap2/encode data weather-params movement-params cloud-params nx ny)]
+          (let [buf (-> weather-worker
+                        :output-ch
+                        async/<!
+                        (fmap2/encode weather-params movement-params cloud-params)
+                        .-buffer
+                        js/Buffer.from)]
             (when-not first-done?
               (save-buffer buf
                            (str (mission-name-base mission-name) ".fmap")))
@@ -3330,6 +3332,25 @@
                                         :value :poor}
                                        {:label "Inclement"
                                         :value :inclement}])))
+                (override "temperature"
+                          :temperature
+                          22
+                          (fn [val]
+                            (comm/validating-edit :source val
+                                                  :conform (comm/int-conformer -50 50)
+                                                  :placeholder "°C (ft)"
+                                                  :align "right"
+                                                  :width 55)))
+                (override "visibility"
+                          :visibility
+                          10
+                          (fn [val]
+                            (comm/validating-edit :source val
+                                                  :conform (comm/float-conformer 0 60)
+                                                  :fmt format-visibility
+                                                  :placeholder "km"
+                                                  :align "right"
+                                                  :width 55)))
                 (override "cloud cover"
                           :cloud-cover
                           :overcast
@@ -3401,17 +3422,17 @@
                    (div
                     (span :css {:margin-right (px 7)} "Override winds at")
                     (comm/dropdown :value alts
-                                       :change (fn [v]
-                                                 (swap! weather-params
-                                                        assoc-in
-                                                        [:weather-overrides @index :wind-alts]
-                                                        (if (= v :all)
-                                                          model/wind-alts
-                                                          [])))
-                                       :choices [{:label  "All Altitudes"
-                                                  :value :all}
-                                                 {:label "Selected Altitudes"
-                                                  :value :some}]))
+                                   :change (fn [v]
+                                             (swap! weather-params
+                                                    assoc-in
+                                                    [:weather-overrides @index :wind-alts]
+                                                    (if (= v :all)
+                                                      model/wind-alts
+                                                      [])))
+                                   :choices [{:label  "All Altitudes"
+                                              :value :all}
+                                             {:label "Selected Altitudes"
+                                              :value :some}]))
                    (when-tpl (cell= (not= alts :all))
                      (table
                       (tbody
@@ -3461,8 +3482,8 @@
            (checkbox "Exclude from forecast?" :exclude-from-forecast?
                      {:row-attrs {:toggle (cell= (:animate? override))}})
            #_(pre-cell "data"
-                     (formula-of [weather-params]
-                       (get-in weather-params [:weather-overrides @index])))
+                       (formula-of [weather-params]
+                         (get-in weather-params [:weather-overrides @index])))
            (buttons/image-button
             :click #(swap! weather-params
                            update-in
@@ -3511,6 +3532,8 @@
                                       :wind-dir               nil
                                       :wind-speed             nil
                                       :wind-alts              model/wind-alts
+                                      :temperature            nil
+                                      :visibility             nil
                                       })))))
     "Add New")))
 
@@ -3697,9 +3720,7 @@
      "Reset to Defaults")
     (buttons/a-button
      :css {:margin-right (px 3)}
-     :click #(save-twx @cloud-params
-                       (:direction @movement-params)
-                       (:mission-name @mission))
+     :click #(save-twx (:mission-name @mission))
      "Save .TWX"))
    (control-subsection
     :title (with-help [:clouds :high :overview]
@@ -3866,7 +3887,7 @@
                               :else str)
                        :conform (cond
                                   (= a :visibility)
-                                  (comm/float-conformer 0.1 60)
+                                  (comm/float-conformer 0 60)
 
                                   (= :size b)
                                   (comm/float-conformer 0 5.0)
@@ -3958,7 +3979,7 @@
                             :else             str)
                      :conform (cond
                                 (= a :visibility)
-                                (comm/float-conformer 0.1 60)
+                                (comm/float-conformer 0 60)
 
                                 :else
                                 (comm/int-conformer 0 60000))
@@ -4296,9 +4317,7 @@
        (div
         :class "button-container"
         (buttons/a-button
-         :click #(save-twx @cloud-params
-                           (:direction @movement-params)
-                           (:mission-name @mission))
+         :click #(save-twx (:mission-name @mission))
          "Save .TWX"))
        (div
         :class "button-container"

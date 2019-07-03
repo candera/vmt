@@ -4279,3 +4279,119 @@ java.nio.file.File
         inspect)
     #_(.write ch buf)
     #_(.close ch)))
+
+(rebl)
+
+(do
+  (require 'vmt.fmap)
+  (let [buf (fs/file-buf "/Users/candera/falcon/4.34/Data/Campaign/WeatherMapsUpdates/11200.fmap")]
+    (def f (vmt.fmap/decode buf))
+    (inspect f)))
+
+(as-> "file:////Users/candera/falcon/4.34/Data/Campaign/-BMS%20000-%20Benchmark%20Test.twx" ?
+  (twx-load ?)
+  (into (sorted-map) ?)
+  #_(dissoc ? :current-condition :wth-turbulence)
+  #_(clojure.pprint/pprint ?)
+  (inspect ?))
+
+(buf/size twx/twx)
+
+(let [buf (-> "file:////Users/candera/falcon/4.34/Data/Campaign/-BMS%20000-%20Benchmark%20Test.twx"
+              java.net.URI.
+              java.nio.file.Paths/get
+              java.nio.file.Files/readAllBytes
+              java.nio.ByteBuffer/wrap)]
+  (binding [octet.buffer/*byte-order* :little-endian]
+    (inspect (buf/read buf (buf/spec :version buf/uint32
+                                     :last-check buf/int32 ; ?
+                                     :basic-old-condition buf/int32
+                                     :basic-condition buf/int32
+                                     :basic-condition-counter buf/int32
+                                     :current-condition twx/condition-preset
+                                     :a (buf/repeat 13 buf/int32)
+                                     :b (buf/repeat 10 buf/float)
+                                     :c (buf/repeat 1 buf/int32)
+                                     )))))
+
+(let [buf (-> "file:////Users/candera/falcon/4.34/Data/Campaign/twx-test.twx"
+              java.net.URI.
+              java.nio.file.Paths/get
+              java.nio.file.Files/readAllBytes)]
+  (->> buf
+       (map str)
+       (str/join " ")))
+
+(require '[vmt.fmap])
+
+(let [initial (->> "/Users/candera/falcon/4.34/Data/Campaign/WeatherMapsUpdates/Korea-F4WX-01"
+                   io/file
+                   file-seq
+                   (filter #(str/ends-with? % ".fmap"))
+                   rand-nth
+                   fs/file-buf
+                   vmt.fmap/decode)
+      rt (-> initial
+             (vmt.fmap/encode {:cell-count [(:vmt.fmap/rows initial)
+                                            (:vmt.fmap/cols initial)]}
+                              {:direction {:heading (:vmt.fmap/map-move-heading initial)
+                                           :speed (:vmt.fmap/map-move-speed initial)}}
+                              {:stratus-z-fair (:vmt.fmap/stratus-z-fair initial)
+                               :stratus-z-inclement (:vmt.fmap/stratus-z-inclement initial)
+                               :contrails (:vmt.fmap/contrails initial)})
+              vmt.fmap/decode)]
+  (inspect initial))
+
+
+(let [weather {:type        :poor
+               :pressure    29.29
+               :temperature 22
+               :wind        {0     {:speed   0
+                                    :heading 0}
+                             3000  {:speed   10
+                                    :heading 1}
+                             6000  {:speed   21
+                                    :heading 2}
+                             9000  {:speed   32
+                                    :heading 3}
+                             12000 {:speed   43
+                                    :heading 4}
+                             18000 {:speed   54
+                                    :heading 5}
+                             24000 {:speed   65
+                                    :heading 6}
+                             30000 {:speed   76
+                                    :heading 7}
+                             40000 {:speed   87
+                                    :heading 8}
+                             50000 {:speed   98
+                                    :heading 9}}
+               :low-clouds  {:base      1000
+                             :coverage  :broken
+                             :size      3
+                             :towering? true}
+               :visibility  30}
+      encoded (vmt.fmap/encode {[0 0] weather
+                                [0 1] weather
+                                [1 0] weather
+                                [1 1] weather}
+                               {:cell-count [2 2]}
+                               {:direction {:heading 1
+                                            :speed   2}}
+                               {:stratus-z-fair      3
+                                :stratus-z-inclement 4
+                                :contrails           {:sunny     20000
+                                                      :fair      21000
+                                                      :poor      22000
+                                                      :inclement 23000}})]
+  (-> encoded
+      vmt.fmap/decode
+      inspect))
+
+(do
+  (require 'vmt.fmap)
+  (let [buf (fs/file-buf "/Users/candera/falcon/4.34/Data/Campaign/NewMap.fmap")]
+    (def f (vmt.fmap/decode buf))
+    (inspect f)))
+
+(buf/size vmt.fmap/header-spec)
