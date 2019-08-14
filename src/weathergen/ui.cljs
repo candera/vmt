@@ -3691,6 +3691,7 @@
   (control-section
    :title (with-help [:clouds :overview] "Atmosphere")
    :id (gensym)
+   :toggle (cell= (= display-mode :edit))
    (div
     :toggle (cell= (= display-mode :edit))
     (help-icon [:clouds :buttons])

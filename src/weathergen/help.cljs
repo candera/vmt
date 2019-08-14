@@ -585,7 +585,13 @@ forward and backward in time. ")
     list.")}
 
    :clouds
-   {:overview
+   {:low
+    {:overview
+     (content-para
+      "Edit the occurrence and configuration of low clouds. Low clouds
+      are those typically occurring below 10,000 feet.")}
+
+    :overview
     (content-para
      "Edit the cloud, visibility, and contrail settings. These
     settings are the same everywhere on the map - they do not vary by
@@ -593,12 +599,26 @@ forward and backward in time. ")
 
     :buttons
     (content
-     [:p "Randomize: sets the clouds and contrails to random (but
-      valid) values."]
-     [:p "Save TWX: Saves a .twx file, which contains the cloud and
+     [:dl
+      [:dt "Randomize Clouds & Vis"]
+      [:dl "Set the values for contrails, high clouds, low clouds, and
+      visibility to random (but valid) values."]
+
+      [:dt "Randomize Wind"]
+      [:dl "Set the wind values to random (but valid) values."]
+
+      [:dt "Randomize Temperature"]
+      [:dl "Set the temperature values to random (but valid) values."]
+
+      [:dt "Reset to Defaults"]
+      [:dl "Reset the cloud, wind, and temperature values to their default values."]
+
+      [:dt "Save TWX"]
+      [:dl
+       [:p "Save TWX: Saves a .twx file, which contains the cloud and
         contrail values from this section. This file should be saved
         with the same name as the mission (.tac or .cam) file, but
-        with a .twx extension."])
+        with a .twx extension."]]])
 
     :cumulus-coverage
     (content
