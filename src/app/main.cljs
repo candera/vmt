@@ -50,7 +50,7 @@
         .-webContents
         (.on "did-finish-load"
              (fn []
-               (when (-> js/process.env (aget "VMT_DEV_OPEN_WINDOW_EARLY") some?)
+               (when true #_(-> js/process.env (aget "VMT_DEV_OPEN_WINDOW_EARLY") some?)
                  (.show mission-window))
                (ipc/send-to-renderer mission-window
                                      (mode {:briefing "open-briefing"

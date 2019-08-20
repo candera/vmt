@@ -5489,12 +5489,17 @@
      :click #(export-database @mission)
      "Export"))))
 
-(defn hidden-tools-tab
-  []
-  (div
-   (when-tpl (cell= (= :edit display-mode))
-     (database-export-section {}))
-   (damage-computer-section {})))
+
+(let [BrowserWindow (-> electron .-remote .-BrowserWindow)]
+  (defn hidden-tools-tab
+    []
+    (div
+     (when-tpl (cell= (= :edit display-mode))
+       (database-export-section {}))
+     (damage-computer-section {})
+     (buttons/a-button :click (fn [_]
+                                (-> BrowserWindow .getFocusedWindow .-webContents .openDevTools))
+                       "Open Debug Console"))))
 
 ;;; General layout
 

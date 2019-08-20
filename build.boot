@@ -57,7 +57,9 @@
                  [org.clojure/test.check "0.10.0-alpha4" :scope "test"]
                  ;;[io.nervous/cljs-nodejs-externs "0.2.0"]
                  ;;[cljsjs/nodejs-externs "1.0.4-1"]
-                 ]
+                 
+                 [clojure-complete "0.2.5" :scope "test"
+                  :exclusions [org.clojure/clojure]]]
  ;; TODO: Really need a way to hook into the repl-server so that dev
  ;; doesn't wind up in the source path for released code.
  :source-paths #{"src" "dev"}
@@ -96,6 +98,36 @@
                                 [org.openjfx/javafx-swing    "11.0.1"]
                                 [org.openjfx/javafx-base     "11.0.1"]
                                 [org.openjfx/javafx-web      "11.0.1"]])))
+
+(defn repl-server-accept
+  "Override the default so we land in the boot.user namespace instead
+  of the default (user)."
+  []
+  (clojure.main/repl
+   :init (fn []
+           (let [init-ns-sym (or (get-env :repl-server-init-ns) 'boot.user)]
+             (require init-ns-sym)
+             (in-ns init-ns-sym)
+             (apply require clojure.main/repl-requires)))
+   :read clojure.core.server/repl-read))
+
+(defn run-repl-server
+  [port name]
+  (require 'clojure.core.server)
+  (clojure.core.server/start-server {:port port
+                                     :name name
+                                     :accept 'boot.user/repl-server-accept
+                                     :daemon false}))
+
+(deftask repl-server
+  "Run a REPL socket server"
+  [p port PORT int "Port to run the server on. Defaults to a random number."
+   n name NAME str "Name of the repl server. Defaults to a randomly generated name."]
+  (with-pass-thru _
+    (let [port (or port (get-env :repl-server-port) (+ 1024 (rand-int (- 9999 1024))))
+          name (or name (get-env :repl-server-name) (str (gensym)))]
+      (run-repl-server port name)
+      (println "Server" name "is running on port" port))))
 
 (deftask dev
   "Build and serve WeatherGen for local development."

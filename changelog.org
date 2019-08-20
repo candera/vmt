@@ -4,6 +4,17 @@
 #+TITLE:
 
 * Change Log
+** v058-21 [2019-08-20 Tue]
+
+DIAGNOSTIC RELEASE.
+
+- Adds "Open Debug Console" button to Tools tab
+- Shows mission window even if loading fails
+
+These features may be removed in a future release - don't count on
+them sticking around. They are there to support debugging an issue
+that only shows up on some users' Windows 10 installs.
+
 ** v058-19 [2019-07-03 Wed]
 
 BETA Release!
