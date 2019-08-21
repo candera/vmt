@@ -3087,7 +3087,7 @@
                                :ppt-data           ppt-data})]
     (log/debug "Candidate installs" (:candidate-installs mission))
     (progress/with-step "Finalizing mission data"
-      (postprocess-mission mission))))
+      #(postprocess-mission mission))))
 
 (defn mission->briefing
   "Converts a mission to a 'briefing', which is a serializable version

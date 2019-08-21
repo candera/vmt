@@ -4,7 +4,7 @@
 #+TITLE:
 
 * Change Log
-** v058-21 [2019-08-20 Tue]
+** v058-22 [2019-08-20 Tue]
 
 DIAGNOSTIC RELEASE.
 
