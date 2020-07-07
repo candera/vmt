@@ -5,7 +5,7 @@
     "main": "main.js",
     "private": "true",
     "devDependencies": {
-        "electron": "^1.6.2"
+        "electron": "^9.1.0"
     },
     "dependencies": {
         "@claviska/jquery-minicolors": "^2.2.4",
