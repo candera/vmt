@@ -130,10 +130,10 @@
     (content
      [:p
       "This section allows saving and loading of the various
-      files that WeatherGen can use. Files should be saved with the
-      same name as the mission (.cam or .tac) file, but with the
-      extension changed as appropriate. For instance, if you're making
-      a mission called 'oca-strike.tac', save the TWX file as
+      weather-related files that VMT can use. Files should be saved
+      with the same name as the mission (.cam or .tac) file, but with
+      the extension changed as appropriate. For instance, if you're
+      making a mission called 'oca-strike.tac', save the TWX file as
       'oca-strike.twx'. The filename will use the mission name of the
       loaded mission section if possible."]
 
@@ -150,9 +150,10 @@
         .twx extension."]
 
       [:dt "Save Settings"]
-      [:dd "Saves a .vmtw file with all the values from the
-        WeatherGen application. Use this to preserve the state of
-        WeatherGen so you can later pick up where you left off."]
+      [:dd "Saves a .vmtw file with all the weather-related values
+        from the VMT application. Use this to preserve the state of
+        generated weather in VMT so you can later pick up where you
+        left off when editing related missions."]
 
       [:dt "Load Settings"]
       [:dd "Loads a previously saved .vmtw file. Note that
@@ -175,7 +176,7 @@
         "A TWX file containing the clouds and contrails settings."]
        [:li [:b [:i "mission-name"] ".setting.edn"]
         " - "
-        "Contains the WeatherGen settings used to generate the
+        "Contains the settings used to generate the
              package."]
        [:li [:b "WeatherMapsUpdates"]
         " - "
@@ -198,7 +199,11 @@
      (content-para
       "The name of the mission file (.cam or .tac) for which
      weather is being generated. This value will be used to name the
-     generated .twx and .fmap files.")}}
+     generated .twx and .fmap files.")
+
+     :mission-date
+     (content-para
+      "Sets the date of the flight. This controls sunrise, sunset, moon phase, etc. See BMS manual for more details.")}}
 
    :weather-display-controls
    {:map

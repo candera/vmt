@@ -527,6 +527,7 @@
                       :pressure-unit :inhg
                       :flight-paths  nil
                       :multi-save    {:mission-name nil
+                                      :date         {:year 2004 :month 4 :day 15}
                                       :from         {:day 1 :hour 5 :minute 0}
                                       :to           {:day 1 :hour 10 :minute 0}
                                       :step         60}})
@@ -1132,14 +1133,14 @@
 
 (defn twx-blob
   "Returns a JS blob containing TWX file data."
-  []
-  (js/Blob. #js [(twx/get-twx)]))
+  [date]
+  (js/Blob. #js [(twx/get-twx date)]))
 
 (defn save-twx
   "Initiates a download of a TWX file."
-  [mission-name]
+  [mission-name date]
   (comm/save-data
-   {:data         (safari-safe-binary (twx-blob))
+   {:data         (safari-safe-binary (twx-blob date))
     :title        "Save TWX"
     :filters      [{:name      "TWX Files"
                     :extension ["twx"]}]
@@ -1366,7 +1367,7 @@
                (recur)))}))
 
 (defn save-weather-files
-  [{:keys [weather-params cloud-params movement-params weather-direction mission-name
+  [{:keys [weather-params cloud-params movement-params display-params weather-direction mission-name
            nx ny from to step save-file progress cancel campaign-dir]}]
   (let [cells (for [x (range nx)
                     y (range ny)]
@@ -1392,7 +1393,7 @@
         (reset! progress p))
       (if (< end t)
         (do
-          (save-blob (twx-blob)
+          (save-blob (twx-blob (get-in display-params [:multi-save :date]))
                      (twx-filename mission-name))
           (save-blob (settings-blob)
                      (settings-filename mission-name))
@@ -3027,6 +3028,38 @@
          (assoc :update #(swap! source assoc-in path %))
          (assoc :max-time (get-in @weather-params [:time :max]))))))
 
+(defn- conform-date
+  "Validating editor conformation from YYYY/MM/DD dates."
+  [c]
+  (formula-of [c]
+    (let [[parsed? y m d] (re-matches #"(\d{4})/(\d{1,2})/(\d{1,2})" c)
+          year            (when parsed? (comm/parse-int y))
+          month           (when parsed? (comm/parse-int m))
+          day             (when parsed? (comm/parse-int d))
+          ;; This doesn't disallow things like February 30th, but oh well.
+          valid?          (and parsed? year month day
+                      (< 1900 year 2100)
+                      (<= 1 month 12)
+                      (<= 1 day 31))]
+      {:valid?  valid?
+       :value   (when valid? {:year  year
+                              :month month
+                              :day   day})
+       :message (when-not valid?
+                  "Must be a valid date in the form YYYY/MM/DD.")})))
+
+(defelem date-entry
+  "Defines a date-edit box against `path` into map cell `source`."
+  [attrs _]
+  (let [{:keys [path source]} attrs]
+    (comm/validating-edit :source (path-lens source path)
+                          :conform conform-date
+                          :fmt (fn [v] (str (:year v)
+                                            "/"
+                                            (gstring/format "%02d" (:month v))
+                                            "/"
+                                            (gstring/format "%02d" (:day v)))))))
+
 (defn button-bar
   "Returns UI for the 'button bar' that goes across the top of the
   map."
@@ -3722,7 +3755,7 @@
      "Reset to Defaults")
     (buttons/a-button
      :css {:margin-right (px 3)}
-     :click #(save-twx (:mission-name @mission))
+     :click #(save-twx (:mission-name @mission) (get-in @display-params [:multi-save :date]))
      "Save .TWX"))
    (control-subsection
     :title (with-help [:clouds :high :overview]
@@ -4319,7 +4352,7 @@
        (div
         :class "button-container"
         (buttons/a-button
-         :click #(save-twx (:mission-name @mission))
+         :click #(save-twx (:mission-name @mission) (get-in @display-params [:multi-save :date]))
          "Save .TWX"))
        (div
         :class "button-container"
@@ -4349,6 +4382,10 @@
         [(row "Mission:"
               [:serialization-controls :multi-save :mission-name]
               (div (cell= (or (:mission-name mission) "No Mission Loaded"))))
+         (row "Date:"
+              [:serialization-controls :multi-save :mission-date]
+              (date-entry :source display-params
+                          :path [:multi-save :date]))
          (row "From:"
               [:serialization-controls :multi-save :from]
               (time-entry :source display-params
@@ -4405,6 +4442,7 @@
                           (save-weather-files {:weather-params    @weather-params
                                                :cloud-params      @cloud-params
                                                :movement-params   @movement-params
+                                               :display-params    @display-params
                                                :weather-direction (:direction @movement-params)
                                                :campaign-dir      (mission/campaign-dir @mission)
                                                :mission-name      (:mission-name @mission)

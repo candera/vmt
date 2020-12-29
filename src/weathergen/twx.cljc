@@ -3,7 +3,11 @@
   (:require [octet.core :as buf]
             [octet.buffer]))
 
-(def buffer-size 764)
+;; Most of the below doesn't work. For TWX files we're really just
+;; trying to set the date. If you need to mess with turbulence, you'll
+;; have to use Falcon to edit it.
+
+(def buffer-size 788)
 
 ;; This is the value of :model that indicates the map weather model is
 ;; in use, which is pretty much the only thing we support
@@ -70,7 +74,10 @@
 
 ;; The new one is twelve bytes shorter than the old one. Which might
 ;; be something to do with removing fair/poor/inclement....
-(def twx (buf/spec :version buf/uint32 ;; 3
+(def twx (buf/spec :version buf/uint32 ;; 6
+                   :year buf/uint32
+                   :month buf/uint32
+                   :day   buf/uint32
                    :last-check buf/int32 ;; 32400000
                    :basic-old-condition buf/int32 ;; 2
                    :basic-condition buf/int32 ;; 2
@@ -398,34 +405,44 @@
 ;; format, and realized that I only need the turbulence data, the map
 ;; model, and "maps auto update". So I saved a TWX like that and here
 ;; it is: understanding the contents not required.
+
+(comment
+    (->> "file:///Users/candera/falcon/4.35/Data/Campaign/template.twx"
+      java.net.URI.
+      java.nio.file.Paths/get
+      java.nio.file.Files/readAllBytes
+      (into [])
+      pr-str)
+    )
+
 (def twx-data
-  [3 0 0 0 -128 98 -18 1 2 0 0 0 2 0 0 0 0 0 0 0 12 0 0 0 18 0 0 0 28 0 0 0 -17 3 0 0 -15 3 0 0 -11 3 0 0 9 0 0 0 18 0 0 0 27 0 0 0 98 0 0 0 -72 -120 0 0 -120 19 0 0 96 109 0 0 0 0 0 0 0 0 -6 69 0 -128 -69 69 0 80 67 72 0 96 106 72 0 0 0 63 -51 -52 12 63 0 64 -100 69 0 0 0 0 -116 -117 11 63 -93 -94 34 63 -59 -60 68 63 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 64 64 0 -128 -69 68 0 0 -128 63 0 0 -128 63 0 0 -128 63 51 51 115 63 0 0 -128 63 0 0 -128 63 0 64 -100 -59 0 -72 8 -57 0 -64 -38 70 0 -48 4 71 0 0 0 0 28 86 0 0 3 0 0 0 1 0 0 0 32 78 0 0 -88 97 0 0 0 0 -128 62 0 0 -128 62 0 0 -128 62 0 0 -128 62 -128 -66 20 7 1 0 0 0 -128 26 59 12 1 0 0 0 -128 118 97 17 1 0 0 0 -128 -46 -121 22 1 0 0 0 -128 46 -82 27 1 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 5 0 0 0 30 0 0 0 5 0 0 0 2 0 0 0 10 0 0 0 5 0 0 0 10 0 0 0 15 0 0 0 20 0 0 0 10 0 0 0 9 0 0 0 20 0 0 0 10 0 0 0 15 0 0 0 20 0 0 0 15 0 0 0 10 0 0 0 13 0 0 0 30 0 0 0 15 0 0 0 20 0 0 0 25 0 0 0 5 0 0 0 5 0 0 0 16 0 0 0 30 0 0 0 5 0 0 0 7 0 0 0 3 0 0 0 45 0 0 0 -122 0 0 0 -16 0 0 0 3 0 0 0 4 0 0 0 2 0 0 0 45 0 0 0 -122 0 0 0 -16 0 0 0 4 0 0 0 5 0 0 0 2 0 0 0 45 0 0 0 -122 0 0 0 -16 0 0 0 1 0 0 0 3 0 0 0 3 0 0 0 45 0 0 0 -63 0 0 0 -16 0 0 0 3 0 0 0 4 0 0 0 4 0 0 0 45 0 0 0 -63 0 0 0 -16 0 0 0 1 0 0 0 1 0 0 0 0 0 0 0 45 0 0 0 -63 0 0 0 -16 0 0 0 -12 1 0 0 -36 5 0 0 60 0 0 0 20 0 0 0 -118 -46 -37 69 -119 -69 118 69 0 0 -6 68 0 0 -6 68 95 -64 64 72 -89 -126 27 72 103 94 -118 71 -100 7 -46 70 -72 -120 0 0 -72 -120 0 0 48 117 0 0 48 117 0 0 -120 19 0 0 -120 19 0 0 -96 15 0 0 -72 11 0 0 -48 -124 0 0 96 109 0 0 -88 97 0 0 32 78 0 0 5 0 0 0 0 0 64 64 12 0 0 0 18 0 0 0 30 0 0 0 12 0 0 0 18 0 0 0 28 0 0 0 10 0 0 0 15 0 0 0 25 0 0 0 9 0 0 0 14 0 0 0 22 0 0 0 10 4 0 0 12 4 0 0 16 4 0 0 -17 3 0 0 -15 3 0 0 -11 3 0 0 -35 3 0 0 -33 3 0 0 -29 3 0 0 -46 3 0 0 -44 3 0 0 -30 3 0 0])
+  [6 0 0 0 -44 7 0 0 4 0 0 0 15 0 0 0 86 41 -91 0 2 0 0 0 2 0 0 0 0 0 0 0 12 0 0 0 18 0 0 0 28 0 0 0 -17 3 0 0 -15 3 0 0 -11 3 0 0 9 0 0 0 18 0 0 0 27 0 0 0 98 0 0 0 -24 -128 0 0 -120 19 0 0 96 109 0 0 0 0 0 0 76 -20 -109 68 0 -128 -69 69 0 64 28 72 0 96 106 72 0 0 0 63 -51 -52 12 63 0 64 -100 69 0 0 0 0 -116 -117 11 63 -93 -94 34 63 -59 -60 68 63 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 64 64 0 -128 -69 68 0 0 -128 63 0 0 -128 63 0 0 -128 63 51 51 115 63 0 0 -128 63 0 0 -128 63 0 64 -100 -59 0 -24 0 -57 0 -64 -38 70 0 -48 4 71 0 0 0 0 127 79 0 0 3 0 0 0 1 0 0 0 32 78 0 0 -88 97 0 0 0 0 -128 62 0 0 -128 62 0 0 -128 62 0 0 -128 62 -128 39 -53 5 1 0 0 0 -128 -125 -15 10 1 0 0 0 -128 -33 23 16 1 0 0 0 -128 59 62 21 1 0 0 0 -128 -105 100 26 1 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 5 0 0 0 30 0 0 0 5 0 0 0 2 0 0 0 10 0 0 0 5 0 0 0 10 0 0 0 15 0 0 0 20 0 0 0 10 0 0 0 9 0 0 0 20 0 0 0 10 0 0 0 15 0 0 0 20 0 0 0 15 0 0 0 10 0 0 0 13 0 0 0 30 0 0 0 15 0 0 0 20 0 0 0 25 0 0 0 5 0 0 0 5 0 0 0 16 0 0 0 30 0 0 0 2 0 0 0 2 0 0 0 1 0 0 0 -6 0 0 0 -3 0 0 0 106 0 0 0 -32 7 126 63 2 0 0 0 3 0 0 0 1 0 0 0 48 2 0 0 -3 0 0 0 -100 0 0 0 -32 7 126 63 3 0 0 0 2 0 0 0 0 0 0 0 -12 1 0 0 91 2 0 0 -50 0 0 0 -32 7 126 63 1 0 0 0 1 0 0 0 0 0 0 0 44 1 0 0 -103 0 0 0 106 0 0 0 -32 7 126 63 1 0 0 0 3 0 0 0 1 0 0 0 -112 1 0 0 -53 0 0 0 -100 0 0 0 -32 7 126 63 1 0 0 0 2 0 0 0 1 0 0 0 -12 1 0 0 -103 0 0 0 -50 0 0 0 -32 7 126 63 -12 1 0 0 -36 5 0 0 10 0 0 0 20 0 0 0 -117 -1 -9 69 24 48 -52 69 -66 -6 86 69 -54 -69 -12 68 -25 60 73 72 1 -16 31 72 11 -113 -119 71 15 2 -55 70 -72 -120 0 0 -24 -128 0 0 48 117 0 0 48 117 0 0 -120 19 0 0 -120 19 0 0 -96 15 0 0 -72 11 0 0 -48 -124 0 0 96 109 0 0 -88 97 0 0 32 78 0 0 5 0 0 0 0 0 64 64 12 0 0 0 18 0 0 0 30 0 0 0 12 0 0 0 18 0 0 0 28 0 0 0 10 0 0 0 15 0 0 0 25 0 0 0 9 0 0 0 14 0 0 0 22 0 0 0 10 4 0 0 12 4 0 0 16 4 0 0 -17 3 0 0 -15 3 0 0 -11 3 0 0 -35 3 0 0 -33 3 0 0 -29 3 0 0 -46 3 0 0 -44 3 0 0 -30 3 0 0])
 
 (def twx-data-len (count twx-data))
 
 (defn get-twx
-  "Given global weather parameters and weather direction, return a
-  ByteBuffer (JVM) or an ArrayBuffer (CLJS) populated with the
-  contents of a TWX file."
-  []
+  "Given a date, return a ByteBuffer (JVM) or an ArrayBuffer (CLJS)
+  populated with the contents of a TWX file."
+  [{:keys [year month day] :as date}]
   (let [buf (buf/allocate twx-data-len)]
     ;; Unfortunately, there seems to be a problem with using
     ;; buf/with-byte-order. Something something ClojureScript and
     ;; macros.
     (binding [octet.buffer/*byte-order* :little-endian]
-      (buf/write! buf twx-data (buf/repeat twx-data-len buf/byte)))
+      (buf/write! buf twx-data (buf/repeat twx-data-len buf/byte))
+      (buf/write! buf date (buf/spec :year buf/uint32 :month buf/uint32 :day buf/uint32) {:offset 4}))
     buf))
 
 
 
 (comment
   ;; JVM
-  (-> "file:///Users/candera/GDrive/weather-4.twx"
+  (-> "file:///Users/candera/falcon/4.35/Data/Campaign/Save-Day  1 03 00 00.twx"
       java.net.URI.
       java.nio.file.Paths/get
       java.nio.file.Files/readAllBytes
       java.nio.ByteBuffer/wrap
-      parse)
+      twx/parse)
 
   )
 
