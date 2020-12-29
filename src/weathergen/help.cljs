@@ -365,7 +365,20 @@ forward and backward in time. ")
      "The minimum, maximum, and mean temperatures for each weather
      type. Due to crossfading, these values are not strict -
      temperature can be higher than the maximum or lower than the
-     minimum near the edges of other weather types.")}
+     minimum near the edges of other weather types.")
+
+    :category
+    (content
+     [:p
+      "Sets the relative amount of the various weather types. Move the
+     slider for e.g. `sunny` to the left to decrease the amount of
+     sunny weather that will be generated. Note that decreasing the
+     amount of one type of weather automatically increases the amount
+     of the other types, as every location on the map has to have one
+     of the four weather types."]
+     [:p
+      "If you want to dictate more closely the configuration of
+      weather types, consider using weather overrides instead."])}
 
    :displayed-time
    (content
@@ -585,17 +598,9 @@ forward and backward in time. ")
     list.")}
 
    :clouds
-   {:low
-    {:overview
-     (content-para
-      "Edit the occurrence and configuration of low clouds. Low clouds
-      are those typically occurring below 10,000 feet.")}
-
-    :overview
+   {:overview
     (content-para
-     "Edit the cloud, visibility, and contrail settings. These
-    settings are the same everywhere on the map - they do not vary by
-    location.")
+     "Edit the settings controlling generated clouds, visibility, contrails and wind.")
 
     :buttons
     (content
@@ -619,6 +624,35 @@ forward and backward in time. ")
         contrail values from this section. This file should be saved
         with the same name as the mission (.tac or .cam) file, but
         with a .twx extension."]]])
+
+
+    :high
+    {:overview
+     (content-para
+      "Sets the theater-wide (does not vary by location) of the
+      altitude of the high cloud layer by weather type.")}
+
+    :low
+    {:overview
+     (content-para
+      "Edit the occurrence and configuration of low clouds. Low clouds
+      are those typically occurring below 10,000 feet.")}
+
+    :visibility-and-contrails
+    {:overview
+     (content-para
+      "Set the parameters for generated visibility and theater-wide
+      contrail altitudes by weather type.")}
+
+    :ground-wind-and-temp
+    {:overview
+     (content-para
+      "Set the winds and temperatures at ground level. BMS will vary
+      the temperature by altitude based on its atmospheric model.
+      Winds can be varied by altitude using the \"winds aloft\"
+      section below.")}
+
+
 
     :cumulus-coverage
     (content
