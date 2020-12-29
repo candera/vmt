@@ -2,7 +2,7 @@
 
 (merge-env!
  :dependencies '[[org.clojure/clojure       "1.10.0"]
-                 [org.clojure/clojurescript "1.10.520"]
+                 [org.clojure/clojurescript "1.10.773"]
                  ;;[hoplon "7.2.0"]
                  [jumblerg/hoplon "7.0.4"] ; Official release broken in several ways...
 
@@ -17,20 +17,20 @@
 
                  ;;[hoplon/javelin "3.9.0"]
 
-                 [org.clojure/core.async "0.4.490" :exclusions [[org.clojure/tools.reader]]]
+                 [org.clojure/core.async "1.3.610" :exclusions [[org.clojure/tools.reader]]]
                  ;; [tailrecursion/boot-jetty  "0.1.3"]
                  ;; [cljsjs/jquery "3.4.0-0"]
                  [cljsjs/jquery-ui "1.11.4-0"]
-                 [org.clojure/data.csv "0.1.4"]
-                 [org.clojure/data.json "0.2.6"]
+                 [org.clojure/data.csv "1.0.0"]
+                 [org.clojure/data.json "1.0.0"]
                  [org.clojure/data.xml "0.0.8"]  ; Boot dep, unfortunately
                  ;; [org.clojure/data.xml "0.2.0-alpha6"]
                  [funcool/tubax "0.2.0"]
 
-                 [rum "0.11.3"]
-                 [com.cognitect/transit-cljs "0.8.256"]
-                 [com.cognitect/transit-clj "0.8.313" :scope "test"]
-                 [com.taoensso/timbre "4.10.0"]
+                 [rum "0.12.3"]
+                 [com.cognitect/transit-cljs "0.8.264"]
+                 [com.cognitect/transit-clj "1.0.324" :scope "test"]
+                 [com.taoensso/timbre "5.1.0"]
                  [hiccups "0.3.0"]
                  ;;[secretary "1.2.3"]
                  ;;[funcool/cuerdas "2.0.0"]
