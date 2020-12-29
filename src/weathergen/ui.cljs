@@ -108,7 +108,8 @@
 ;;; Constants
 
 ;; 4.34 = revision 8
-(def revision 8)
+;; 4.35 = revision 9
+(def revision 9)
 
 ;;; Browser detection
 
@@ -1279,8 +1280,8 @@
                    :installations installations
                    :revision revision
                    :briefing? (some? briefing))
-        (when (< revision 8)
-          (throw (ex-info (str "This version of VMT cannot be used to load briefing files from prior versions - file format changes in BMS 4.34 resulted in incompatibilities. You will need to ask the mission creator for a new briefing file. Briefing revision: " revision)
+        (when (< revision 9)
+          (throw (ex-info (str "This version of VMT cannot be used to load briefing files from prior versions - file format changes in BMS 4.35 resulted in incompatibilities. You will need to ask the mission creator for a new briefing file. Briefing revision: " revision)
                           {:omit-stack-trace? true
                            :revision          revision})))
         (let [mission-data (progress/with-step (str "Loading briefing from " path)

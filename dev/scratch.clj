@@ -4395,3 +4395,24 @@ java.nio.file.File
     (inspect f)))
 
 (buf/size vmt.fmap/header-spec)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(do (def mission (mission/read-mission
+               installs
+               "/Users/candera/falcon/4.35/Data/Campaign/Save-Day  1 03 00 08.cam"))
+    (inspect mission))
+
+(-> mission :class-table inspect)
+
+(do (->> mission :units inspect) nil)
+
+
+(inspect (binding [octet.buffer/*byte-order* :little-endian]
+           (buf/read (-> "file:///tmp/teams.raw"
+                          java.net.URI.
+                          java.nio.file.Paths/get
+                          java.nio.file.Files/readAllBytes
+                          java.nio.ByteBuffer/wrap)
+                      mission/team-record
+                      {:offset 2})))

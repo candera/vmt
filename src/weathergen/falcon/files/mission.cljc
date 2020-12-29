@@ -3021,6 +3021,11 @@
   :args (s/cat :installs Installs :path Path)
   :ret Mission)
 
+(def required-database-versions
+  {"4.34" #{100}
+   ;; Oddly, some of the TEs in 4.35 are version 102, not 103
+   "4.35" #{102 103}})
+
 ;; TODO: Consider renaming this read-database, and referring to the resulting object
 ;; as the database.
 (defn read-mission
@@ -3034,6 +3039,17 @@
                              :version
                              :version))
         _             (log/debug "Version is " version)
+        _             (let [required-versions (get required-database-versions "4.35")]
+                        (when-not (required-versions version)
+                          (throw (ex-info (str "Database version is "
+                                               version
+                                               ", but the expected version for BMS 4.35 missions is "
+                                               required-versions
+                                               ". You must use a version of VMT built for the version of BMS you are using. Sorry - backward compatibility was just too hard to implement.")
+                                          {:reason           ::version-mismatch
+                                           :read-version     version
+                                           :required-version required-versions
+                                           :omit-stack-trace? true}))))
         install-dir   (progress/with-step "Locating installation directory"
                         #(find-install-dir path))
         installation  (progress/with-step (str "Scanning Falcon installation at " install-dir)
@@ -3502,7 +3518,8 @@
             ;; names rather than an array
             :obj-type-priority (buf/repeat 36 buf/ubyte)
             :unit-type-priority (buf/repeat 20 buf/ubyte)
-            :mission-priority (buf/repeat 41 buf/ubyte)
+            ;; Was 41 in 4.34 - 50 in 4.35
+            :mission-priority (buf/repeat 50 buf/ubyte)
             :max-vehicle (buf/repeat 4 buf/ubyte)
             :team-flag buf/ubyte
             :team-color buf/ubyte
@@ -3522,6 +3539,21 @@
 (defmethod read-embedded-file* :teams
   [_ {:keys [offset length] :as entry} buf _]
   (binding [octet.buffer/*byte-order* :little-endian]
+    #?(:clj (.write (java.io.FileOutputStream. "/tmp/teams.raw")
+                    (.array buf)
+                    offset
+                    length))
+    #_(let [dump-offset offset]
+      (loop [idx 0
+             offset (+ 2 offset)
+             data []]
+        (if (= idx 8)
+          data
+          (let [[datasize read-data] (buf/read* buf team-record {:offset offset})]
+            (log/debug "read team" idx
+                       "at offset" (- offset dump-offset) " [" (format "0x%x" (- offset dump-offset))
+                       "]. " datasize " [" (format "0x%x" datasize) "] bytes were read.")
+            (recur (inc idx) (+ offset datasize) (conj data read-data))))))
     (buf/read buf
               (larray buf/int16 team-record)
               {:offset offset})))
@@ -3685,7 +3717,8 @@
                 :fuel           buf/int32
                 :specialty      buf/ubyte
                 ;; :stores         (buf/repeat 400 buf/ubyte) 4.33
-                :stores         (buf/repeat 1000 buf/ubyte)
+                ;; :stores         (buf/repeat 1000 buf/ubyte) 4.34
+                :stores         (buf/repeat 1016 buf/ubyte)
                 :pilots         (buf/repeat 48 pilot)
                 :schedule       (buf/repeat 16 buf/int32)
                 :airbase-id     vu-id
@@ -3699,7 +3732,9 @@
                 :mission-score  buf/int16
                 :total-losses   buf/ubyte
                 :pilot-losses   buf/ubyte
-                :squadron-patch buf/int16])))
+                :squadron-patch buf/int16
+                :mystery-4-35   (buf/repeat 5 buf/ubyte)
+])))
 
 (def package
   (let [package-common (apply buf/spec
