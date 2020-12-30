@@ -518,6 +518,8 @@
                   [dim dim])))
 
 ;; These are *weather* display options
+(def default-mission-date {:year 2004 :month 4 :day 15})
+
 (defc display-params {:opacity       0.33
                       :display       :type
                       ;; :map            :korea
@@ -527,7 +529,7 @@
                       :pressure-unit :inhg
                       :flight-paths  nil
                       :multi-save    {:mission-name nil
-                                      :date         {:year 2004 :month 4 :day 15}
+                                      :date         default-mission-date
                                       :from         {:day 1 :hour 5 :minute 0}
                                       :to           {:day 1 :hour 10 :minute 0}
                                       :step         60}})
@@ -1177,6 +1179,8 @@
                                     :display-params
                                     (assoc :multi-save
                                            {:mission-name nil
+                                            :date         (or (get-in data [:multi-save :date])
+                                                              default-mission-date)
                                             :from         t
                                             :to           (time/add-minutes t (* 6 60))
                                             :step         (-> data :movement-params :step)})))
