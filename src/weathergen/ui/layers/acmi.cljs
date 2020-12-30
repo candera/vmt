@@ -33,7 +33,7 @@
   (let [[path] (-> electron
                    .-remote
                    .-dialog
-                   (.showOpenDialog
+                   (.showOpenDialogSync
                     (clj->js
                      {:title       "Select an ACMI file"
                       :properties  ["openFile"]

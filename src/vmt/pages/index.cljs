@@ -138,7 +138,7 @@
   (when-let [[path] (-> electron
                         .-remote
                         .-dialog
-                        (.showOpenDialog
+                        (.showOpenDialogSync
                          (clj->js {:title      "Select a campaign or tactical engagement file"
                                    :properties ["openFile"]
                                    :filters    [{:name       "Campaign file"
@@ -157,7 +157,7 @@
   (when-let [[path] (-> electron
                         .-remote
                         .-dialog
-                        (.showOpenDialog
+                        (.showOpenDialogSync
                          #js {:title "Select a campaign or tactical engagement file"
                               :openFile true
                               :filters #js [#js {:name "VMT Briefing"

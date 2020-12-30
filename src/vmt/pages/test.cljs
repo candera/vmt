@@ -61,7 +61,7 @@
                         js/require
                         .-remote
                         .-dialog
-                        (.showOpenDialog
+                        (.showOpenDialogSync
                          (clj->js {:title      "Select a campaign or tactical engagement file"
                                    :properties ["openFile"]
                                    :filters    [{:name       "Campaign file"

@@ -1151,7 +1151,7 @@
   (let [[path] (-> electron
                    .-remote
                    .-dialog
-                   (.showOpenDialog
+                   (.showOpenDialogSync
                     (clj->js
                      {:title       "Select a VMT or Weathergen Weather File"
                       :properties  ["openFile"]

@@ -32,12 +32,15 @@
 (def installations (atom {}))
 
 (defn mk-window [w h frame? show?]
-  (BrowserWindow. #js {:width w
-                       :height h
-                       :frame frame?
-                       :show show?
-                       :icon "images/440th-logo-500.png"
-                       :center true}))
+  (doto (BrowserWindow. #js {:width w
+                             :height h
+                             :frame frame?
+                             :show show?
+                             :icon "images/440th-logo-500.png"
+                             :center true
+                             :webPreferences #js {:nodeIntegration true
+                                                  :enableRemoteModule true}})
+    (.setMenuBarVisibility false)))
 
 (defn open
   "Kicks off a renderer opening the thing at `path`. `mode` tells us

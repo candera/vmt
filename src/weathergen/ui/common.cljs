@@ -870,7 +870,7 @@
     (when-let [[path] (-> electron
                           .-remote
                           .-dialog
-                          (.showOpenDialog
+                          (.showOpenDialogSync
                            (clj->js
                             (cond->
                                 {:title       title
