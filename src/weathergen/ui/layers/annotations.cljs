@@ -346,12 +346,20 @@
                                           "lightblue"
                                           "white"))
                                 :stroke-width (cell= (/ 0.1 map-zoom)))
-                               (svg/image
-                                :xlink-href src
-                                :x (cell= (* size 0.1))
-                                :y (cell= (* size 0.1))
-                                :width (cell= (* size 0.8))
-                                :height (cell= (* size 0.8)))))]
+                               ;; This sort of stupid, but at some
+                               ;; point Chromimum started deciding
+                               ;; that it wouldn't respect fractional
+                               ;; image sizes properly. So we scale
+                               ;; down/up to make it happy with our
+                               ;; numbers.
+                               (svg/g
+                                :transform "scale(0.01, 0.01)"
+                                (svg/image
+                                 :xlink-href src
+                                 :x (cell= (* size 10))
+                                 :y (cell= (* size 10))
+                                 :width (cell= (* size 80))
+                                 :height (cell= (* size 80))))))]
                  (svg/g
                   :debug (cell= (str "edit buttons. Dragging: " (pr-str dragging)))
                   (when (buttons :move)
