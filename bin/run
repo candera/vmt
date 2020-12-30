@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+VMT_DEV_OPEN_WINDOW_EARLY=1 VMT_DEV_SHOW_TEST_WINDOW=1 npm exec -- electron target/
