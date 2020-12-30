@@ -5,10 +5,11 @@
     "main": "main.js",
     "private": "true",
     "devDependencies": {
-        "electron": "^1.8.7"
+        "electron": "^11.1.1"
     },
     "dependencies": {
         "@claviska/jquery-minicolors": "^2.2.6",
+        "electron-packager": "^15.2.0",
         "tinycolor2": "^1.4.1",
         "winreg": "^1.2.3"
     }

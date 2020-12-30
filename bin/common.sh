@@ -28,7 +28,7 @@ function package () {
         cp $BUILDINFO $TARGETDIR/build.txt
     fi
 
-    ELECTRON_VERSION=$(electron --version | cut -d v -f 2)
+    ELECTRON_VERSION=$(npm exec -- electron --version | cut -d v -f 2)
     echo "Using Electron version ${ELECTRON_VERSION}"
-    electron-packager $TARGETDIR --electron-version=$ELECTRON_VERSION --out=$DESTINATION --overwrite --platform=$PLATFORM --arch=$ARCH --icon $ICON
+    npm exec -- electron-packager $TARGETDIR --electron-version=$ELECTRON_VERSION --out=$DESTINATION --overwrite --platform=$PLATFORM --arch=$ARCH --icon $ICON
 }
