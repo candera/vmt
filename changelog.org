@@ -4,6 +4,22 @@
 #+TITLE:
 
 * Change Log
+** TODO: Version
+
+Updates for BMS 4.35.
+
+THIS VERSION WILL NOT WORK WITH ANY PRIOR BMS RELEASE.
+
+Looking for a 4.34-compatible version of VMT? Download the [[https://s3.amazonaws.com/org.craigandera.vmt/dev/VMT-win32-x64-v058-19-gf8e70f4-dev.zip][32-bit]] or
+[[https://s3.amazonaws.com/org.craigandera.vmt/dev/VMT-win32-ia64-v058-19-gf8e70f4-dev.zip][64-bit]] versions.
+
+- Added ability to set mission date in weather settings.
+
+Note that because of the complexity in replicating BMS turbulence
+calculations, turbulence will always be set to the default when saving
+a TWX file. You will need to edit it in Falcon after saving if you
+want non-default turbulence behavior.
+
 ** v058-22 [2019-08-20 Tue]
 
 DIAGNOSTIC RELEASE.
