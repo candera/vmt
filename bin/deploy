@@ -11,7 +11,7 @@ GIT_SHA=$(git rev-parse HEAD)
 
 function print_usage() {
   cat <<EOF
-$(basename $0) [ --no-upload ] [ --allow-dirty ] [ --verbose | -v ] [ --help | -h ] CHANNEL
+$(basename $0) [ --no-compile ] [ --no-upload ] [ --allow-dirty ] [ --verbose | -v ] [ --help | -h ] CHANNEL
 
 EOF
 }
@@ -21,6 +21,10 @@ while [[ "$1" != "" ]]; do
     "--no-upload")
       UPLOAD="no"
       echo "Build will not be uploaded."
+      ;;
+    "--no-compile")
+      COMPILE="no"
+      echo "Application will not be compiled - using existing build."
       ;;
     "--allow-dirty")
       echo "Allowing uncommitted changes in the build."
@@ -63,12 +67,15 @@ fi
 echo "Building version ${GIT_VERSION} for channel ${CHANNEL}"
 
 TARGETDIR=target
-PACKAGEDIR=package
+PACKAGEDIR=dist
 UPDATE_BASE=https://s3.amazonaws.com/org.craigandera.vmt
 S3_BUCKET_URL=s3://org.craigandera.vmt
 WEBSITE_BASE=http://org.craigandera.vmt.s3-website-us-east-1.amazonaws.com
 
-build $TARGETDIR
+if [[ $COMPILE != "no" ]]
+then
+  build $TARGETDIR
+fi
 
 echo ${GIT_VERSION} > $TARGETDIR/version.txt
 
@@ -99,10 +106,11 @@ This is the Virtual Mission Tools download and change log page. VMT is a suite o
 <ul>
 EOF
 
-for TYPE in "win32,ia32" "win32,x64" "darwin,x64" "linux,ia32" "linux,x64"; do
+npm exec -- electron-builder --linux --mac --windows --x64 --ia32
+
+while read PLATFORM ARCH DIRECTORY
+do
   BUILDINFO=$(mktemp)
-  PLATFORM=${TYPE%,*}
-  ARCH=${TYPE##*,}
   echo "Packaging for platform ${PLATFORM} and arch ${ARCH}"
   BUILD="VMT-${PLATFORM}-${ARCH}"
   ZIPFILE="${BUILD}-${GIT_VERSION}-${CHANNEL}.zip"
@@ -119,8 +127,9 @@ UPDATE=${UPDATE_BASE}/${CHANNEL}/${LATEST}?x-update-check-from-version=${GIT_VER
 DOWNLOAD_URL=$DOWNLOAD_URL
 CHANGELOG_URL=${CHANGELOG_URL}
 EOF
-  package $TARGETDIR $PACKAGEDIR $PLATFORM $ARCH $BUILDINFO
-  pushd $PACKAGEDIR/$BUILD
+#  package $TARGETDIR $PACKAGEDIR $PLATFORM $ARCH $BUILDINFO
+  #  pushd $PACKAGEDIR/$BUILD
+  pushd $(dirname $0)/../$PACKAGEDIR/$DIRECTORY
   zip -r ../"$ZIPFILE" . -i \*
   if [[ "${UPLOAD}" != "no" ]]
   then
@@ -139,7 +148,7 @@ EOF
     PLATFORM_NAME="Windows"
   fi
 
-  if [[ "$ARCH" == "x64" ]]
+  if [[ "$ARCH" == "ia64" ]]
   then
     ARCH_NAME="64 bit"
   else
@@ -149,7 +158,13 @@ EOF
   cat >> ${REDIRECTS} <<EOF
 <li><a href="${DOWNLOAD_URL}">${PLATFORM_NAME} (${ARCH_NAME})</a></li>
 EOF
-done
+done <<EOF
+win32 x86 win-ia32-unpacked
+win32 ia64 win-unpacked
+darwin ia64 mac
+linux ia64 linux-unpacked
+linux x86 linux-ia32-unpacked
+EOF
 
 # This is a bit of a hack, as it winds up embedding the entire HTML
 # doc inside another one, but it seems to work, so what the hell.
@@ -169,4 +184,4 @@ then
 fi
 
 mkdir -p ~/Applications/VMT
-cp -r $PACKAGEDIR/VMT-darwin-x64/VMT.app ~/Applications/VMT/VMT-${GIT_VERSION}-${CHANNEL}.app
+cp -r $PACKAGEDIR/mac/VMT.app ~/Applications/VMT/VMT-${GIT_VERSION}-${CHANNEL}.app

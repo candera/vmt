@@ -17,18 +17,30 @@ function package () {
     ARCH=$4
     BUILDINFO=$5
 
-    if [[ "$PLATFORM" = "darwin" ]]; then
-        ICON="assets/images/vmt.icns"
-    else
-        ICON="assets/images/vmt.ico"
-    fi
-
     if [[ -r $BUILDINFO ]]
     then
         cp $BUILDINFO $TARGETDIR/build.txt
     fi
 
-    ELECTRON_VERSION=$(npm exec -- electron --version | cut -d v -f 2)
-    echo "Using Electron version ${ELECTRON_VERSION}"
-    npm exec -- electron-packager $TARGETDIR --electron-version=$ELECTRON_VERSION --out=$DESTINATION --overwrite --platform=$PLATFORM --arch=$ARCH --icon $ICON
+    if [[ $PLATFORM == "win32" ]]
+    then
+      PLATFORM_SWITCH=--windows
+    elif [[ $PLATFORM == "linux" ]]
+    then
+      PLATFORM_SWITCH=--linux
+    else
+      PLATFORM_SWITCH=--mac
+    fi
+
+    if [[ $ARCH == "ia32" ]]
+    then
+      ARCH_SWITCH=--ia32
+    else
+      ARCH_SWITCH=--x64
+    fi
+    
+    # ELECTRON_VERSION=$(npm exec -- electron --version | cut -d v -f 2)
+    # echo "Using Electron version ${ELECTRON_VERSION}"
+    # npm exec -- electron-packager $TARGETDIR --electron-version=$ELECTRON_VERSION --out=$DESTINATION --overwrite --platform=$PLATFORM --arch=$ARCH --icon $ICON
+    npm exec -- electron-builder -c.directories.output=$DESTINATION $PLATFORM_SWITCH $ARCH_SWITCH
 }

@@ -21,3 +21,4 @@ pom.xml
 /files/*
 /changelog.html
 /rebl
+/dist/

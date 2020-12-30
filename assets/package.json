@@ -1,16 +1,32 @@
 {
     "name": "vmt",
     "productName": "VMT",
+    "description": "Virtual Mission Tools for Falcon BMS",
+    "author": "Tyrant of the 440th VFW",
     "version": "0.1.0",
     "main": "main.js",
     "private": "true",
     "devDependencies": {
-        "electron": "^11.1.1"
+        "electron": "^11.1.1",
+        "electron-builder": "^22.9.1"
     },
     "dependencies": {
         "@claviska/jquery-minicolors": "^2.2.6",
-        "electron-packager": "^15.2.0",
         "tinycolor2": "^1.4.1",
         "winreg": "^1.2.3"
+    },
+    "build": {
+        "appId": "org.craigandera.vmt",
+        "files" : [
+            {"from": "./target",
+             "to": "." }
+        ],
+        "mac": {
+            "icon": "assets/images/vmt.icns"
+        },
+        "win": {
+            "target": "portable",
+            "icon": "assets/images/vmt.ico"
+        }
     }
 }
