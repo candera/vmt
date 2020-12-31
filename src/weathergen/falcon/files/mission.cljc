@@ -2123,7 +2123,12 @@
   (let [objectives-map (zipmap (map :id objectives) objectives)]
     (->> deltas
          (reduce (fn [objectives-map delta]
-                    (update objectives-map (:id delta) merge delta))
+                   (if-let [objective (get objectives-map (:id delta))]
+                     (update objectives-map (:id delta) merge delta)
+                     (do
+                       (progress/step-warn (str "Objective delta for objective " (-> delta :id :name)
+                                                " was found, but no objective with that ID exists. Skipping."))
+                       objectives-map)))
                  objectives-map)
          vals
          vec)))
@@ -2619,6 +2624,7 @@
 (defn- objective-status
   [mission objective]
   ;; Will this work for non-airbases?
+  ;; (log/debug "objective-status" :id (:id objective))
   (airbase-status mission objective))
 
 
@@ -3079,9 +3085,10 @@
         mission        (merge database
                               mission-files
                               ;; TODO: Figure out if we need to merge persistent objects
-                              {:objectives         (merge-objective-deltas
-                                                    (:objectives scenario-files)
-                                                    (:objective-deltas mission-files))
+                              {:objectives         (progress/with-step "Merging objective deltas"
+                                                     #(merge-objective-deltas
+                                                       (:objectives scenario-files)
+                                                       (:objective-deltas mission-files)))
                                :scenario-files     scenario-files
                                :path               path
                                :names              names
@@ -3717,8 +3724,8 @@
                 :fuel           buf/int32
                 :specialty      buf/ubyte
                 ;; :stores         (buf/repeat 400 buf/ubyte) 4.33
-                ;; :stores         (buf/repeat 1000 buf/ubyte) 4.34
-                :stores         (buf/repeat 1016 buf/ubyte)
+                :mystery-435-1  (buf/repeat 16 buf/ubyte)
+                :stores         (buf/repeat 1000 buf/ubyte) ; 4.34
                 :pilots         (buf/repeat 48 pilot)
                 :schedule       (buf/repeat 16 buf/int32)
                 :airbase-id     vu-id
@@ -3733,7 +3740,7 @@
                 :total-losses   buf/ubyte
                 :pilot-losses   buf/ubyte
                 :squadron-patch buf/int16
-                :mystery-4-35   (buf/repeat 5 buf/ubyte)
+                :mystery-435-2  (buf/repeat 5 buf/ubyte)
 ])))
 
 (def package
