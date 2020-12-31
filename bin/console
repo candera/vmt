@@ -13,7 +13,7 @@ EOF
 # Sets up a tmux window
 
 tmux new-session -s vmt   -n repl -d "bash --rcfile $TEMPRC"
-tmux new-window  -t vmt:1 -n electron 'bash -i -c "VMT_DEV_OPEN_WINDOW_EARLY=1 VMT_DEV_SHOW_TEST_WINDOW=1 electron target/"'
+tmux new-window  -t vmt:1 -n electron 'bash -i -c "VMT_DEV_OPEN_WINDOW_EARLY=1 VMT_DEV_SHOW_TEST_WINDOW=1 npm exec -- electron target/"'
 
 tmux select-window -t vmt:0
 tmux -2 attach-session -t vmt

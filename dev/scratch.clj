@@ -4399,11 +4399,18 @@ java.nio.file.File
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (do (def mission (mission/read-mission
-               installs
-               "/Users/candera/falcon/4.35/Data/Campaign/Save-Day  1 03 00 08.cam"))
+                  installs
+                  #_"/Users/candera/falcon/4.35/Data/Campaign/MAD-Day  1 10 13 12.cam"
+                  "/Users/candera/falcon/4.35/Data/Campaign/MAD-Name Modified.cam"
+                  #_"/Users/candera/falcon/4.35/Data/Campaign/TE_BMS_10_Multination_War.tac"
+               #_"/Users/candera/falcon/4.35/Data/Campaign/Save-Day  1 03 00 08.cam"))
     (inspect mission))
 
 (-> mission :class-table inspect)
+
+(->> mission :objectives (map-indexed vector) (filter (fn [[i o]] (-> o :id :name (= 1376)))) first)
+
+(->> mission :objective-deltas (map-indexed vector) (filter (fn [[i o]] (-> o :id :name (= 1376)))) first)
 
 (do (->> mission :units inspect) nil)
 
@@ -4418,3 +4425,13 @@ java.nio.file.File
                       {:offset 2})))
 
 
+
+(let [original (mission/read-mission
+                installs
+                "/Users/candera/falcon/4.35/Data/Campaign/MAD-Day  1 10 13 12.cam")
+      renamed  (mission/read-mission
+                installs
+                "/Users/candera/falcon/4.35/Data/Campaign/MAD-Name Modified.cam")]
+  (inspect (clojure.data/diff original
+                              renamed)))
+)
