@@ -4,7 +4,14 @@
 #+TITLE:
 
 * Change Log
-** TODO: Version
+** v059-2
+
+Add temporary hack to work around differences in objectives files in
+Balkans and ITO (and possibly others) from KTO.
+
+THIS VERSION WILL WORK ONLY WITH BMS RELEASE 4.35.
+
+** v059
 
 Updates for BMS 4.35.
 
