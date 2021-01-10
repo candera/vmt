@@ -4400,10 +4400,11 @@ java.nio.file.File
 
 (do (def mission (mission/read-mission
                   installs
+                  #_"/Users/candera/falcon/4.35/Data/Add-On Balkans/Campaign/JG-Day  1 05 36 22.cam"
                   #_"/Users/candera/falcon/4.35/Data/Campaign/MAD-Day  1 10 13 12.cam"
-                  "/Users/candera/falcon/4.35/Data/Campaign/MAD-Name Modified.cam"
+                  #_"/Users/candera/falcon/4.35/Data/Campaign/MAD-Name Modified.cam"
                   #_"/Users/candera/falcon/4.35/Data/Campaign/TE_BMS_10_Multination_War.tac"
-               #_"/Users/candera/falcon/4.35/Data/Campaign/Save-Day  1 03 00 08.cam"))
+                  "/Users/candera/falcon/4.35/Data/Campaign/Save-Day  1 03 00 08.cam"))
     (inspect mission))
 
 (-> mission :class-table inspect)
@@ -4435,3 +4436,13 @@ java.nio.file.File
   (inspect (clojure.data/diff original
                               renamed)))
 )
+
+
+(inspect (binding [octet.buffer/*byte-order* :little-endian]
+           (buf/read* (-> "file:///tmp/objectives.raw"
+                          java.net.URI.
+                          java.nio.file.Paths/get
+                          java.nio.file.Files/readAllBytes
+                          java.nio.ByteBuffer/wrap)
+                      (apply buf/spec mission/objective-fields)
+                      {:offset 0})))

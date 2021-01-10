@@ -3295,7 +3295,8 @@
 
 ;; Ref: objectiv.cpp
 ;; TODO: Combine this with the objective delta stuff
-(def objective-fields
+(defn- objective-fields
+  [padding]
   (util/concatv [:objective-type buf/uint16]
                 camp-base-fields
                 [:last-repair  campaign-time
@@ -3331,16 +3332,19 @@
                                           {:has-radar-data 0}])
 
                                        (= 1 flag-val)
-                                       (let [[ratio-size ratio-val]
-                                             (buf/read* buf
-                                                        (buf/repeat c/NUM_RADAR_ARCS buf/float)
-                                                        {:offset (+ pos flag-size)})]
-                                         [(+ flag-size ratio-size)
-                                          {:has-radar-data flag-val
-                                           :detect-ratio ratio-val}])
+                                       (do
+                                         (log/debug "flag was 1")
+                                         (let [[ratio-size ratio-val]
+                                               (buf/read* buf
+                                                          (buf/spec :ratios (buf/repeat c/NUM_RADAR_ARCS buf/float))
+                                                          {:offset (+ pos flag-size)})]
+                                           [(+ flag-size ratio-size)
+                                            {:has-radar-data flag-val
+                                             :detect-ratio   (:ratios ratio-val)}]))
 
                                        :else
-                                       [flag-size {:has-radar-data flag-val}]))))]))
+                                       [flag-size {:has-radar-data flag-val}]))))
+                 :mystery-435 (buf/repeat padding buf/ubyte)]))
 
 (defmethod read-embedded-file* :objectives
   [_ {:keys [offset length] :as entry} buf _]
@@ -3361,9 +3365,34 @@
                  :num-objectives num-objectives
                  :compressed-size compressed-size
                  :uncompressed-size uncompressed-size)
-      (let [r (buf/read data
-                        (buf/repeat num-objectives
-                                    (apply buf/spec objective-fields)))]
+      #?(:clj (.write (java.io.FileOutputStream. "/tmp/objectives.raw")
+                      (.array data)))
+      #_(let [spec (apply buf/spec objective-fields)]
+          (loop [objectives []
+                 index 0
+                 offset 0]
+            (if (= index num-objectives)
+              objectives
+              (let [[datasize objective] (buf/read* data spec {:offset offset})]
+                (log/debug "Read objective " :index index :datasize datasize :offset offset)
+                #?(:clj (spit (format "/tmp/objective-%05d.edn" index) (pr-str objective)))
+                (recur (conj objectives objective)
+                       (inc index)
+                       (+ offset datasize))))))
+      ;; TOTAL HACK: I couldn't figure out under what conditions the
+      ;; extra 28 bytes are showing up in the objective field under
+      ;; 4.35, so I'm temporarily falling back on just trying to parse
+      ;; in each mode and using whichever works. Hopefully I will be
+      ;; able to figure out something less lame.
+      (let [read-objectives (fn [padding]
+                              (buf/read data
+                                        (buf/repeat num-objectives
+                                                    (apply buf/spec (objective-fields padding)))))
+            r (try
+                (read-objectives 0)
+                (catch #?(:clj IndexOutOfBoundsException :cljs js/Error) x
+                  (progress/step-warn "Failure reading objectives data. Retrying with hacky alternate method.")
+                  (read-objectives 28)))]
         (log/debug "Done reading objectives")
         r))))
 
@@ -3390,8 +3419,11 @@
                                                 {:offset offset})
           data (lzss/expand buf
                             (+ offset (buf/size header-spec))
-                            compressed-size
-                            uncompressed-size)]
+                            compressed-size uncompressed-size)]
+      #?(:clj (.write (java.io.FileOutputStream. "/tmp/objective-deltas.raw")
+                      (.array buf)
+                      offset
+                      length))
       (buf/read data
                 (buf/repeat num-deltas objective-delta)))))
 
