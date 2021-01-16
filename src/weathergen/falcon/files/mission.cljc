@@ -1586,187 +1586,6 @@
      :camera-label-names (indexed 60 c/NUM_CAMERA_LABELS)
      :unit-name-format (strings 58)}))
 
-(def unit-class-data
-  ;; Source: entity.cpp::LoadUnitData and UcdFile.cs
-  (buf/spec :index buf/int32
-            :num-elements (buf/repeat c/VEHICLE_GROUPS_PER_UNIT
-                                      buf/int32)
-            :vehicle-type  (buf/repeat c/VEHICLE_GROUPS_PER_UNIT
-                                       buf/int16)
-            :vehicle-class (buf/repeat c/VEHICLE_GROUPS_PER_UNIT
-                                       (buf/repeat 8 buf/ubyte))
-            :flags buf/uint16
-            :name (fixed-string 20)
-            :padding buf/int16
-            :movement-type buf/int32
-            :movement-speed buf/int16
-            :max-range buf/int16
-            :fuel buf/int32
-            :rate buf/int16
-            :pt-data-index buf/int16
-            :scores (buf/repeat c/MAXIMUM_ROLES buf/ubyte)
-            :role buf/ubyte
-            :hit-chance (buf/repeat c/MOVEMENT_TYPES buf/ubyte)
-            :strength (buf/repeat c/MOVEMENT_TYPES buf/ubyte)
-            :range (buf/repeat c/MOVEMENT_TYPES buf/ubyte)
-            :detection (buf/repeat c/MOVEMENT_TYPES buf/ubyte)
-            :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte)
-            :radar-vehicle buf/ubyte
-            :padding2 buf/byte
-            :special-index buf/int16
-            :icon-index buf/uint16
-            :padding3 (buf/repeat 2 buf/byte)))
-
-;; Ref: entity.h
-(def objective-class-data
-  (buf/spec :index buf/int16 ; Matches the index in the class table
-            :name (fixed-string 20)
-            :data-rate buf/int16 ; Sorte Rate and other cool data
-            :deag-distance buf/int16 ; Distance to deaggregate at.
-            :pt-data-index buf/int16 ; Index into pt header data table
-            :detection (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; Detection ranges
-            :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte) ; How much each type will hurt me (% of strength applied)
-            :mystery buf/ubyte    ; Not sure what this is
-            :icon-index buf/uint16 ; Index to this objective's icon type
-            :features buf/ubyte ; Number of features in this objective
-            :radar-feature buf/ubyte ; ID of the radar feature for this objective
-            :first-feature buf/int16 ; Index of first feature entry
-            ))
-
-;; Ref: entity.h
-(def vehicle-class-data
-  (buf/spec     :index buf/int16      ; descriptionIndex pointing here
-                :hit-points buf/int16 ; Damage this thing can take
-                :flags buf/uint32     ; see VEH_ flags in vehicle.h
-                :name (fixed-string 15)
-                :nctr (fixed-string 5)
-                :rcs-factor buf/float ; log2( 1 + RCS relative to an F16 )
-                :max-wt buf/int32     ; Max loaded weight in lbs.
-                :empty-wt buf/int32   ; Empty weight in lbs.
-                :fuel-wt buf/int32    ; Weight of max fuel in lbs.
-                :fuel-econ buf/int16  ; Fuel usage in lbs./min.
-                :engine-sound buf/int16 ; SoundFX sample index of corresponding engine sound
-                :high-alt buf/int16     ; in hundreds of feet
-                :low-alt buf/int16      ; in hundreds of feet
-                :cruise-alt buf/int16   ; in hundreds of feet
-                :max-speed buf/int16   ; Maximum vehicle speed, in kph
-                :radar-type buf/int16 ; Index into RadarDataTable
-                :number-of-pilots buf/int16 ; # of pilots (for eject)
-                :rack-flags buf/uint16 ; 0x01 means hardpoint 0 needs a rack, 0x02 -> hdpt 1, etc
-                :visible-flags buf/uint16 ; 0x01 means hardpoint 0 is visible, 0x02 -> hdpt 1, etc
-                :callsign-index buf/ubyte
-                :callsign-slots buf/ubyte
-                :hit-chance (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; // Vehicle hit chances (best hitchance bitand bonus)
-                :strength (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; // Combat strengths (full strength only) (calculated)
-                :range (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; // Firing ranges (full strength only) (calculated)
-                :detection (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; // Electronic detection ranges
-                :weapon (buf/repeat c/HARDPOINT_MAX buf/int16); // Weapon id of weapons (or weapon list)
-                :weapons (buf/repeat c/HARDPOINT_MAX buf/ubyte); // Number of shots each (fully supplied)
-                :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte) ; // How much each type will hurt me (% of strength applied
-                :mystery (buf/repeat 3 buf/ubyte)
-                ))
-
-;; Ref: entity.h
-(def weapon-class-data
-  (buf/spec :index buf/int16       ; ;; descriptionIndex pointing here
-            ;; 2002-02-08 MN changed from short to ushort
-            :strength buf/uint16    ;; How much damage it'll do.
-            ;; See DamageDataType
-            :damage-type buf/uint16 ;; What type of damage it does.
-            :padding (buf/repeat 2 buf/ubyte)
-            :range buf/int16        ;; Range, in km.
-            :flags buf/uint16
-            :name (fixed-string 20)
-            :hit-chance (buf/repeat c/MOVEMENT_TYPES buf/ubyte)
-            :fire-rate buf/ubyte ;; # of shots fired per barrage
-            :rariety buf/ubyte ;; % of full supply which is actually provided
-            :guidance-flags buf/uint16
-            :collective buf/ubyte
-            :padding2 buf/ubyte
-            :simweap-index buf/int16 ;; Index into sim's weapon data tables
-            :drag-index buf/int16
-            :blast-radius buf/uint16 ;; radius in ft.
-            :radar-type buf/int16    ;; Index into RadarDataTable
-            :sim-data-idx buf/int16  ;; Index int SimWeaponDataTable
-            :max-alt buf/byte ;; Maximum altitude it can hit in thousands of feet
-            :padding3 buf/ubyte
-            :weight buf/uint16       ;; Weight in lbs.
-            ))
-
-;; Ref: entity.h
-(def feature-class-data
-  (buf/spec :index buf/int16 ; descriptionIndex pointing here
-            :repair-time buf/int16 ; How long it takes to repair
-            :priority buf/byte    ; Display priority
-            :padding1 buf/byte
-            ;; See FEAT_ flags in feature.h
-            :flags (bitflags buf/uint16
-                             {:repairable?         c/FEAT_EREPAIR
-                              :virtual?            c/FEAT_VIRTUAL
-                              :has-light-switch?   c/FEAT_HAS_LIGHT_SWITCH
-                              :has-smoke-stack?    c/FEAT_HAS_SMOKE_STACK
-                              :flat-container?     c/FEAT_FLAT_CONTAINER
-                              :elevated-container? c/FEAT_ELEV_CONTAINER
-                              :can-explode?        c/FEAT_CAN_EXPLODE
-                              :can-burn?           c/FEAT_CAN_BURN
-                              :can-collapse?       c/FEAT_CAN_COLAPSE
-                              :container-top?      c/FEAT_CONTAINER_TOP
-                              :next-is-top?        c/FEAT_NEXT_IS_TOP
-                              :no-hiteval?         c/FEAT_NO_HITEVAL})
-            :name (fixed-string 20)    ; 'Control Tower'
-            :hit-points buf/int16      ; Damage this thing can take
-            :height buf/int16       ; Height of vehicle ramp, if any
-            :angle buf/float            ; Angle of vehicle ramp, if any
-            :radar-type buf/int16   ; Index into RadarDataTable
-            :detection (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; Electronic detection ranges
-            :damage-mod (buf/repeat (inc c/OtherDam) buf/ubyte) ; How much each type will hurt me (% of strength appl
-            :padding2 (buf/repeat 3 buf/ubyte)))
-
-;; Ref: entity.h
-(def feature-entry-data
-  (buf/spec :index buf/int16        ; Entity class index of feature
-            :flags buf/uint16
-            :entity-class (buf/repeat 8 buf/ubyte) ; Entity class array of feature
-            :value buf/ubyte ; % loss in operational status for destruction
-            :padding1 (buf/repeat 3 buf/byte)
-            :offset vector3
-            :facing buf/int16
-            :padding2 (buf/repeat 2 buf/byte)))
-
-(def point-header-data
-  (buf/spec :obj-id buf/int16 ; ID of the objective this belongs to
-            :type buf/ubyte    ; The type of pt data this contains
-            :count buf/ubyte ; Number of points
-            :features (buf/repeat c/MAX_FEAT_DEPEND buf/ubyte) ; Features this list
-                                                               ; depends on (# in
-                                                               ; objective's feature
-                                        ; list)
-            :padding buf/byte
-            :data buf/int16             ; Other data (runway heading, for example)
-            :sin-heading buf/float
-            :cos-heading buf/float
-            :first buf/int16            ; Index of first point
-            :tex-idx buf/int16          ; texture to apply to this runway
-            :runway-num buf/byte ; -1 if not a runway, indicates which runway this list
-                                 ; applies to
-            :ltrt buf/byte       ; put base pt to rt or left
-            :next-header buf/int16 ; Index of next header, if any
-            ))
-
-(def sim-weapon-data
-  (buf/spec :flags             buf/int32
-            :drag-coefficient  buf/float
-            :weight            buf/float
-            :surface-area      buf/float
-            :ejection-velocity (buf/spec :x buf/float
-                                         :y buf/float
-                                         :z buf/float)
-            :sms-mnemonic      (fixed-string 8)
-            :sms-weapon-class  buf/int32
-            :sms-weapon-domain buf/int32
-            :sms-weapon-type   buf/int32
-            :data-index        buf/int32))
-
 (defn extension
   [file-name]
   (let [i (str/last-index-of file-name ".")]
@@ -1807,17 +1626,18 @@
    :victory-conditions "victory conditions"})
 
 (defmulti read-embedded-file*
-  (fn [type entry buf database]
+  (fn [type entry buf database version]
     type))
 
 (defn read-embedded-file
-  [type entry buf database]
+  [type entry buf database version]
   (log/debug "read-embedded-file"
              :type type
-             :file-name (:file-name entry))
+             :file-name (:file-name entry)
+             :version version)
   (progress/with-step (str "Reading " (get file-type-description type "data"))
     (fn []
-     (read-embedded-file* type entry buf database))))
+     (read-embedded-file* type entry buf database version))))
 
 (def directory-entry
   (buf/spec :file-name (lstring buf/ubyte)
@@ -2050,46 +1870,6 @@
                :image-ids (read-image-ids installation)
                :user-ids  (read-user-ids installation)})))
 
-(s/fdef load-initial-database
-  :args (s/cat :installation Installation :theater Theater)
-  :ret InitialDatabase)
-
-(defn load-initial-database
-  "Load the files in known locations needed to process a mission in a
-  given theater."
-  [installation theater & [{version :database/version :as opts}]]
-  (if (>= version 100)
-    (load-xml-initial-database installation theater opts)
-    (throw (ex-info "This version of VMT does not work with versions of BMS prior to 4.34. Use an older version of VMT to work with missions from older versions of BMS."
-                    {:omit-stack-trace? true
-                     :version           version}))
-    #_(->> (for [[file k spec] [["FALCON4.ct" :class-table (apply buf/spec falcon4-entity-fields)]
-                                ["FALCON4.UCD" :unit-class-data unit-class-data]
-                                ["FALCON4.OCD" :objective-class-data objective-class-data]
-                                ["FALCON4.VCD" :vehicle-class-data vehicle-class-data]
-                                ["FALCON4.WCD" :weapon-class-data weapon-class-data]
-                                ["FALCON4.FCD" :feature-class-data feature-class-data]
-                                ["falcon4.fed" :feature-entry-data feature-entry-data]
-                                ["FALCON4.PHD" :point-header-data point-header-data]]]
-             (let [path (fs/path-combine
-                         (object-dir installation theater)
-                         file)
-                   buf  (fs/file-buf path)]
-             [k
-              (binding [octet.buffer/*byte-order* :little-endian]
-                (vec
-                 (map-indexed (fn [i v]
-                                (assoc v ::index i))
-                              (buf/read (->> file
-                                             (fs/path-combine (object-dir installation theater))
-                                             fs/file-buf)
-                                        (larray buf/uint16 spec)))))]))
-           (into {})
-           (merge { ;; These next couple might need to be generalized, like to a map
-                   ;; from the type to the ids in it.
-                   :image-ids (read-image-ids installation)
-                   :user-ids  (read-user-ids installation)}))))
-
 (defn- read-embedded-files
   "Reads and parses a .tac/.cmp file, returning a map from the embedded
   file type to its contents. Opts includes `::file-types`, a set of
@@ -2101,13 +1881,19 @@
           dir-file-count (buf/read buf buf/uint32 {:offset dir-offset})
           directory (buf/read buf (buf/repeat dir-file-count directory-entry)
                               {:offset (+ dir-offset 4)})
+          version (as-> directory ?
+                      (filter #(-> % :file-name file-type (= :version)) ?)
+                    (first ?)
+                    (read-embedded-file :version ? buf database nil)
+                    (:version ?))
+          _ (log/info "Read version" version)
           files (for [entry directory
                       :let [type (-> entry :file-name file-type)]
                       :when (or (nil? file-types)
                                 (file-types type))]
                   (assoc entry
                          :type type
-                         :data (read-embedded-file type entry buf database)))]
+                         :data (read-embedded-file type entry buf database version)))]
       ;; Ensure that there's exactly one file per type
       (assert (->> files
                    (map :type)
@@ -3066,7 +2852,7 @@
         strings       (progress/with-step "Reading theater strings"
                         #(read-strings-file campaign-dir))
         database      (progress/with-step "Reading theater data"
-                        #(assoc (load-initial-database installation theater {:database/version version})
+                        #(assoc (load-xml-initial-database installation theater {})
                                 :strings strings))
         mission-files (progress/with-step "Parsing mission info"
                         #(read-embedded-files mission-buf database))
@@ -3155,7 +2941,7 @@
                                                 :install-dir     install-dir
                                                 :theaterdef-name theaterdef-name})))
         strings              (read-strings-file (campaign-dir installation theater))
-        database             (assoc (load-initial-database installation theater opts)
+        database             (assoc (load-xml-initial-database installation theater opts)
                                     :strings strings)
         {:keys [theater-name
                 scenario]}   (->> briefing :campaign-info)
@@ -3187,13 +2973,15 @@
 
 
 ;; Campaign details file
-(def team-basic-info
+(defn team-basic-info
+  [version]
   (buf/spec :flag buf/ubyte
             :color buf/ubyte
             :name (fixed-string 20)
             :motto (fixed-string 200)))
 
-(def squadron-info
+(defn squadron-info
+  [version]
   (buf/spec :x                 buf/float
             :y                 buf/float
             :id                vu-id
@@ -3207,7 +2995,8 @@
             :airbase-name      (fixed-string 40)
             :padding           buf/byte))
 
-(def event-node
+(defn event-node
+  [version]
   (buf/spec :x buf/int16
             :y buf/int16
             :time campaign-time
@@ -3218,7 +3007,8 @@
             :ui-event-node buf/int32 ; Pointer - no meaning in file
             :event-text (lstring buf/uint16)))
 
-(def cmp-spec
+(defn cmp-spec
+  [version]
   (buf/spec :current-time       campaign-time
             :te-start           campaign-time
             :te-time-limit      campaign-time
@@ -3230,7 +3020,7 @@
             :te-team            buf/int32
             :te-team-points     (buf/repeat 8 buf/int32)
             :te-flags           buf/int32
-            :team-info          (buf/repeat 8 team-basic-info)
+            :team-info          (buf/repeat 8 (team-basic-info version))
             :last-major-event   buf/uint32
             :last-resupply      buf/uint32
             :last-repair        buf/uint32
@@ -3259,18 +3049,18 @@
             :save-file          (fixed-string 40)
             :ui-name            (fixed-string 40)
             :player-squadron-id vu-id
-            :recent-event-entries (larray buf/int16 event-node)
-            :priority-event-entries (larray buf/int16 event-node)
+            :recent-event-entries (larray buf/int16 (event-node version))
+            :priority-event-entries (larray buf/int16 (event-node version))
             :map                (larray buf/int16 buf/ubyte)
             :last-index-num     buf/int16
-            :squadron-info      (larray buf/int16 squadron-info)
+            :squadron-info      (larray buf/int16 (squadron-info version))
             :tempo              buf/ubyte
             :creator-ip         buf/int32
             :creation-time      buf/int32
             :creation-rand      buf/int32))
 
 (defmethod read-embedded-file* :campaign-info
-  [_ {:keys [offset length] :as entry} buf _]
+  [_ {:keys [offset length] :as entry} buf _ version]
   (binding [octet.buffer/*byte-order* :little-endian]
     (let [header-spec (buf/spec :compressed-size buf/int32
                                 :uncompressed-size buf/int32)
@@ -3283,12 +3073,13 @@
                             (+ offset (buf/size header-spec))
                             adjusted-compressed-size
                             uncompressed-size)]
-      (into (sorted-map) (buf/read data cmp-spec)))))
+      (into (sorted-map) (buf/read data (cmp-spec version))))))
 
 ;; Objectives file
 
 ;; Ref: objectiv.h
-(def objective-link
+(defn objective-link
+  [version]
   (buf/spec :costs (buf/repeat c/MOVEMENT_TYPES buf/ubyte) ; Cost to go here depending
                                                            ; on movement type
             :id    vu-id))
@@ -3296,7 +3087,7 @@
 ;; Ref: objectiv.cpp
 ;; TODO: Combine this with the objective delta stuff
 (defn- objective-fields
-  [padding]
+  [version]
   (util/concatv [:objective-type buf/uint16]
                 camp-base-fields
                 [:last-repair  campaign-time
@@ -3310,7 +3101,7 @@
                  :name-id      buf/int16
                  :parent       vu-id
                  :first-owner  buf/ubyte
-                 :links        (larray buf/ubyte objective-link)
+                 :links        (larray buf/ubyte (objective-link version))
                  :radar-data   (reify octet.spec/ISpec
                                  (read [_ buf pos]
                                    ;; It was crashing in Balkans when a 17 would appear as the
@@ -3332,22 +3123,25 @@
                                           {:has-radar-data 0}])
 
                                        (= 1 flag-val)
-                                       (do
-                                         (log/debug "flag was 1")
-                                         (let [[ratio-size ratio-val]
-                                               (buf/read* buf
-                                                          (buf/spec :ratios (buf/repeat c/NUM_RADAR_ARCS buf/float))
-                                                          {:offset (+ pos flag-size)})]
-                                           [(+ flag-size ratio-size)
-                                            {:has-radar-data flag-val
-                                             :detect-ratio   (:ratios ratio-val)}]))
+                                       (let [[ratio-size ratio-val]
+                                             (buf/read* buf
+                                                        (buf/spec :ratios (buf/repeat c/NUM_RADAR_ARCS buf/float))
+                                                        {:offset (+ pos flag-size)})]
+                                         [(+ flag-size ratio-size)
+                                          {:has-radar-data flag-val
+                                           :detect-ratio   (:ratios ratio-val)}])
 
                                        :else
-                                       [flag-size {:has-radar-data flag-val}]))))
-                 :mystery-435 (buf/repeat padding buf/ubyte)]))
+                                       [flag-size {:has-radar-data flag-val}]))))]
+                (when (<= 103 version)
+                  [:sim-position (buf/spec :x buf/double
+                                           :y buf/double
+                                           :z buf/double)
+                   :sim-heading buf/float ; radians
+                   ])))
 
 (defmethod read-embedded-file* :objectives
-  [_ {:keys [offset length] :as entry} buf _]
+  [_ {:keys [offset length] :as entry} buf _ version]
   (binding [octet.buffer/*byte-order* :little-endian]
     (let [header-spec (buf/spec :num-objectives buf/int16
                                 :uncompressed-size buf/int32
@@ -3361,13 +3155,14 @@
                             (+ offset (buf/size header-spec))
                             compressed-size
                             uncompressed-size)]
-      (log/debug "read objectives"
+      (log/debug "expanded objectives"
                  :num-objectives num-objectives
                  :compressed-size compressed-size
-                 :uncompressed-size uncompressed-size)
+                 :uncompressed-size uncompressed-size
+                 :version version)
       #?(:clj (.write (java.io.FileOutputStream. "/tmp/objectives.raw")
                       (.array data)))
-      #_(let [spec (apply buf/spec objective-fields)]
+      #_(let [spec (apply buf/spec (objective-fields version))]
           (loop [objectives []
                  index 0
                  offset 0]
@@ -3379,25 +3174,15 @@
                 (recur (conj objectives objective)
                        (inc index)
                        (+ offset datasize))))))
-      ;; TOTAL HACK: I couldn't figure out under what conditions the
-      ;; extra 28 bytes are showing up in the objective field under
-      ;; 4.35, so I'm temporarily falling back on just trying to parse
-      ;; in each mode and using whichever works. Hopefully I will be
-      ;; able to figure out something less lame.
-      (let [read-objectives (fn [padding]
-                              (buf/read data
-                                        (buf/repeat num-objectives
-                                                    (apply buf/spec (objective-fields padding)))))
-            r (try
-                (read-objectives 0)
-                (catch #?(:clj IndexOutOfBoundsException :cljs js/Error) x
-                  (progress/step-warn "Failure reading objectives data. Retrying with hacky alternate method.")
-                  (read-objectives 28)))]
+      (let [r (buf/read data
+                        (buf/repeat num-objectives
+                                    (apply buf/spec (objective-fields version))))]
         (log/debug "Done reading objectives")
         r))))
 
 ;; Objectives delta file
-(def objective-delta
+(defn objective-delta
+  [version]
   (buf/spec :id vu-id
             :last-repair campaign-time
             :owner buf/ubyte
@@ -3407,7 +3192,7 @@
             :f-status (larray buf/ubyte buf/ubyte)))
 
 (defmethod read-embedded-file* :objective-deltas
-  [_ {:keys [offset length] :as entry} buf _]
+  [_ {:keys [offset length] :as entry} buf _ version]
   (binding [octet.buffer/*byte-order* :little-endian]
     (let [header-spec (buf/spec :compressed-size buf/int32
                                 :num-deltas buf/int16
@@ -3425,16 +3210,17 @@
                       offset
                       length))
       (buf/read data
-                (buf/repeat num-deltas objective-delta)))))
+                (buf/repeat num-deltas (objective-delta version))))))
 
 ;; Victory conditions
 (defmethod read-embedded-file* :victory-conditions
-  [_ {:keys [offset length] :as entry} buf _]
+  [_ {:keys [offset length] :as entry} buf _ version]
   (buf/read buf (fixed-string length) {:offset offset}))
 
 ;; Team definition file
 
-(def team-air-action
+(defn team-air-action
+  [version]
   (buf/spec :start campaign-time
             :stop campaign-time
             :objective vu-id
@@ -3442,7 +3228,8 @@
             :type buf/ubyte
             :padding (buf/repeat 3 buf/byte)))
 
-(def team-ground-action
+(defn team-ground-action
+  [version]
   (buf/spec :time campaign-time
             :timeout campaign-time
             :objective vu-id
@@ -3450,7 +3237,8 @@
             :tempo buf/ubyte
             :points buf/ubyte))
 
-(def team-status
+(defn team-status
+  [version]
   (buf/spec :air-defence-vehicles buf/uint16
             :aircraft buf/uint16
             :ground-vehicles buf/uint16
@@ -3461,17 +3249,20 @@
             :supply-level buf/ubyte
             :fuel-level buf/ubyte))
 
-(def atm-airbase
+(defn atm-airbase
+  [version]
   (buf/spec :id vu-id
             :schedule (buf/repeat c/ATM_MAX_CYCLES buf/ubyte)))
 
-(def tasking-manager-fields
+(defn tasking-manager-fields
+  [version]
   [:id vu-id
    :entity-type buf/uint16
    :manager-flags buf/int16
    :owner buf/ubyte])
 
-(def mission-request
+(defn mission-request
+  [version]
   ;; Ref AirTaskingManager.cs
   (buf/spec
    :requester      vu-id
@@ -3504,29 +3295,33 @@
    :max-to         buf/byte ; Yes, signed
    :padding        (buf/repeat 3 buf/byte)))
 
-(def air-tasking-manager
+(defn air-tasking-manager
+  [version]
   (apply buf/spec
-         (into tasking-manager-fields
+         (into (tasking-manager-fields version)
                [:flags buf/int16
                 :average-ca-strength buf/int16
                 :average-ca-missions buf/int16
                 :sample-cycles buf/ubyte
-                :airbases (larray buf/ubyte atm-airbase)
+                :airbases (larray buf/ubyte (atm-airbase version))
                 :cycle buf/ubyte
                 ;; This differs between the C# and the CPP...
-                :mission-requests (larray buf/int16 mission-request)])))
+                :mission-requests (larray buf/int16 (mission-request version))])))
 
-(def ground-tasking-manager
+(defn ground-tasking-manager
+  [version]
   (apply buf/spec
-         (into tasking-manager-fields
+         (into (tasking-manager-fields version)
                [:flags buf/int16])))
 
-(def naval-tasking-manager
+(defn naval-tasking-manager
+  [version]
   (apply buf/spec
-         (into tasking-manager-fields
+         (into (tasking-manager-fields version)
                [:flags buf/int16])))
 
-(def team
+(defn team
+  [version]
   (buf/spec :id vu-id
             :entity-type buf/uint16
             :who buf/ubyte
@@ -3548,8 +3343,8 @@
             :replacements-available buf/uint16
             :player-rating buf/float
             :last-player-mission campaign-time
-            :current-stats team-status
-            :start-stats team-status
+            :current-stats (team-status version)
+            :start-stats (team-status version)
             :reinforcement buf/int16
             :bonus-objs (buf/repeat 20 vu-id)
             :bonus-time (buf/repeat 20 buf/uint32)
@@ -3557,26 +3352,29 @@
             ;; names rather than an array
             :obj-type-priority (buf/repeat 36 buf/ubyte)
             :unit-type-priority (buf/repeat 20 buf/ubyte)
-            ;; Was 41 in 4.34 - 50 in 4.35
-            :mission-priority (buf/repeat 50 buf/ubyte)
+            :mission-priority (buf/repeat (if (<= 102 version)
+                                            c/AMIS_OTHER
+                                            41)
+                                          buf/ubyte)
             :max-vehicle (buf/repeat 4 buf/ubyte)
             :team-flag buf/ubyte
             :team-color buf/ubyte
             :equipment buf/ubyte
             :name (fixed-string 20)
             :motto (fixed-string 200)
-            :ground-action team-ground-action
-            :defensive-air-action team-air-action
-            :offensive-air-action team-air-action))
+            :ground-action (team-ground-action version)
+            :defensive-air-action (team-air-action version)
+            :offensive-air-action (team-air-action version)))
 
-(def team-record
-  (buf/spec :team team
-            :air-tasking-manager air-tasking-manager
-            :ground-tasking-manager ground-tasking-manager
-            :naval-tasking-manager naval-tasking-manager))
+(defn team-record
+  [version]
+  (buf/spec :team (team version)
+            :air-tasking-manager (air-tasking-manager version)
+            :ground-tasking-manager (ground-tasking-manager version)
+            :naval-tasking-manager (naval-tasking-manager version)))
 
 (defmethod read-embedded-file* :teams
-  [_ {:keys [offset length] :as entry} buf _]
+  [_ {:keys [offset length] :as entry} buf _ version]
   (binding [octet.buffer/*byte-order* :little-endian]
     #?(:clj (.write (java.io.FileOutputStream. "/tmp/teams.raw")
                     (.array buf)
@@ -3594,18 +3392,21 @@
                        "]. " datasize " [" (format "0x%x" datasize) "] bytes were read.")
             (recur (inc idx) (+ offset datasize) (conj data read-data))))))
     (buf/read buf
-              (larray buf/int16 team-record)
+              (larray buf/int16 (team-record version))
               {:offset offset})))
 
 ;; Version file
 (defmethod read-embedded-file* :version
-  [_ {:keys [offset length] :as entry} buf _]
+  [_ {:keys [offset length] :as entry} buf _ _]
+  (log/debug "Reading version" :length length :offset offset)
   (let [version-string (buf/read buf (fixed-string length) {:offset offset})]
+    (log/debug "Read version " version-string)
     {:version #?(:clj (Long. version-string)
                  :cljs (-> version-string js/Number. .valueOf long))}))
 
 ;; Units file
-(def waypoint
+(defn waypoint
+  [version]
   (reify
     octet.spec/ISpec
     (read [_ buf pos]
@@ -3638,7 +3439,8 @@
     ;; TODO: Implement write
     ))
 
-(def unit-fields
+(defn unit-fields
+  [version]
   (into camp-base-fields
         [:last-check    campaign-time
          :roster        buf/int32
@@ -3685,11 +3487,12 @@
          :current-wp    buf/uint16
          :name-id       buf/int16
          :reinforcement buf/int16
-         :waypoints     (larray buf/uint16 waypoint)]))
+         :waypoints     (larray buf/uint16 (waypoint version))]))
 
 ;; Air units
 
-(def pilot
+(defn pilot
+  [version]
   (buf/spec :id               buf/int16
             :skill-and-rating buf/ubyte
             :status           buf/ubyte
@@ -3699,14 +3502,16 @@
             :an-kills         buf/ubyte
             :missions-flown   buf/int16))
 
-(def loadout
+(defn loadout
+  [version]
   (buf/spec :id    (buf/repeat 16 buf/uint16) ; Widened from byte in version 73
             :count (buf/repeat 16 buf/ubyte)))
 
 ;; Ref: flight.cpp::FlightClass ctor
-(def flight
+(defn flight
+  [version]
   (apply buf/spec
-         (into unit-fields
+         (into (unit-fields version)
                [:type              (constant :flight)
                 :pos-z             buf/float
                 :fuel-burnt        buf/int32
@@ -3725,7 +3530,7 @@
                                     buf/int16)
                 :loadouts          (debug-spec
                                     {:level :off}
-                                    (larray buf/ubyte loadout))
+                                    (larray buf/ubyte (loadout version)))
                 :mission           buf/ubyte
                 :old-mission       buf/ubyte
                 :last-direction    buf/ubyte
@@ -3749,35 +3554,38 @@
                 :refuel-quantity   buf/uint32 ; >= 72
                 ])))
 
-(def squadron
+(defn squadron
+  [version]
   (apply buf/spec
-         (into unit-fields
-               [:type           (constant :squadron)
-                :fuel           buf/int32
-                :specialty      buf/ubyte
-                ;; :stores         (buf/repeat 400 buf/ubyte) 4.33
-                :mystery-435-1  (buf/repeat 16 buf/ubyte)
-                :stores         (buf/repeat 1000 buf/ubyte) ; 4.34
-                :pilots         (buf/repeat 48 pilot)
-                :schedule       (buf/repeat 16 buf/int32)
-                :airbase-id     vu-id
-                :hot-spot       vu-id
-                :rating         (buf/repeat 16 buf/ubyte)
-                :aa-kills       buf/int16
-                :ag-kills       buf/int16
-                :as-kills       buf/int16
-                :an-kills       buf/int16
-                :missions-flown buf/int16
-                :mission-score  buf/int16
-                :total-losses   buf/ubyte
-                :pilot-losses   buf/ubyte
-                :squadron-patch buf/int16
-                :mystery-435-2  (buf/repeat 5 buf/ubyte)
-])))
+         (util/concatv (unit-fields version)
+                       [:type           (constant :squadron)
+                        :fuel           buf/int32
+                        :specialty      buf/ubyte]
+                       (when (<= 101 version)
+                         [:camp-specific-rating (buf/repeat c/ARO_OTHER buf/ubyte)])
+                       [:stores         (buf/repeat 1000 buf/ubyte) ; 4.34
+                        :pilots         (buf/repeat 48 (pilot version))
+                        :schedule       (buf/repeat 16 buf/int32)
+                        :airbase-id     vu-id
+                        :hot-spot       vu-id
+                        :rating         (buf/repeat 16 buf/ubyte)
+                        :aa-kills       buf/int16
+                        :ag-kills       buf/int16
+                        :as-kills       buf/int16
+                        :an-kills       buf/int16
+                        :missions-flown buf/int16
+                        :mission-score  buf/int16
+                        :total-losses   buf/ubyte
+                        :pilot-losses   buf/ubyte
+                        :squadron-patch buf/int16]
+                       (when (<= 102 version)
+                         [:squadron-retask-at buf/uint32
+                          :veh-relocate       buf/ubyte]))))
 
-(def package
+(defn package
+  [version]
   (let [package-common (apply buf/spec
-                              (into unit-fields
+                              (into (unit-fields version)
                                     [:type              (constant :package)
                                      :elements          (larray buf/ubyte vu-id)
                                      :interceptor       vu-id
@@ -3830,21 +3638,24 @@
 
 ;; Land units
 
-(def ground-unit-fields
-  (into unit-fields
+(defn ground-unit-fields
+  [version]
+  (into (unit-fields version)
         [:orders   buf/ubyte
          :division buf/int16
          :aobj     vu-id]))
 
-(def brigade
+(defn brigade
+  [version]
   (apply buf/spec
-         (into ground-unit-fields
+         (into (ground-unit-fields version)
                [:type     (constant :brigade)
                 :elements (larray buf/ubyte vu-id)])))
 
-(def battalion
+(defn battalion
+  [version]
   (apply buf/spec
-         (into ground-unit-fields
+         (into (ground-unit-fields version)
                [:type (constant :battalion)
                 :last-move campaign-time
                 :last-combat campaign-time
@@ -3859,9 +3670,10 @@
 
 ;; Sea units
 
-(def task-force
+(defn task-force
+  [version]
   (apply buf/spec
-         (into unit-fields
+         (into (unit-fields version)
                [:type (constant :task-force)
                 :orders buf/ubyte
                 :supply buf/ubyte])))
@@ -3871,7 +3683,7 @@
 (defn unit-record
   "Returns an octet spec for unit records against the given
   class table."
-  [database]
+  [database version]
   (reify
     octet.spec/ISpec
     (read [_ buf pos]
@@ -3894,27 +3706,27 @@
                       [c/DOMAIN_AIR  c/TYPE_FLIGHT]
                       (do
                         ;; (log/debug "Unit is flight")
-                        flight)
+                        (flight version))
                       [c/DOMAIN_AIR  c/TYPE_PACKAGE]
                       (do
                         ;; (log/debug "Unit is package")
-                        package)
+                        (package version))
                       [c/DOMAIN_AIR  c/TYPE_SQUADRON]
                       (do
                         ;; (log/debug "Unit is squadron")
-                        squadron)
+                        (squadron version))
                       [c/DOMAIN_LAND c/TYPE_BATTALION]
                       (do
                         ;; (log/debug "Unit is battalion")
-                        battalion)
+                        (battalion version))
                       [c/DOMAIN_LAND c/TYPE_BRIGADE]
                       (do
                         ;; (log/debug "Unit is brigade")
-                        brigade)
+                        (brigade version))
                       [c/DOMAIN_SEA  c/TYPE_TASKFORCE]
                       (do
                         ;; (log/debug "Unit is task-force")
-                        task-force))
+                        (task-force version)))
                 [datasize data] (try
                                   (buf/read* buf
                                              spc
@@ -3941,7 +3753,9 @@
   [_
    {:keys [offset length] :as entry}
    buf
-   {:keys [class-table] :as database}]
+   {:keys [class-table] :as database}
+   version]
+  (log/debug "read-embedded-file* :units" :version version)
   (binding [octet.buffer/*byte-order* :little-endian]
     (let [header-spec (buf/spec :compressed-size buf/int32
                                 :num-units buf/int16
@@ -3966,13 +3780,13 @@
                       (.array data)))
       (->> (buf/read
             data
-            (buf/repeat num-units (unit-record database)))
+            (buf/repeat num-units (unit-record database version)))
            (remove nil?)
            (mapv (fn [unit]
                    (assoc unit :name (unit-name database unit))))))))
 
 (defmethod read-embedded-file* :default
-  [_ entry buf _]
+  [_ entry buf _ version]
   :not-yet-implemented)
 
 (defn oob-air

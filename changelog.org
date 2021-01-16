@@ -4,6 +4,11 @@
 #+TITLE:
 
 * Change Log
+** v059-3
+
+Removed hack and replaced with correct code for handling database
+version differences.
+
 ** v059-2
 
 Add temporary hack to work around differences in objectives files in

@@ -2381,7 +2381,16 @@
     AMIS_RECONPATROL    = 38,        ; Recon for enemy ground vehicles
     AMIS_ABORT          = 39,
     AMIS_TRAINING       = 40,
-    AMIS_OTHER          = 41,
+    AMIS_RELOCATE       = 41,
+    AMIS_DUMMY_02       = 42,
+    AMIS_DUMMY_03       = 43,
+    AMIS_DUMMY_04       = 44,
+    AMIS_DUMMY_05       = 45,
+    AMIS_DUMMY_06       = 46,
+    AMIS_DUMMY_07       = 47,
+    AMIS_DUMMY_08       = 48,
+    AMIS_DUMMY_09       = 49,
+    AMIS_OTHER = 50
     )
 
   ;; Mission rolls
