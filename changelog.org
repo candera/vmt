@@ -4,26 +4,16 @@
 #+TITLE:
 
 * Change Log
-** v059-3
+** v060 [2021-01-26 Tue]
 
-Removed hack and replaced with correct code for handling database
-version differences.
-
-** v059-2
-
-Add temporary hack to work around differences in objectives files in
-Balkans and ITO (and possibly others) from KTO.
+Update to support BMS 4.35.
 
 THIS VERSION WILL WORK ONLY WITH BMS RELEASE 4.35.
 
-** v059
-
-Updates for BMS 4.35.
-
-THIS VERSION WILL NOT WORK WITH ANY PRIOR BMS RELEASE.
-
 Looking for a 4.34-compatible version of VMT? Download the [[https://s3.amazonaws.com/org.craigandera.vmt/dev/VMT-win32-x64-v058-19-gf8e70f4-dev.zip][32-bit]] or
 [[https://s3.amazonaws.com/org.craigandera.vmt/dev/VMT-win32-ia64-v058-19-gf8e70f4-dev.zip][64-bit]] versions.
+
+Changes:
 
 - Added ability to set mission date in weather settings.
 
