@@ -3632,9 +3632,9 @@
                      :caps buf/int16
                      :requests buf/int16
                      :responses buf/int16
-                     :ingress-waypoints (larray buf/ubyte waypoint)
-                     :egress-waypoints (larray buf/ubyte waypoint)
-                     :mission-request mission-request))))))))
+                     :ingress-waypoints (larray buf/ubyte (waypoint version))
+                     :egress-waypoints (larray buf/ubyte (waypoint version))
+                     :mission-request (mission-request version)))))))))
 
 ;; Land units
 
