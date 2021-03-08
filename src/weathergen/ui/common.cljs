@@ -845,7 +845,7 @@
   (when-let [path (-> electron
                       .-remote
                       .-dialog
-                      (.showSaveDialog
+                      (.showSaveDialogSync
                        (clj->js (cond-> {:title       title
                                          :filters     [filters]}
                                   default-path (assoc :defaultPath default-path)))))]
