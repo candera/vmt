@@ -7,12 +7,12 @@
 ** v062 [2021-03-07 Sun]
 
 - Bugfix: Saving individual files (map images, annotations, FMAPs,
-  etc. would silently fail
+  etc.) would silently fail
 
 ** v061 [2021-03-07 Sun]
 
-- Bugfix: correct =no protocol method ISpec.read defined for type
-function= error when loading a TE
+- Bugfix: correct 'no protocol method ISpec.read defined for type
+  function' error when loading a TE
 
 ** v060 [2021-01-26 Tue]
 
