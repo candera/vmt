@@ -941,12 +941,20 @@
           :cx 0
           :cy 0
           :r (cell= (- radius ew))))
-       (svg/image
-        :xlink-href "images/ppt.svg"
-        :x (cell= (* icon-size -0.4))
-        :y (cell= (* icon-size -0.4))
-        :width (cell= (* icon-size 0.8))
-        :height (cell= (* icon-size 0.8)))
+       ;; This sort of stupid, but at some
+       ;; point Chromimum started deciding
+       ;; that it wouldn't respect fractional
+       ;; image sizes properly. So we scale
+       ;; down/up to make it happy with our
+       ;; numbers.
+       (svg/g
+        :transform "scale(0.01, 0.01)"
+        (svg/image
+         :xlink-href "images/ppt.svg"
+         :x (cell= (* icon-size -40))
+         :y (cell= (* icon-size -40))
+         :width (cell= (* icon-size 80))
+         :height (cell= (* icon-size 80))))
        (svg/text
         :transform (cell= (comm/svg-xform-combine
                            (comm/svg-translate 0 (/ icon-size 2))

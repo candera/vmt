@@ -4,6 +4,8 @@
 #+TITLE:
 
 * Change Log
+** v063 [2021-04-06 Tue]
+- Bugfix: PPT symbols would not always display
 ** v062 [2021-03-07 Sun]
 
 - Bugfix: Saving individual files (map images, annotations, FMAPs,
