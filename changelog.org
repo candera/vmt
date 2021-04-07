@@ -6,6 +6,8 @@
 * Change Log
 ** v063 [2021-04-06 Tue]
 - Bugfix: PPT symbols would not always display
+- Regression: Had to disable Linux builds as they break the entire
+  build right now
 ** v062 [2021-03-07 Sun]
 
 - Bugfix: Saving individual files (map images, annotations, FMAPs,

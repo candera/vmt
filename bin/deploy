@@ -162,9 +162,14 @@ done <<EOF
 win32 x86 win-ia32-unpacked
 win32 ia64 win-unpacked
 darwin ia64 mac
-linux ia64 linux-unpacked
-linux x86 linux-ia32-unpacked
 EOF
+
+# Unfortuantely, some crazy piece of Javascript crap broke Linux
+# builds.
+#
+# linux ia64 linux-unpacked
+# linux x86 linux-ia32-unpacked
+
 
 # This is a bit of a hack, as it winds up embedding the entire HTML
 # doc inside another one, but it seems to work, so what the hell.
