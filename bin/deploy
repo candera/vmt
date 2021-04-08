@@ -106,7 +106,7 @@ This is the Virtual Mission Tools download and change log page. VMT is a suite o
 <ul>
 EOF
 
-npm exec -- electron-builder --linux --mac --windows --x64 --ia32
+npm exec -- electron-builder --linux --mac --windows
 
 while read PLATFORM ARCH DIRECTORY
 do
@@ -159,17 +159,10 @@ EOF
 <li><a href="${DOWNLOAD_URL}">${PLATFORM_NAME} (${ARCH_NAME})</a></li>
 EOF
 done <<EOF
-win32 x86 win-ia32-unpacked
 win32 ia64 win-unpacked
 darwin ia64 mac
+linux ia64 linux-unpacked
 EOF
-
-# Unfortuantely, some crazy piece of Javascript crap broke Linux
-# builds.
-#
-# linux ia64 linux-unpacked
-# linux x86 linux-ia32-unpacked
-
 
 # This is a bit of a hack, as it winds up embedding the entire HTML
 # doc inside another one, but it seems to work, so what the hell.
