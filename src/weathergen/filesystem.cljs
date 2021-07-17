@@ -22,6 +22,12 @@
 
 (def win32? (-> os-lib .platform (= "win32")))
 
+(defn- safe-read-dir
+  "Calls readdirSync, returning nil if the directory does not exist."
+  [path]
+  (when (.existsSync fs-lib path)
+    (.readdirSync fs-lib path)))
+
 (defn- case-desensitize
   "If on a case-sensitive filesystem, try to convert to an existing
   path, ignoring case."
@@ -30,7 +36,7 @@
     path
     (reduce (fn [existing child]
               (some->> existing
-                       (.readdirSync fs-lib)
+                       safe-read-dir
                        (filter #(= (str/lower-case %)
                                    (str/lower-case child)))
                        first
