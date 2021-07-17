@@ -4,7 +4,7 @@
 #+TITLE:
 
 * Change Log
-** v063-3 [2021-07-17 Sat]
+** v063-5 [2021-07-17 Sat]
 - Bugfix: Kuwait missions wouldn't load due to gaps in XML database indicies
 - Bugfix: Null images were preventing mission load
 - Give better error for non-1024x1024 theaters

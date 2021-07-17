@@ -39,7 +39,8 @@
                              :icon "images/440th-logo-500.png"
                              :center true
                              :webPreferences #js {:nodeIntegration true
-                                                  :enableRemoteModule true}})
+                                                  :enableRemoteModule true
+                                                  :contextIsolation false}})
     (.setMenuBarVisibility false)))
 
 (defn open
@@ -104,8 +105,7 @@
   (when dev?
     ;; TODO: Anything we want to do differently?
     )
-  (.on @app-window "closed" #(reset! app-window nil))
-  )
+  (.on @app-window "closed" #(reset! app-window nil)))
 
 ;; TODO: Maybe show splash screen
 (defn init []
