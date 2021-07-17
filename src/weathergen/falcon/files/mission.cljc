@@ -19,7 +19,7 @@
             [weathergen.math :as math]
             [weathergen.progress :as progress]
             [weathergen.time :as time]
-            [weathergen.util :as util :refer [format-list has-flag?]]))
+            [weathergen.util :as util :refer [format-list has-flag? with-let]]))
 
 ;;; Specs
 
@@ -3073,7 +3073,15 @@
                             (+ offset (buf/size header-spec))
                             adjusted-compressed-size
                             uncompressed-size)]
-      (into (sorted-map) (buf/read data (cmp-spec version))))))
+      (with-let [cmp-info (into (sorted-map) (buf/read data (cmp-spec version)))]
+        (let [{:keys [theater-size-x theater-size-y]} cmp-info]
+          (when-not (= [1024 1024] [theater-size-x theater-size-y])
+            (throw (ex-info (str "Theater is not 1024x1024, but is "
+                                 theater-size-x "x" theater-size-y
+                                 ". Only 1024x1024 theaters are currently supported. Bug Tyrant and maybe he'll implement it.")
+                            {:reason :theater-size-not-supported
+                             ::theater-size-x theater-size-x
+                             ::theater-size-y theater-size-y}))))))))
 
 ;; Objectives file
 

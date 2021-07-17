@@ -163,3 +163,9 @@
        (apply merge-with m maps)
        (apply f maps)))
    maps))
+
+(defmacro with-let
+  "Binds resource to binding and evaluates body. Then, returns resource. It's
+  a cross between doto and with-open."
+  [[binding resource] & body]
+  `(let [ret# ~resource ~binding ret#] ~@body ret#))
