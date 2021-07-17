@@ -4,6 +4,11 @@
 #+TITLE:
 
 * Change Log
+** v063-3 [2021-07-17 Sat]
+- Bugfix: Kuwait missions wouldn't load due to gaps in XML database indicies
+- Bugfix: Null images were preventing mission load
+- Give better error for non-1024x1024 theaters
+
 ** v063 [2021-04-06 Tue]
 - Bugfix: PPT symbols would not always display
 - Remove 32-bit versions, as I can't get them to build any more

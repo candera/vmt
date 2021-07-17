@@ -884,36 +884,39 @@
 (defn get-image
   "Return a URL for the image identified by `image-descriptor`."
   [mission image-descriptor]
-  (when-not (:base image-descriptor)
-    (log/warn "Trying to load an image with no base in its descriptor"
-              :image-descriptor image-descriptor))
-  (let [path (image-cache-path image-descriptor)]
-    (if (fs/exists? path)
-      path
-      (let [^js/HTMLCanvasElement canvas (.createElement js/document "canvas")]
-        (with-time
-          (str "Loading image " (:image-id image-descriptor))
-          (im/read-image
-           mission
-           image-descriptor
-           (fn [width height]
-             (-> canvas .-width (set! width))
-             (-> canvas .-height (set! height))
-             (let [^js/CanvasRenderingContext2D context (.getContext canvas "2d")
-                   ^js/ImageData image-data (.getImageData context 0 0 width height)
-                   buf (-> image-data .-data .-length js/ArrayBuffer.)
-                   buf8 (js/Uint8ClampedArray. buf)
-                   data (js/Uint32Array. buf)]
-               {:set-pixel! (fn [^long x ^long y ^long argb]
-                              (aset data (+ x (* y width)) argb))
-                :finalize (fn []
-                            (-> image-data .-data (.set buf8))
-                            (-> context (.putImageData image-data 0 0)))}))))
-        ;; Async - cache for later use
-        (.toBlob canvas
-                 (fn [blob]
-                   (save-blob-async blob path)))
-        (.toDataURL canvas)))))
+  (if-not image-descriptor
+    (log/warn "Attempt to load a null image. Nothing will be loaded.")
+    (do
+     (when-not (:base image-descriptor)
+       (log/warn "Trying to load an image with no base in its descriptor"
+                 :image-descriptor image-descriptor))
+     (let [path (image-cache-path image-descriptor)]
+       (if (fs/exists? path)
+         path
+         (let [^js/HTMLCanvasElement canvas (.createElement js/document "canvas")]
+           (with-time
+             (str "Loading image " (:image-id image-descriptor))
+             (im/read-image
+              mission
+              image-descriptor
+              (fn [width height]
+                (-> canvas .-width (set! width))
+                (-> canvas .-height (set! height))
+                (let [^js/CanvasRenderingContext2D context (.getContext canvas "2d")
+                      ^js/ImageData image-data (.getImageData context 0 0 width height)
+                      buf (-> image-data .-data .-length js/ArrayBuffer.)
+                      buf8 (js/Uint8ClampedArray. buf)
+                      data (js/Uint32Array. buf)]
+                  {:set-pixel! (fn [^long x ^long y ^long argb]
+                                 (aset data (+ x (* y width)) argb))
+                   :finalize (fn []
+                               (-> image-data .-data (.set buf8))
+                               (-> context (.putImageData image-data 0 0)))}))))
+           ;; Async - cache for later use
+           (.toBlob canvas
+                    (fn [blob]
+                      (save-blob-async blob path)))
+           (.toDataURL canvas)))))))
 
 (defn centered-image
   "Renders an image centered in width and height."

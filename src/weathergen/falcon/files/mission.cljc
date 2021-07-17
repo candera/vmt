@@ -1303,11 +1303,17 @@
 (defn- sim-weapon-data-entry
   "Returns the sim weapon data record for a given weapon."
   [mission weapon]
-  (as-> weapon ?
-      (:index ?)
-    (nth (:class-table mission) ?)
-    (:vehicle-data-index ?)
-    (nth (:sim-weapon-data mission) ?)))
+  (try
+    (as-> weapon ?
+       (:index ?)
+       (nth (:class-table mission) ?)
+       (:vehicle-data-index ?)
+       (nth (:sim-weapon-data mission) ?))
+    (catch #?(:clj Throwable
+              :cljs :default) x
+      (log/error x "Failed to load sim weapon data entry"
+                 :weapon weapon)
+      (throw x))))
 
 (defn active-units
   "Return a seq of the units in `mission` that are not inactive."

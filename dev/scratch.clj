@@ -4444,3 +4444,15 @@ java.nio.file.File
                           java.nio.ByteBuffer/wrap)
                       (apply buf/spec mission/objective-fields)
                       {:offset 0})))
+
+(do (def mission (mission/read-mission
+                  installs
+                  "/Users/candera/falcon/4.35/Data/Add-On NTO Polar Vortex/Campaign/LF-Day  1 05 22 35.cam"
+                  #_"/Users/candera/falcon/4.35/Data/Add-On Korea TvT/Campaign/Save-Day  1 06 19 09.cam"
+                  #_"/Users/candera/falcon/4.35/Data/Add-On Kuwait 64/Campaign/DS-Day  1 01 17 09.cam"
+                  #_"/Users/candera/falcon/4.35/Data/Campaign/MAD-Day  1 10 13 12.cam"
+                  #_"/Users/candera/falcon/4.35/Data/Campaign/MAD-Name Modified.cam"
+                  #_"/Users/candera/falcon/4.35/Data/Campaign/TE_BMS_10_Multination_War.tac"
+                  #_"/Users/candera/falcon/4.35/Data/Campaign/Save-Day  1 03 00 08.cam"))
+    #_(inspect mission))
+

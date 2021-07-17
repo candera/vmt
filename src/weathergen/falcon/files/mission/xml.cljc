@@ -401,9 +401,19 @@
   "Parses `xml` as an XML file of `type`."
   [xml type]
   #_(log/debug "parsing xml for" type)
+  ;; The XML files can have gaps in them, so we read into a map and
+  ;; then put it into a vector, which is what the rest of the code is
+  ;; expecting.
   (let [data (parse-str xml)
-        mapping (get mappings type)]
-    (->> data
-         :content
-         (filter element?)
-         (mapv #(parse-elem mapping %)))))
+        mapping (get mappings type)
+        m (->> data
+               :content
+               (filter element?)
+               (reduce (fn [m elem]
+                         (let [{index :weathergen.falcon.files.mission/index
+                                :as item} (parse-elem mapping elem)]
+                           (assoc m index item)))
+                       (sorted-map)))
+        max-index (-> m last key)]
+    (into [] (for [i (range (inc max-index))]
+               (get m i ::missing-entry)))))

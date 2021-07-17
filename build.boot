@@ -93,11 +93,11 @@
   []
   (with-pass-thru _
     (merge-env! :source-paths #{"rebl"}
-                :dependencies '[[org.openjfx/javafx-fxml     "11.0.1"]
-                                [org.openjfx/javafx-controls "11.0.1"]
-                                [org.openjfx/javafx-swing    "11.0.1"]
-                                [org.openjfx/javafx-base     "11.0.1"]
-                                [org.openjfx/javafx-web      "11.0.1"]])))
+                :dependencies '[[org.openjfx/javafx-fxml     "11.0.2"]
+                                [org.openjfx/javafx-controls "11.0.2"]
+                                [org.openjfx/javafx-swing    "11.0.2"]
+                                [org.openjfx/javafx-base     "11.0.2"]
+                                [org.openjfx/javafx-web      "11.0.2"]])))
 
 (defn repl-server-accept
   "Override the default so we land in the boot.user namespace instead

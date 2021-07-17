@@ -22,3 +22,4 @@ pom.xml
 /changelog.html
 /rebl
 /dist/
+*.log
